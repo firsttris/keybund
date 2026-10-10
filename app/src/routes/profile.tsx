@@ -64,7 +64,7 @@ function KeyDetail({ view }: { view: ProfileView }) {
   const { profile, key } = view;
   const copy = useCopyPublicKey();
   const [copied, setCopied] = useState(false);
-  const usesGit = profile.folders.length > 0 || view.is_default || gitAccounts(profile).length > 0 || !!profile.git;
+  const usesGit = profile.folders.length > 0 || view.is_default || gitAccounts(profile).length > 0;
 
   const onCopy = () =>
     copy.mutate(profile.id, {
@@ -114,7 +114,7 @@ function KeyDetail({ view }: { view: ProfileView }) {
           <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4 max-[640px]:grid-cols-1">
             <UsageCard view={view} />
             <KeyCard view={view} onCopy={onCopy} />
-            {usesGit && <GitCard profile={profile} />}
+            {profile.folders.length > 0 ? <GitCard profile={profile} /> : usesGit && <GlobalIdentityCard />}
             {!profile.archived && <DangerCard view={view} />}
           </div>
         </TabsContent>
@@ -513,21 +513,25 @@ function FolderForm({ profile, onDone }: { profile: Profile; onDone: () => void 
   const settings = useSettings();
   const all = useProfiles();
   const needsIdentity = !profile.git;
-  // Usually the same person: take the name from another key.
-  const knownName = all.data?.profiles.find((p) => p.profile.git?.name)?.profile.git?.name ?? "";
+  const global = all.data?.global_identity;
+  // Usually the same person: the name from ~/.gitconfig or another key.
+  const knownName = global?.name ?? all.data?.profiles.find((p) => p.profile.git?.name)?.profile.git?.name ?? "";
   const needsAccount = gitAccounts(profile).length === 0;
   const [folder, setFolder] = useState("");
   const [name, setName] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState<string | null>(null);
   const [provider, setProvider] = useState<Provider | "">("github");
   const suggestion = `${settings.data?.projects_dir ?? "~/dev"}/${profile.id}/`;
   const gitName = name ?? knownName;
-  const error =
-    !folder.trim() ? null : needsIdentity && (!gitName.trim() || !isValidEmail(email)) ? "Bitte Name und eine gültige E-Mail eingeben." : null;
+  const gitEmail = email ?? global?.email ?? "";
+  const identityOk = !needsIdentity || (!!gitName.trim() && isValidEmail(gitEmail));
+  const error = !folder.trim() || identityOk ? null : "Bitte Name und eine gültige E-Mail eingeben.";
   const save = () => {
     const value = folder.trim() || suggestion;
     const next: Profile = { ...profile, folders: [...profile.folders, value] };
-    if (needsIdentity) next.git = { name: gitName.trim(), email: email.trim(), sign: false };
+    // The same as ~/.gitconfig: nothing of its own, the key follows the global identity.
+    const sameAsGlobal = gitName.trim() === (global?.name ?? "") && gitEmail.trim() === (global?.email ?? "");
+    if (needsIdentity && !sameAsGlobal) next.git = { name: gitName.trim(), email: gitEmail.trim(), sign: false };
     if (needsAccount && provider) {
       next.hosts = [...profile.hosts, { provider, hostname: defaultHostname(provider), alias: null, user: null, port: null }];
     }
@@ -543,7 +547,7 @@ function FolderForm({ profile, onDone }: { profile: Profile; onDone: () => void 
       className="flex flex-col gap-3 rounded-lg border border-border p-3"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!error && (!needsIdentity || (gitName.trim() && isValidEmail(email)))) save();
+        if (identityOk) save();
       }}
     >
       <div className="flex flex-col gap-1.5">
@@ -572,8 +576,13 @@ function FolderForm({ profile, onDone }: { profile: Profile; onDone: () => void 
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="folder-git-mail">E-Mail in Commits</Label>
-            <Input id="folder-git-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input id="folder-git-mail" type="email" value={gitEmail} onChange={(e) => setEmail(e.target.value)} />
           </div>
+          {global?.email && (
+            <FieldHint className="col-span-full">
+              Vorgeschlagen aus ~/.gitconfig. Für einen Kunden einfach die E-Mail ändern – sie gilt dann nur in diesem Ordner.
+            </FieldHint>
+          )}
         </div>
       )}
       {needsAccount && (
@@ -595,7 +604,7 @@ function FolderForm({ profile, onDone }: { profile: Profile; onDone: () => void 
         <Button type="button" variant="ghost" size="sm" onClick={onDone}>
           Abbrechen
         </Button>
-        <Button size="sm" type="submit" disabled={update.isPending || (needsIdentity && (!gitName.trim() || !isValidEmail(email)))}>
+        <Button size="sm" type="submit" disabled={update.isPending || !identityOk}>
           Ordner speichern
         </Button>
       </div>
@@ -772,18 +781,51 @@ export function HostForm({
   );
 }
 
+/** Git uses the identity of ~/.gitconfig wherever a key sets none. */
+function useGlobalIdentity() {
+  return useProfiles().data?.global_identity ?? { name: null, email: null };
+}
+
+function formatIdentity(id: { name: string | null; email: string | null }): string | null {
+  if (!id.name && !id.email) return null;
+  return [id.name, id.email && `<${id.email}>`].filter(Boolean).join(" ");
+}
+
+/** A key without git folders has no identity of its own. */
+function GlobalIdentityCard() {
+  const global = formatIdentity(useGlobalIdentity());
+  return (
+    <Card aria-labelledby="git-title">
+      <CardTitle id="git-title">Git-Identität</CardTitle>
+      <CardDescription>
+        Dieser Key hat keinen Git-Ordner. Für deine Commits gilt deshalb die globale Identität aus ~/.gitconfig
+        {global ? ":" : " – dort ist aber keine eingetragen, Git fragt beim ersten Commit danach."}
+      </CardDescription>
+      {global && <span className="font-mono text-[13px]">{global}</span>}
+      <FieldHint>Eine eigene Identität, z. B. die E-Mail eines Kunden, bekommt ein Key über einen Git-Ordner.</FieldHint>
+    </Card>
+  );
+}
+
 function GitCard({ profile }: { profile: Profile }) {
   const update = useUpdateProfile();
+  const global = useGlobalIdentity();
   const git = profile.git ?? { name: "", email: "", sign: false };
   const [name, setName] = useState(git.name);
   const [email, setEmail] = useState(git.email);
   const dirty = name !== git.name || email !== git.email;
   const emailOk = email === "" || isValidEmail(email);
-  const save = (sign = git.sign) => update.mutate({ ...profile, git: { name: name.trim(), email: email.trim(), sign } });
+  const save = (sign = git.sign) => {
+    const next = { name: name.trim(), email: email.trim(), sign };
+    // Nothing of its own: the key simply follows ~/.gitconfig.
+    update.mutate({ ...profile, git: next.name || next.email || next.sign ? next : null });
+  };
   return (
     <Card aria-labelledby="git-title">
       <CardTitle id="git-title">Git-Identität</CardTitle>
-      <CardDescription>Name und E-Mail, die in deinen Commits stehen – in den Git-Ordnern dieses Keys.</CardDescription>
+      <CardDescription>
+        Name und E-Mail in den Commits der Git-Ordner dieses Keys. Leer lassen heißt: wie in ~/.gitconfig.
+      </CardDescription>
       <form
         className="flex flex-col gap-3"
         onSubmit={(e) => {
@@ -796,13 +838,27 @@ function GitCard({ profile }: { profile: Profile }) {
             <Label htmlFor="git-name" className="text-xs font-normal text-muted-foreground">
               Name
             </Label>
-            <Input id="git-name" value={name} onChange={(e) => setName(e.target.value)} disabled={profile.archived} />
+            <Input
+              id="git-name"
+              value={name}
+              placeholder={global.name ?? ""}
+              onChange={(e) => setName(e.target.value)}
+              disabled={profile.archived}
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="git-mail" className="text-xs font-normal text-muted-foreground">
               E-Mail
             </Label>
-            <Input id="git-mail" type="email" value={email} aria-invalid={!emailOk} onChange={(e) => setEmail(e.target.value)} disabled={profile.archived} />
+            <Input
+              id="git-mail"
+              type="email"
+              value={email}
+              placeholder={global.email ?? ""}
+              aria-invalid={!emailOk}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={profile.archived}
+            />
           </div>
         </div>
         <div className="flex items-start justify-between gap-3">
@@ -819,7 +875,7 @@ function GitCard({ profile }: { profile: Profile }) {
           </span>
           <span className="text-xs text-muted-foreground">
             Mit diesem Key unterschreiben – GitHub und GitLab zeigen die Commits dann als „Verified“, wenn der Key dort auch als
-            Signing-Key eingetragen ist.
+            Signing-Key eingetragen ist.{!git.email && " Dafür braucht der Key eine eigene E-Mail."}
           </span>
         </div>
         <Switch

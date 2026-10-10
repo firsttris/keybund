@@ -7,6 +7,7 @@ use specta::Type;
 
 use keybund_core::apply::{self, ApplyReport, Plan};
 use keybund_core::clone::{self, RepoUrl};
+use keybund_core::gitenv::GlobalIdentity;
 use keybund_core::hostkeys::{self, HostKeyCheck};
 use keybund_core::import::{self, ImportProposal};
 use keybund_core::keygen::{self, GenerateOptions, ImportCandidate, KeyInfo};
@@ -65,6 +66,8 @@ pub struct ProfilesView {
     pub import_available: u32,
     /// When Keybund last wrote its configs (milliseconds since the epoch).
     pub last_applied: Option<f64>,
+    /// Name and e-mail from `~/.gitconfig`, used where a key sets none.
+    pub global_identity: GlobalIdentity,
 }
 
 pub fn profile_view(env: &Env, config: &Config, p: &Profile, last_test: Option<LastTest>) -> ProfileView {
@@ -122,6 +125,7 @@ pub fn load_profiles(env: &Env) -> CmdResult<ProfilesView> {
         pending_changes,
         import_available,
         last_applied: last_applied(env),
+        global_identity: keybund_core::gitenv::global_identity(env),
     })
 }
 

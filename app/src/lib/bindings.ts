@@ -153,6 +153,15 @@ export type GitIdentity = {
 	sign: boolean,
 };
 
+/**
+ *  The identity from the user's own `~/.gitconfig`: what git uses outside
+ *  Keybund's folders and where a key leaves name or e-mail empty.
+ */
+export type GlobalIdentity = {
+	name: string | null,
+	email: string | null,
+};
+
 export type HostEntry = {
 	/**
 	 *  SSH alias (e.g. `meinserver`). Hosts with an alias get their own
@@ -355,6 +364,8 @@ export type ProfilesView = {
 	import_available: number,
 	/**  When Keybund last wrote its configs (milliseconds since the epoch). */
 	last_applied: number | null,
+	/**  Name and e-mail from `~/.gitconfig`, used where a key sets none. */
+	global_identity: GlobalIdentity,
 };
 
 export type Provider = "github" | "gitlab" | "bitbucket" | "generic";

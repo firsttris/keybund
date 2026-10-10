@@ -139,8 +139,17 @@ pub fn ssh_host_blocks(settings: &Settings, profile: &Profile) -> String {
 /// `~/.config/keybund/git/<id>.gitconfig`.
 pub fn profile_gitconfig(profile: &Profile) -> String {
     let mut out = format!("{MANAGED}\n# Key: {}\n", profile.name);
-    if let Some(git) = &profile.git {
-        let _ = writeln!(out, "[user]\n\tname = {}\n\temail = {}", git_value(&git.name), git_value(&git.email));
+    // Empty name or e-mail: git keeps the one from ~/.gitconfig.
+    if let Some(git) =
+        profile.git.as_ref().filter(|g| !g.name.trim().is_empty() || !g.email.trim().is_empty() || g.sign)
+    {
+        out.push_str("[user]\n");
+        if !git.name.trim().is_empty() {
+            let _ = writeln!(out, "\tname = {}", git_value(&git.name));
+        }
+        if !git.email.trim().is_empty() {
+            let _ = writeln!(out, "\temail = {}", git_value(&git.email));
+        }
         if git.sign {
             let _ = writeln!(out, "\tsigningkey = {}", git_value(&profile.key.pub_path()));
         }
@@ -252,6 +261,12 @@ mod tests {
         let cfg = sample();
         insta::assert_snapshot!("profile_signing", profile_gitconfig(&cfg.profiles[0]));
         insta::assert_snapshot!("profile_plain", profile_gitconfig(&cfg.profiles[1]));
+        // Without own name and e-mail git keeps the global identity.
+        let mut p = cfg.profiles[1].clone();
+        p.git = Some(GitIdentity { name: String::new(), email: "t@kunde.de".into(), sign: false });
+        assert!(profile_gitconfig(&p).contains("[user]\n\temail = t@kunde.de\n[core]"));
+        p.git = Some(GitIdentity { name: " ".into(), email: String::new(), sign: false });
+        assert!(!profile_gitconfig(&p).contains("[user]"));
     }
 
     #[test]

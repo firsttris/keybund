@@ -246,7 +246,8 @@ fn show_prints_details_and_public_key() {
     sb.cmd().args(["show", "p"]).assert().success().stdout(
         predicate::str::contains("ssh-ed25519")
             .and(predicate::str::contains("SHA256:"))
-            .and(predicate::str::contains("T <t@p.de>"))
+            .and(predicate::str::contains("Git-Name       T\n"))
+            .and(predicate::str::contains("Git-E-Mail     t@p.de"))
             .and(predicate::str::contains("Signieren      ja"))
             .and(predicate::str::contains("gitlab.kunde.de (GitLab)")),
     );

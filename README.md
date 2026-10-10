@@ -22,6 +22,10 @@ In Keybund legst du **Keys** an – „Privat“, „Kunde C“, „NAS“ – u
 | **Server** | `ssh`, `scp`, `sftp`, `rsync` auf einen Host oder eine IP | `Host`-Block mit Alias und Hostname |
 | **Standard** | Git überall dort, wo kein anderer Key gilt | `core.sshCommand` in `index.gitconfig` |
 
+**Git-Identität:** Deine Identität aus `~/.gitconfig` bleibt, wie sie ist – Keybund liest sie nur. Ein Key mit
+Git-Ordner kann eine eigene haben (z. B. die E-Mail eines Kunden); sie gilt dann nur in diesen Ordnern. Leere Felder
+heißen „wie in `~/.gitconfig`“. Für den Standard-Key setzt Keybund nur den SSH-Key, nicht die Identität.
+
 Ein Key kann alles zugleich sein – z. B. „Privat“ als Standard, mit GitHub und deinem Heimserver. Neuer Key: Name
 eingeben, „Key anlegen“ – wo er gilt, legst du danach auf seiner Seite fest. Bei jeder Verwendung gibt es „Testen“
 (mit einer verständlichen Schritt-für-Schritt-Erklärung, was ssh gemacht hat) und, wo es geht, „Key eintragen“.

@@ -22,7 +22,7 @@ test("creates a key and sets it up for a GitHub folder", async ({ app }) => {
   await usage(app).getByRole("button", { name: /^Git-Ordner/ }).click();
   const form = app.getByRole("form", { name: "Git-Ordner hinzufügen" });
   await expect(form.getByLabel("Ordner", { exact: true })).toHaveAttribute("placeholder", "~/dev/kunde-c/");
-  await expect(form.getByLabel("Name in Commits")).toHaveValue("Tristan");
+  await expect(form.getByLabel("Name in Commits")).toHaveValue("Tristan Teufel");
   await form.getByLabel("E-Mail in Commits").fill("tristan@kunde-c.de");
   await form.getByRole("button", { name: "Ordner speichern" }).click();
 

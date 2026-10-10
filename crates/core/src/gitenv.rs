@@ -169,9 +169,49 @@ pub fn detect(env: &Env) -> Vec<EnvOverride> {
     detect_with(env, &process, shell.as_deref())
 }
 
+/// The identity from the user's own `~/.gitconfig`: what git uses outside
+/// Keybund's folders and where a key leaves name or e-mail empty.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct GlobalIdentity {
+    pub name: Option<String>,
+    pub email: Option<String>,
+}
+
+/// Reads `user.name` and `user.email` with `git config --global`, which does
+/// not follow includes – so Keybund's own files never count.
+pub fn global_identity(env: &Env) -> GlobalIdentity {
+    let get = |key: &str| {
+        let mut cmd = env.command("git");
+        cmd.args(["config", "--global", "--get", key]);
+        crate::process::stdout(cmd).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+    };
+    GlobalIdentity { name: get("user.name"), email: get("user.email") }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_the_global_identity_without_includes() {
+        if Command::new("git").arg("--version").output().is_err() {
+            assert!(std::env::var_os("CI").is_none(), "git is required in CI");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let env = Env::with_home(dir.path());
+        assert_eq!(global_identity(&env), GlobalIdentity::default());
+        std::fs::write(dir.path().join("other.gitconfig"), "[user]\n\temail = included@x.de\n").unwrap();
+        std::fs::write(
+            dir.path().join(".gitconfig"),
+            "[user]\n\tname = Tristan Teufel\n[include]\n\tpath = ~/other.gitconfig\n",
+        )
+        .unwrap();
+        let id = global_identity(&env);
+        assert_eq!(id.name.as_deref(), Some("Tristan Teufel"));
+        assert_eq!(id.email, None, "includes (Keybund's files) do not count");
+    }
 
     fn kv(list: &[(&str, &str)]) -> Vec<(String, String)> {
         list.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()

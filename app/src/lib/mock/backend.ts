@@ -16,6 +16,7 @@ import type {
   GeneratedFile,
   HostEntry,
   ImportCandidate,
+  GlobalIdentity,
   ImportDone,
   ImportProposal,
   InstallResult,
@@ -125,6 +126,8 @@ export interface MockState {
   agentKeys: string[] | null;
   /** When the configs were last written (ms). */
   lastApplied: number | null;
+  /** `user.name` / `user.email` from ~/.gitconfig. */
+  globalIdentity: GlobalIdentity;
   /** libssh version of an installed Dolphin (`null`: no Dolphin). */
   dolphinLibssh: string | null;
   /** known_hosts names (`host` or `[host]:port`) whose key is stored. */
@@ -217,6 +220,7 @@ export function seedState(): MockState {
     dolphinLibssh: null,
     agentKeys: ["~/.ssh/privat_ed25519", "~/.ssh/sparkasse_ed25519"],
     lastApplied: Date.now() - 3 * 3_600_000,
+    globalIdentity: { name: "Tristan Teufel", email: "tristanteufel@example.org" },
     settings: { projects_dir: "~/dev", keys_dir: "~/.ssh", absolute_ssh_include: false, known_hosts_per_profile: true },
     unreachable: [],
   };
@@ -234,8 +238,11 @@ function sshCommand(path: string) {
 
 export function renderProfileGitconfig(p: Profile): string {
   let out = `${MANAGED}\n# Key: ${p.name}\n`;
-  if (p.git) {
-    out += `[user]\n\tname = ${p.git.name}\n\temail = ${p.git.email}\n`;
+  // Empty name or e-mail: git keeps the one from ~/.gitconfig.
+  if (p.git && (p.git.name.trim() || p.git.email.trim() || p.git.sign)) {
+    out += "[user]\n";
+    if (p.git.name.trim()) out += `\tname = ${p.git.name}\n`;
+    if (p.git.email.trim()) out += `\temail = ${p.git.email}\n`;
     if (p.git.sign) out += `\tsigningkey = ${p.key.path}.pub\n`;
   }
   out += `[core]\n\tsshCommand = ${sshCommand(p.key.path)}\n`;
@@ -650,6 +657,7 @@ export function createMockBackend(state: MockState = seedState()) {
           pending_changes: planFor(state).changes.length,
           import_available: proposals(state).length,
           last_applied: state.lastApplied,
+          global_identity: structuredClone(state.globalIdentity),
         };
         return result;
       }

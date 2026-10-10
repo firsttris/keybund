@@ -72,9 +72,17 @@ pub fn show(env: &Env, id: &str) -> Result<ExitCode> {
     ui::row("Typ", info.key_type.as_deref().unwrap_or("–"));
     ui::row("Fingerprint", info.fingerprint.as_deref().unwrap_or("–"));
     ui::row("Erstellt", info.created.as_deref().unwrap_or("–"));
-    if let Some(g) = &p.git {
-        ui::row("Git", &format!("{} <{}>", g.name, g.email));
-        ui::row("Signieren", if g.sign { "ja" } else { "nein" });
+    // Only the git folders use the key's identity; empty fields fall back to ~/.gitconfig.
+    if !p.folders.is_empty() {
+        let global = keybund_core::gitenv::global_identity(env);
+        let own = |v: Option<&str>, fallback: Option<String>| match v.filter(|v| !v.trim().is_empty()) {
+            Some(v) => v.to_string(),
+            None => format!("{} (aus ~/.gitconfig)", fallback.unwrap_or_else(|| "–".into())),
+        };
+        let g = p.git.as_ref();
+        ui::row("Git-Name", &own(g.map(|g| g.name.as_str()), global.name));
+        ui::row("Git-E-Mail", &own(g.map(|g| g.email.as_str()), global.email));
+        ui::row("Signieren", if g.is_some_and(|g| g.sign) { "ja" } else { "nein" });
     }
     for f in &p.folders {
         ui::row("Ordner", f);

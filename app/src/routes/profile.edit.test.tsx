@@ -44,8 +44,10 @@ describe("key page", () => {
     expect(within(card).queryByRole("list", { name: "Verwendungen" })).not.toBeInTheDocument();
     await user.click(within(card).getByRole("button", { name: /^Git-Ordner/ }));
     const form = within(card).getByRole("form", { name: "Git-Ordner hinzufügen" });
-    // The name comes from another key, the e-mail is asked.
-    expect(within(form).getByLabelText("Name in Commits")).toHaveValue("Tristan");
+    // Name and e-mail are suggested from ~/.gitconfig; the customer's e-mail replaces it.
+    expect(within(form).getByLabelText("Name in Commits")).toHaveValue("Tristan Teufel");
+    expect(within(form).getByLabelText("E-Mail in Commits")).toHaveValue("tristanteufel@example.org");
+    await user.clear(within(form).getByLabelText("E-Mail in Commits"));
     expect(within(form).getByRole("button", { name: "Ordner speichern" })).toBeDisabled();
     await user.type(within(form).getByLabelText("E-Mail in Commits"), "t@neu.de");
     await user.selectOptions(within(form).getByLabelText("Wo liegt der Code?"), "gitlab");
@@ -54,10 +56,54 @@ describe("key page", () => {
     expect(await row("GitLab-Konto")).toBeInTheDocument();
     expect(backend.state.profiles.find((p) => p.id === "neu")).toMatchObject({
       folders: ["~/dev/neu/"],
-      git: { name: "Tristan", email: "t@neu.de", sign: false },
+      git: { name: "Tristan Teufel", email: "t@neu.de", sign: false },
       hosts: [{ provider: "gitlab", hostname: "gitlab.com" }],
     });
     expect(screen.getByRole("region", { name: "Git-Identität" })).toBeInTheDocument();
+  });
+
+  it("follows ~/.gitconfig when the folder keeps the suggested identity", async () => {
+    const { user, backend } = await renderApp("/profile/neu", (b) => {
+      b.state.profiles.push({ ...structuredClone(emptyKey), hosts: [{ provider: "github", hostname: "github.com", alias: null, user: null, port: null }] });
+    });
+    await user.click(within(await usage()).getByRole("button", { name: /^Git-Ordner/ }));
+    await user.click(screen.getByRole("button", { name: "Ordner speichern" }));
+    expect(await row("~/dev/neu/")).toBeInTheDocument();
+    expect(backend.state.profiles.find((p) => p.id === "neu")!.git).toBeNull();
+    expect(backend.state.applied.get("~/.config/keybund/git/neu.gitconfig")).not.toContain("[user]");
+    // The fields stay empty and show the global identity.
+    const card = screen.getByRole("region", { name: "Git-Identität" });
+    expect(within(card).getByLabelText("E-Mail")).toHaveValue("");
+    expect(within(card).getByLabelText("E-Mail")).toHaveAttribute("placeholder", "tristanteufel@example.org");
+    expect(within(card).getByText(/Dafür braucht der Key eine eigene E-Mail/)).toBeInTheDocument();
+  });
+
+  it("shows the global identity for a key without git folders", async () => {
+    await renderApp("/profile/privat", (b) => {
+      b.state.profiles.find((p) => p.id === "privat")!.folders = [];
+    });
+    const card = await screen.findByRole("region", { name: "Git-Identität" });
+    expect(card).toHaveTextContent("Dieser Key hat keinen Git-Ordner");
+    expect(card).toHaveTextContent("Tristan Teufel <tristanteufel@example.org>");
+    expect(within(card).queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("says when ~/.gitconfig has no identity either", async () => {
+    await renderApp("/profile/privat", (b) => {
+      b.state.profiles.find((p) => p.id === "privat")!.folders = [];
+      b.state.globalIdentity = { name: null, email: null };
+    });
+    const card = await screen.findByRole("region", { name: "Git-Identität" });
+    expect(card).toHaveTextContent("dort ist aber keine eingetragen, Git fragt beim ersten Commit danach");
+  });
+
+  it("hides the identity for an unused key", async () => {
+    await renderApp("/profile/neu", (b) => {
+      b.state.profiles.push(structuredClone(emptyKey));
+      b.state.globalIdentity = { name: null, email: null };
+    });
+    await usage();
+    expect(screen.queryByRole("region", { name: "Git-Identität" })).not.toBeInTheDocument();
   });
 
   it("makes an unused key the standard", async () => {
