@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Archive, Check, Copy, ExternalLink, Folder, GitBranch, KeyRound, Server, Star, Trash2, X, Zap } from "lucide-react";
+import { Archive, Check, Copy, Folder, GitBranch, KeyRound, Server, Star, Trash2, X, Zap } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ColorDot } from "@/components/color-dot";
@@ -25,7 +25,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { errorMessage } from "@/lib/api";
-import { openExternal } from "@/lib/open";
 import type { HostEntry, Profile, ProfileView, Provider } from "@/lib/bindings";
 import { gitAccounts, isServerOnly, servers } from "@/lib/categories";
 import {
@@ -129,12 +128,6 @@ function ProfileDetail({ view }: { view: ProfileView }) {
               <Zap aria-hidden />
               Verbindung testen
             </Button>
-            {view.add_key_urls[0] && (
-              <Button variant="outline" onClick={() => openExternal(view.add_key_urls[0].url)}>
-                <ExternalLink aria-hidden />
-                Bei {providerLabel(view.add_key_urls[0].provider)} hinzufügen
-              </Button>
-            )}
             <Button onClick={onCopy} className="min-w-[156px]" disabled={!key.public_key}>
               {copied ? <Check aria-hidden strokeWidth={2.4} /> : <Copy aria-hidden />}
               {copied ? "Kopiert" : "Pubkey kopieren"}
@@ -178,11 +171,19 @@ function KeyCard({ view, onCopy }: { view: ProfileView; onCopy: () => void }) {
           <KeyRound aria-hidden className="size-[18px] text-muted-foreground" />
           <CardTitle id="key-title">SSH-Key</CardTitle>
         </div>
-        {!key.private_exists ? (
-          <Badge variant="danger">Key-Datei fehlt</Badge>
-        ) : key.age_days != null && key.age_days > 730 ? (
-          <Badge variant="warning">Älter als 2 Jahre – rotieren</Badge>
-        ) : null}
+        <div className="flex flex-wrap gap-1.5">
+          {!key.private_exists ? (
+            <Badge variant="danger">Key-Datei fehlt</Badge>
+          ) : key.age_days != null && key.age_days > 730 ? (
+            <Badge variant="warning">Älter als 2 Jahre – rotieren</Badge>
+          ) : null}
+          {key.private_exists && view.in_agent === true && <Badge variant="success">Im Agent geladen</Badge>}
+          {key.private_exists && view.in_agent === false && (
+            <Badge variant="muted" title="Wird beim ersten Gebrauch geladen (AddKeysToAgent)">
+              Nicht im Agent
+            </Badge>
+          )}
+        </div>
       </CardHeader>
       <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
         {[

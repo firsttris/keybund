@@ -51,6 +51,8 @@ pub struct ProfileView {
     pub is_default: bool,
     pub add_key_urls: Vec<HostLink>,
     pub last_test: Option<LastTest>,
+    /// The key is loaded in ssh-agent (`None`: no agent running).
+    pub in_agent: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -61,6 +63,8 @@ pub struct ProfilesView {
     pub pending_changes: u32,
     /// Profiles that could be taken over from `~/.ssh/config`.
     pub import_available: u32,
+    /// When Keybund last wrote its configs (milliseconds since the epoch).
+    pub last_applied: Option<f64>,
 }
 
 pub fn profile_view(env: &Env, config: &Config, p: &Profile, last_test: Option<LastTest>) -> ProfileView {
@@ -80,7 +84,18 @@ pub fn profile_view(env: &Env, config: &Config, p: &Profile, last_test: Option<L
             })
             .collect(),
         last_test,
+        in_agent: None,
     }
+}
+
+/// Modification time of Keybund's newest generated file.
+fn last_applied(env: &Env) -> Option<f64> {
+    [env.ssh_keybund_conf(), env.index_gitconfig()]
+        .iter()
+        .filter_map(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok())
+        .max()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as f64)
 }
 
 pub fn load_profiles(env: &Env) -> CmdResult<ProfilesView> {
@@ -89,11 +104,24 @@ pub fn load_profiles(env: &Env) -> CmdResult<ProfilesView> {
     let config = store::load(env)?;
     let pending_changes = apply::plan(env, &config).map(|p| p.changes.len() as u32).unwrap_or(0);
     let import_available = import::proposals_for(env).map(|p| p.len() as u32).unwrap_or(0);
+    let agent = keybund_core::which::agent_fingerprints(env);
     Ok(ProfilesView {
         default_profile: config.default_profile.clone(),
-        profiles: config.profiles.iter().map(|p| profile_view(env, &config, p, last_test(&p.id))).collect(),
+        profiles: config
+            .profiles
+            .iter()
+            .map(|p| {
+                let mut view = profile_view(env, &config, p, last_test(&p.id));
+                view.in_agent = match (&agent, &view.key.fingerprint) {
+                    (Some(loaded), Some(fp)) => Some(loaded.contains(fp)),
+                    _ => None,
+                };
+                view
+            })
+            .collect(),
         pending_changes,
         import_available,
+        last_applied: last_applied(env),
     })
 }
 

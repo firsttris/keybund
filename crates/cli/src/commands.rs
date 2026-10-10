@@ -35,7 +35,7 @@ pub fn list(env: &Env, all: bool) -> Result<ExitCode> {
         let info = keygen::key_info(env, &p.key);
         let mut title = format!("{} {}", style(&p.name).bold(), style(format!("({})", p.id)).dim());
         if config.default_profile.as_deref() == Some(p.id.as_str()) {
-            title.push_str(&format!(" {}", style("default").cyan()));
+            title.push_str(&format!(" {}", style("Standard").cyan()));
         }
         if p.archived {
             title.push_str(&format!(" {}", style("archiviert").yellow()));
@@ -149,7 +149,7 @@ pub struct NewArgs {
     /// Kommentar für einen neuen Key
     #[arg(long)]
     comment: Option<String>,
-    /// Als Default-Profil setzen
+    /// Als Standard-Profil setzen
     #[arg(long)]
     default: bool,
     /// Ohne Rückfragen anwenden

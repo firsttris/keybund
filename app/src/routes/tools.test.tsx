@@ -14,7 +14,7 @@ describe("which", () => {
     await user.clear(screen.getByLabelText("Ordner oder Host"));
     await user.type(screen.getByLabelText("Ordner oder Host"), "~/tmp/x");
     await user.click(screen.getByRole("button", { name: "Auflösen" }));
-    expect(await screen.findByText("Ordner gehört zu keinem Profil, es gilt das Default-Profil.")).toBeInTheDocument();
+    expect(await screen.findByText("Ordner gehört zu keinem Profil, es gilt das Standard-Profil.")).toBeInTheDocument();
   });
 
   it("starts with a query from the URL", async () => {

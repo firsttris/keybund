@@ -76,7 +76,7 @@ describe("mock backend contract", () => {
   it("resolves folders and hosts", async () => {
     const b = backend();
     expect(await b.invoke("which", { query: "~/dev/sparkasse/repo" })).toMatchObject({ profile_id: "sparkasse", mode: "folder" });
-    expect(await b.invoke("which", { query: "~/elsewhere" })).toMatchObject({ profile_id: "privat", via: "Default-Profil" });
+    expect(await b.invoke("which", { query: "~/elsewhere" })).toMatchObject({ profile_id: "privat", via: "Standard-Profil" });
     expect(await b.invoke("which", { query: "meinserver" })).toMatchObject({ profile_id: "privat", hostname: "1.2.3.4" });
   });
 

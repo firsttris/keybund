@@ -343,6 +343,8 @@ export type ProfileView = {
 	is_default: boolean,
 	add_key_urls: HostLink[],
 	last_test: LastTest | null,
+	/**  The key is loaded in ssh-agent (`None`: no agent running). */
+	in_agent: boolean | null,
 };
 
 export type ProfilesView = {
@@ -352,6 +354,8 @@ export type ProfilesView = {
 	pending_changes: number,
 	/**  Profiles that could be taken over from `~/.ssh/config`. */
 	import_available: number,
+	/**  When Keybund last wrote its configs (milliseconds since the epoch). */
+	last_applied: number | null,
 };
 
 export type Provider = "github" | "gitlab" | "bitbucket" | "generic";

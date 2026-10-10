@@ -9,6 +9,13 @@ describe("profile page", () => {
     expect(screen.getByText("~/.ssh/sparkasse_ed25519")).toBeInTheDocument();
     expect(screen.getByTestId("public-key")).toHaveTextContent(/^ssh-ed25519 .* tristan@zentrale-sparkasse$/);
     expect(screen.getByText("Configs aktuell")).toBeInTheDocument();
+    expect(screen.getByText(/zuletzt angewendet (heute|gestern), \d\d:\d\d/)).toBeInTheDocument();
+    expect(screen.getByText("Im Agent geladen")).toBeInTheDocument();
+  });
+
+  it("shows when a key is not in the agent", async () => {
+    await renderApp("/profile/kunde-b");
+    expect(await screen.findByText("Nicht im Agent")).toBeInTheDocument();
   });
 
   it("copies the public key and shows feedback", async () => {

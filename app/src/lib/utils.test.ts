@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Profile } from "./bindings";
-import { colorHex, formatAge, formatDate, formatRelative, hostLabel, hostSummary, isValidEmail, plural, slugify } from "./utils";
+import { colorHex, formatAge, formatDate, formatDay, formatRelative, hostLabel, hostSummary, isValidEmail, plural, slugify } from "./utils";
 
 describe("slugify", () => {
   // Same cases as store::tests::slugs in the Rust core.
@@ -83,5 +83,12 @@ describe("hosts and colors", () => {
     expect(isValidEmail(" t@kunde.de ")).toBe(true);
     expect(isValidEmail("kein-mail")).toBe(false);
     expect(isValidEmail("a@b")).toBe(false);
+  });
+
+  it("formats days", () => {
+    const now = new Date(2026, 9, 10, 15, 0);
+    expect(formatDay(new Date(2026, 9, 10, 9, 41).getTime(), now)).toBe("heute, 09:41");
+    expect(formatDay(new Date(2026, 9, 9, 18, 2).getTime(), now)).toBe("gestern, 18:02");
+    expect(formatDay(new Date(2026, 2, 3, 8, 0).getTime(), now)).toBe("03.03.2026");
   });
 });

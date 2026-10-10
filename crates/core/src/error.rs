@@ -14,7 +14,7 @@ pub enum Error {
     InvalidId(String),
     #[error("Profil „{0}“ braucht einen Namen")]
     MissingName(String),
-    #[error("Default-Profil „{0}“ existiert nicht")]
+    #[error("Standard-Profil „{0}“ existiert nicht")]
     DefaultProfileMissing(String),
     #[error("Projektordner überschneiden sich: {0} und {1}")]
     NestedFolders(String, String),

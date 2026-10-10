@@ -136,6 +136,10 @@ export interface MockState {
   uploadedKeys: string[];
   flows: Map<string, { id: string; host: string; polls: number }>;
   settings: Settings;
+  /** Key paths loaded in ssh-agent (`null`: no agent). */
+  agentKeys: string[] | null;
+  /** When the configs were last written (ms). */
+  lastApplied: number | null;
   /** libssh version of an installed Dolphin (`null`: no Dolphin). */
   dolphinLibssh: string | null;
   /** known_hosts names (`host` or `[host]:port`) whose key is stored. */
@@ -233,6 +237,8 @@ export function seedState(): MockState {
     flows: new Map(),
     knownHosts: ["1.2.3.4", "gitlab.kunde.de"],
     dolphinLibssh: null,
+    agentKeys: ["~/.ssh/privat_ed25519", "~/.ssh/sparkasse_ed25519"],
+    lastApplied: Date.now() - 3 * 3_600_000,
     settings: { projects_dir: "~/dev", keys_dir: "~/.ssh", absolute_ssh_include: false, known_hosts_per_profile: true },
     unreachable: [],
   };
@@ -288,6 +294,11 @@ function sshHostBlocks(p: Profile, settings?: Settings): string {
     .join("\n");
 }
 
+function markApplied(state: MockState) {
+  state.applied = renderAll(state);
+  state.lastApplied = Date.now();
+}
+
 function renderAll(state: MockState, profiles = state.profiles, def = state.defaultProfile): Map<string, string> {
   const active = profiles.filter((p) => !p.archived);
   const files = new Map<string, string>();
@@ -295,7 +306,7 @@ function renderAll(state: MockState, profiles = state.profiles, def = state.defa
   files.set("~/.ssh/config.d/keybund.conf", `${MANAGED}\n${ssh.map((b) => `\n${b}`).join("")}\nHost *\n`);
   let index = `${MANAGED}\n# Included from ~/.gitconfig.\n`;
   const defProfile = active.find((p) => p.id === def);
-  if (defProfile) index += `\n# Default-Profil: ${defProfile.name}\n[core]\n\tsshCommand = ${sshCommand(defProfile.key.path)}\n`;
+  if (defProfile) index += `\n# Standard-Profil: ${defProfile.name}\n[core]\n\tsshCommand = ${sshCommand(defProfile.key.path)}\n`;
   for (const p of active) if (p.folders.length) index += `\n${includeIfBlocks(p)}`;
   files.set("~/.config/keybund/git/index.gitconfig", index);
   for (const p of active) files.set(`~/.config/keybund/git/${p.id}.gitconfig`, renderProfileGitconfig(p));
@@ -384,7 +395,7 @@ function proposals(state: MockState): ImportProposal[] {
         make_default: asDefault,
         blocks: [b.pattern],
         key_exists: state.keys.has(b.identity),
-        notes: asDefault ? [`Wird Default-Profil: gilt für ${b.hostname} in allen Ordnern ohne eigenes Profil`] : [],
+        notes: asDefault ? [`Wird Standard-Profil: gilt für ${b.hostname} in allen Ordnern ohne eigenes Profil`] : [],
       };
     });
 }
@@ -499,6 +510,7 @@ function view(state: MockState, p: Profile): ProfileView {
       return url ? [{ host: h.hostname, provider: h.provider, url }] : [];
     }),
     last_test: state.lastTests.get(p.id) ?? null,
+    in_agent: state.agentKeys ? state.agentKeys.includes(p.key.path) : null,
   };
 }
 
@@ -620,19 +632,19 @@ function which(state: MockState, query: string): WhichResult {
       .filter(({ f }) => dir.startsWith(f))
       .sort((a, b) => b.f.length - a.f.length)[0];
     const p = match?.p ?? active.find((x) => x.id === state.defaultProfile);
-    if (!p) return { ...base, notes: ["Ordner gehört zu keinem Profil und es gibt kein Default-Profil."] };
+    if (!p) return { ...base, notes: ["Ordner gehört zu keinem Profil und es gibt kein Standard-Profil."] };
     return {
       ...base,
       key_path: p.key.path,
       fingerprint: keyInfo(state, p.key.path).fingerprint,
       profile_id: p.id,
       source: match ? `~/.config/keybund/git/${p.id}.gitconfig` : "~/.config/keybund/git/index.gitconfig",
-      via: match ? `includeIf "gitdir:${match.f}"` : "Default-Profil",
+      via: match ? `includeIf "gitdir:${match.f}"` : "Standard-Profil",
       identities_only: true,
       git_name: p.git?.name ?? null,
       git_email: p.git?.email ?? null,
       agent_loaded: true,
-      notes: match ? [] : ["Ordner gehört zu keinem Profil, es gilt das Default-Profil."],
+      notes: match ? [] : ["Ordner gehört zu keinem Profil, es gilt das Standard-Profil."],
     };
   }
   const aliased = active.find((p) => p.hosts.some((h) => h.alias === q));
@@ -687,6 +699,7 @@ export function createMockBackend(state: MockState = seedState()) {
           profiles: state.profiles.map((p) => view(state, p)),
           pending_changes: planFor(state).changes.length,
           import_available: proposals(state).length,
+          last_applied: state.lastApplied,
         };
         return result;
       }
@@ -742,7 +755,7 @@ export function createMockBackend(state: MockState = seedState()) {
         state.profiles = profiles;
         if (project.make_default || !state.defaultProfile) state.defaultProfile = p.id;
         const plan = planFor(state);
-        state.applied = renderAll(state);
+        markApplied(state);
         const v = view(state, p);
         state.clipboard = v.key.public_key;
         let openError: string | null = null;
@@ -956,7 +969,7 @@ export function createMockBackend(state: MockState = seedState()) {
         validate(profiles);
         if (cmd === "preview_add_host") return planFor(state, profiles);
         state.profiles = profiles;
-        state.applied = renderAll(state);
+        markApplied(state);
         return view(state, next);
       }
       case "last_test":
@@ -968,7 +981,7 @@ export function createMockBackend(state: MockState = seedState()) {
         const expected = args.expectedDiffs as string[];
         if (JSON.stringify(plan.changes.map((c) => c.diff)) !== JSON.stringify(expected))
           throw new MockError("stale_plan", "Die Konfiguration hat sich seit der Vorschau geändert: Bitte Vorschau neu laden");
-        state.applied = renderAll(state);
+        markApplied(state);
         const report: ApplyReport = {
           written: plan.changes.filter((c) => c.kind !== "delete").map((c) => c.path),
           deleted: plan.changes.filter((c) => c.kind === "delete").map((c) => c.path),
@@ -984,7 +997,7 @@ export function createMockBackend(state: MockState = seedState()) {
       case "fix_doctor": {
         const fix = args.fix as Fix;
         if (fix.type === "move_ssh_include") state.doctorIncludeOnTop = true;
-        if (fix.type === "apply") state.applied = renderAll(state);
+        if (fix.type === "apply") markApplied(state);
         if (fix.type === "absolute_ssh_include") state.settings = { ...state.settings, absolute_ssh_include: true };
         if (fix.type === "cleanup_ssh_config") state.sshBlocks = state.sshBlocks.filter((b) => !covered(state, b));
         return doctorReport(state);

@@ -218,7 +218,7 @@ fn default_and_keys() {
         .assert()
         .success()
         .stdout(predicate::str::contains("~/.ssh/a_ed25519").and(predicate::str::contains("[b]")));
-    sb.cmd().arg("list").assert().success().stdout(predicate::str::contains("B (b) default"));
+    sb.cmd().arg("list").assert().success().stdout(predicate::str::contains("B (b) Standard"));
 }
 
 #[test]
@@ -414,7 +414,7 @@ fn import_takes_over_an_existing_ssh_config() {
     assert_eq!(sb.read(".ssh/config"), "Include ~/.ssh/config.d/keybund.conf\n");
     assert!(sb.read(".ssh/config.keybund-backup").contains("Privater Account"));
     assert!(sb.read(".ssh/config.d/keybund.conf").contains("Host pflegeabc"));
-    sb.cmd().arg("list").assert().success().stdout(predicate::str::contains("Privater Account (privat) default"));
+    sb.cmd().arg("list").assert().success().stdout(predicate::str::contains("Privater Account (privat) Standard"));
     sb.cmd().arg("import").assert().success().stdout(predicate::str::contains("Nichts zu übernehmen"));
 }
 

@@ -33,7 +33,9 @@ test("connection test shows success and failure", async ({ app }) => {
 
 test("opens the provider page", async ({ app }) => {
   await app.goto("/#/profile/sparkasse");
-  await app.getByRole("button", { name: "Bei GitLab hinzufügen" }).click();
+  const accounts = app.getByRole("region", { name: "Git-Konten" });
+  await accounts.getByRole("button", { name: "Key eintragen" }).click();
+  await accounts.getByRole("button", { name: "Lieber von Hand: GitLab-Seite öffnen" }).click();
   await expect.poll(() => mockState<string[]>(app, "openedUrls")).toEqual(["https://gitlab.kunde.de/-/user_settings/ssh_keys"]);
 });
 
@@ -150,7 +152,9 @@ test("a failing browser start is explained, not swallowed", async ({ app }) => {
   await app.evaluate(() => {
     (window as unknown as { __keybundMock: { state: { openFails: boolean } } }).__keybundMock.state.openFails = true;
   });
-  await app.getByRole("button", { name: "Bei GitLab hinzufügen" }).click();
+  const accounts = app.getByRole("region", { name: "Git-Konten" });
+  await accounts.getByRole("button", { name: "Key eintragen" }).click();
+  await accounts.getByRole("button", { name: "Lieber von Hand: GitLab-Seite öffnen" }).click();
   await expect(app.getByText("Browser konnte nicht geöffnet werden")).toBeVisible();
   await expect(app.getByRole("button", { name: "Link kopieren" })).toBeVisible();
 });

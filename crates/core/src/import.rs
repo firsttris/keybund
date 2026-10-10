@@ -190,7 +190,7 @@ pub fn proposals(env: &Env, config: &Config, ssh_config: &str) -> Vec<ImportProp
             .collect();
         if make_default {
             notes.push(format!(
-                "Wird Default-Profil: gilt für {} in allen Ordnern ohne eigenes Profil",
+                "Wird Standard-Profil: gilt für {} in allen Ordnern ohne eigenes Profil",
                 hosts.iter().find(|h| h.alias.is_none()).map(|h| h.hostname.as_str()).unwrap_or_default()
             ));
         }

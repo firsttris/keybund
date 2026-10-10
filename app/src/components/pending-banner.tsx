@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { RefreshCw } from "lucide-react";
 import { useProfiles } from "@/lib/queries";
-import { plural } from "@/lib/utils";
+import { formatDay, plural } from "@/lib/utils";
 
 /** Footer line: configs in sync, or a link to the pending diff. */
 export function ConfigStatus() {
@@ -9,9 +9,10 @@ export function ConfigStatus() {
   if (!data) return null;
   if (data.pending_changes === 0) {
     return (
-      <footer className="mt-auto flex items-center gap-2 pt-2 text-xs text-muted-foreground">
+      <footer className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2 text-xs text-muted-foreground">
         <span aria-hidden className="size-[7px] rounded-full bg-emerald-500" />
-        Configs aktuell
+        <span>Configs aktuell</span>
+        {data.last_applied != null && <span>· zuletzt angewendet {formatDay(data.last_applied)}</span>}
       </footer>
     );
   }

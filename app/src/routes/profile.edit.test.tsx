@@ -270,7 +270,9 @@ describe("profile editing", () => {
     const { user, backend } = await renderApp("/profile/sparkasse", (b) => {
       b.state.openFails = true;
     });
-    await user.click(await screen.findByRole("button", { name: "Bei GitLab hinzufügen" }));
+    const card = await screen.findByRole("region", { name: "Git-Konten" });
+    await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
+    await user.click(await within(card).findByRole("button", { name: "Lieber von Hand: GitLab-Seite öffnen" }));
     expect(await screen.findByText("Browser konnte nicht geöffnet werden")).toBeInTheDocument();
     expect(screen.getByText(/xdg-open.*https:\/\/gitlab\.kunde\.de\/-\/user_settings\/ssh_keys/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Link kopieren" })).toBeInTheDocument();

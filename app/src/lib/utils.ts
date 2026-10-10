@@ -91,6 +91,17 @@ export function formatRelative(at: number | null | undefined, now: number = Date
   return `vor ${Math.round(hours / 24)} Tagen`;
 }
 
+/** `heute, 09:41`, `gestern, 18:02` or `03.03.2026`. */
+export function formatDay(at: number, now: Date = new Date()): string {
+  const d = new Date(at);
+  const time = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(now) - day(d)) / 86_400_000);
+  if (diff === 0) return `heute, ${time}`;
+  if (diff === 1) return `gestern, ${time}`;
+  return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
 /** `Kunde C` → `kunde-c`, same rules as the Rust side. */
 export function slugify(name: string): string {
   let out = "";
