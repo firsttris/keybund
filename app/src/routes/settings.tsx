@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@/lib/api";
 import type { Settings } from "@/lib/bindings";
 import { openExternal } from "@/lib/open";
-import { usePaths, useProfiles, useScanKeys, useSetDefault, useSettings, useUpdateSettings } from "@/lib/queries";
+import { toastSaved, usePaths, useProfiles, useScanKeys, useSetDefault, useSettings, useUpdateSettings } from "@/lib/queries";
 import { formatAge } from "@/lib/utils";
 
 const REPO_URL = "https://github.com/firsttris/keybund";
@@ -34,13 +34,13 @@ export function SettingsPage() {
         <Card aria-labelledby="default-title">
           <CardTitle id="default-title">Standard-Key für Git</CardTitle>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="default-profile">Key außerhalb aller Projektordner</Label>
+            <Label htmlFor="default-profile">Key für Repos außerhalb deiner Git-Ordner</Label>
             <Select
               id="default-profile"
               value={profiles.data?.default_profile ?? ""}
               onChange={(e) => setDefault.mutate(e.target.value || null)}
             >
-              <option value="">Keins – ssh wählt selbst</option>
+              <option value="">Keiner – ssh wählt selbst</option>
               {active.map((p) => (
                 <option key={p.profile.id} value={p.profile.id}>
                   {p.profile.name}
@@ -48,64 +48,18 @@ export function SettingsPage() {
               ))}
             </Select>
             <FieldHint>
-              Für alle Git-Repos, die in keinem Projektordner liegen, z. B. ein schnell geklontes Repo in ~/Downloads. Ohne
-              Standard-Key probiert ssh einfach deine Keys durch.
+              Für alle Git-Repos, die in keinem Git-Ordner eines Keys liegen, z. B. ein schnell geklontes Repo in ~/Downloads.
+              Ohne Standard-Key probiert ssh einfach deine Keys durch.
             </FieldHint>
           </div>
         </Card>
 
         <SettingsCard />
 
-        <Card aria-labelledby="paths-title">
-          <CardTitle id="paths-title">Pfade</CardTitle>
-          <p className="m-0 -mt-2 text-[13px] text-muted-foreground">
-            Diese Dateien liest und schreibt Keybund. Deine eigenen (SSH, Git) bekommen nur je eine Include-Zeile.
-          </p>
-          {paths.data && (
-            <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13px]">
-              {[
-                ["Keys (Keybund)", paths.data.profiles_file],
-                ["SSH", paths.data.ssh_config],
-                ["SSH (Keybund)", paths.data.ssh_keybund_conf],
-                ["Git", paths.data.gitconfig],
-                ["Git (Keybund)", paths.data.index_gitconfig],
-              ].map(([k, v]) => (
-                <div key={k} className="contents">
-                  <dt className="text-muted-foreground">{k}</dt>
-                  <dd className="m-0 font-mono text-[12.5px] [overflow-wrap:anywhere]">{v}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </Card>
-
-        <Card aria-labelledby="about-title">
-          <CardTitle id="about-title">Über Keybund</CardTitle>
-          <p className="m-0 text-[13px] leading-relaxed text-muted-foreground">
-            Keybund {version.data ? `${version.data} ` : ""}by Tristan Teufel ·{" "}
-            <button className="text-foreground underline-offset-4 hover:underline" onClick={() => openExternal(REPO_URL)}>
-              Quellcode auf GitHub
-            </button>
-            <br />
-            Lizenz: GPL-3.0 · eine kommerzielle Lizenz gibt es über{" "}
-            <button className="text-foreground underline-offset-4 hover:underline" onClick={() => openExternal("https://teufel-it.de")}>
-              teufel-it.de
-            </button>
-          </p>
-        </Card>
-
-        <Card aria-labelledby="remove-title">
-          <CardTitle id="remove-title">Keybund entfernen</CardTitle>
-          <FieldHint>Nimmt alle Änderungen von Keybund zurück, mit Vorschau. Deine Keys bleiben.</FieldHint>
-          <Link to="/uninstall" className="self-start text-[13px] font-medium text-foreground">
-            Entfernen …
-          </Link>
-        </Card>
-
         <Card className="col-span-full" aria-labelledby="import-title">
-          <CardTitle id="import-title">Vorhandene Keys</CardTitle>
+          <CardTitle id="import-title">Keys in ~/.ssh</CardTitle>
           <FieldHint>
-            Keys in ~/.ssh. Ein ungenutzter Key kann direkt zu einem neuen Projekt werden – oder du{" "}
+            Einen Key, den Keybund noch nicht kennt, kannst du direkt übernehmen – oder du{" "}
             <Link to="/import" className="text-foreground">
               übernimmst deine bestehende ~/.ssh/config
             </Link>
@@ -134,6 +88,61 @@ export function SettingsPage() {
             ))}
           </ul>
         </Card>
+
+        <details className="group col-span-full">
+          <summary className="cursor-pointer py-1 text-[13px] font-medium text-muted-foreground select-none hover:text-foreground">
+            Erweitert
+          </summary>
+          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
+            <AdvancedCard />
+
+            <Card aria-labelledby="paths-title">
+              <CardTitle id="paths-title">Pfade</CardTitle>
+              <p className="m-0 -mt-2 text-[13px] text-muted-foreground">
+                Diese Dateien liest und schreibt Keybund. Deine eigenen (SSH, Git) bekommen nur je eine Include-Zeile.
+              </p>
+              {paths.data && (
+                <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13px]">
+                  {[
+                    ["Keys (Keybund)", paths.data.profiles_file],
+                    ["SSH", paths.data.ssh_config],
+                    ["SSH (Keybund)", paths.data.ssh_keybund_conf],
+                    ["Git", paths.data.gitconfig],
+                    ["Git (Keybund)", paths.data.index_gitconfig],
+                  ].map(([k, v]) => (
+                    <div key={k} className="contents">
+                      <dt className="text-muted-foreground">{k}</dt>
+                      <dd className="m-0 font-mono text-[12.5px] [overflow-wrap:anywhere]">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </Card>
+
+            <Card aria-labelledby="remove-title">
+              <CardTitle id="remove-title">Keybund entfernen</CardTitle>
+              <FieldHint>Nimmt alle Änderungen von Keybund zurück, mit Vorschau. Deine Keys bleiben.</FieldHint>
+              <Link to="/uninstall" className="self-start text-[13px] font-medium text-foreground">
+                Entfernen …
+              </Link>
+            </Card>
+          </div>
+        </details>
+
+        <Card aria-labelledby="about-title">
+          <CardTitle id="about-title">Über Keybund</CardTitle>
+          <p className="m-0 text-[13px] leading-relaxed text-muted-foreground">
+            Keybund {version.data ? `${version.data} ` : ""}by Tristan Teufel ·{" "}
+            <button className="text-foreground underline-offset-4 hover:underline" onClick={() => openExternal(REPO_URL)}>
+              Quellcode auf GitHub
+            </button>
+            <br />
+            Lizenz: GPL-3.0 · eine kommerzielle Lizenz gibt es über{" "}
+            <button className="text-foreground underline-offset-4 hover:underline" onClick={() => openExternal("https://teufel-it.de")}>
+              teufel-it.de
+            </button>
+          </p>
+        </Card>
       </div>
     </>
   );
@@ -143,18 +152,20 @@ function SettingsCard() {
   const settings = useSettings();
   if (!settings.data) return <Spinner />;
   // Remounts with fresh values after saving.
-  return <SettingsForm key={JSON.stringify(settings.data)} saved={settings.data} />;
+  return <FoldersForm key={JSON.stringify(settings.data)} saved={settings.data} />;
 }
 
-function SettingsForm({ saved }: { saved: Settings }) {
+const mono = "font-mono text-[13px]";
+
+/** Where new keys and their git folders go. */
+function FoldersForm({ saved }: { saved: Settings }) {
   const update = useUpdateSettings();
   const [draft, setDraft] = useState(saved);
   const set = (patch: Partial<Settings>) => setDraft((d) => ({ ...d, ...patch }));
-  const changed = JSON.stringify(draft) !== JSON.stringify(saved);
-  const mono = "font-mono text-[13px]";
+  const changed = draft.projects_dir !== saved.projects_dir || draft.keys_dir !== saved.keys_dir;
   return (
     <Card aria-labelledby="settings-title">
-      <CardTitle id="settings-title">Neue Profile & Configs</CardTitle>
+      <CardTitle id="settings-title">Neue Keys</CardTitle>
       <form
         className="flex flex-col gap-4"
         onSubmit={(e) => {
@@ -163,44 +174,62 @@ function SettingsForm({ saved }: { saved: Settings }) {
         }}
       >
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="projects-dir">Ordner für Projekte</Label>
+          <Label htmlFor="projects-dir">Ordner für Git-Repos</Label>
           <Input id="projects-dir" className={mono} value={draft.projects_dir} onChange={(e) => set({ projects_dir: e.target.value })} />
-          <FieldHint>Neue Projekte schlägt der Wizard hier vor, z. B. {draft.projects_dir.replace(/\/+$/, "")}/kunde-c/.</FieldHint>
+          <FieldHint>Hier schlägt Keybund Git-Ordner vor, z. B. {draft.projects_dir.replace(/\/+$/, "")}/kunde-c/.</FieldHint>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="keys-dir">Ordner für Keys</Label>
           <Input id="keys-dir" className={mono} value={draft.keys_dir} onChange={(e) => set({ keys_dir: e.target.value })} />
+          <FieldHint>Hier legt Keybund neue Keys an.</FieldHint>
         </div>
-        <label className="flex items-start justify-between gap-4">
-          <span className="flex flex-col gap-0.5">
-            <span className="text-[13px] font-medium">Server-Fingerprints pro Key (known_hosts)</span>
-            <span className="text-xs text-muted-foreground">
-              ssh merkt sich, woran es deine Server erkennt. Mit dieser Option liegt das pro Key in einer eigenen Datei und
-              verschwindet beim Archivieren mit.
-            </span>
-          </span>
-          <Switch
-            aria-label="Server-Fingerprints pro Key"
-            checked={draft.known_hosts_per_profile}
-            onCheckedChange={(v) => set({ known_hosts_per_profile: v })}
-          />
-        </label>
-        <label className="flex items-start justify-between gap-4">
-          <span className="flex flex-col gap-0.5">
-            <span className="text-[13px] font-medium">Include mit vollem Pfad</span>
-            <span className="text-xs text-muted-foreground">Statt ~ in ~/.ssh/config – nötig für Dolphin/KIO mit libssh vor 0.10.2 (der Doctor meldet das).</span>
-          </span>
-          <Switch
-            aria-label="Include mit vollem Pfad"
-            checked={draft.absolute_ssh_include}
-            onCheckedChange={(v) => set({ absolute_ssh_include: v })}
-          />
-        </label>
         <ErrorSlot message={update.isError && errorMessage(update.error)} />
         <Button type="submit" className="self-end" disabled={!changed || update.isPending}>
-          Einstellungen speichern
+          Speichern
         </Button>
       </form>
+    </Card>
+  );
+}
+
+/** Switches for special setups; each one is saved and applied right away. */
+function AdvancedCard() {
+  const settings = useSettings();
+  const update = useUpdateSettings();
+  const s = settings.data;
+  if (!s) return <Spinner />;
+  const toggle = (patch: Partial<Settings>) =>
+    update.mutate({ ...s, ...patch }, { onSuccess: toastSaved, onError: (e) => toast.error(errorMessage(e)) });
+  return (
+    <Card aria-labelledby="advanced-title">
+      <CardTitle id="advanced-title">Für besondere Fälle</CardTitle>
+      <label className="flex items-start justify-between gap-4">
+        <span className="flex flex-col gap-0.5">
+          <span className="text-[13px] font-medium">Server-Fingerprints pro Key (known_hosts)</span>
+          <span className="text-xs text-muted-foreground">
+            ssh merkt sich, woran es deine Server erkennt. Mit dieser Option liegt das pro Key in einer eigenen Datei und
+            verschwindet beim Archivieren mit.
+          </span>
+        </span>
+        <Switch
+          aria-label="Server-Fingerprints pro Key"
+          checked={s.known_hosts_per_profile}
+          disabled={update.isPending}
+          onCheckedChange={(v) => toggle({ known_hosts_per_profile: v })}
+        />
+      </label>
+      <label className="flex items-start justify-between gap-4">
+        <span className="flex flex-col gap-0.5">
+          <span className="text-[13px] font-medium">Include mit vollem Pfad</span>
+          <span className="text-xs text-muted-foreground">Statt ~ in ~/.ssh/config – nötig für Dolphin/KIO mit libssh vor 0.10.2 (der Doctor meldet das).</span>
+        </span>
+        <Switch
+          aria-label="Include mit vollem Pfad"
+          checked={s.absolute_ssh_include}
+          disabled={update.isPending}
+          onCheckedChange={(v) => toggle({ absolute_ssh_include: v })}
+        />
+      </label>
     </Card>
   );
 }

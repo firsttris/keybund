@@ -259,7 +259,7 @@ fn which_outside_profiles_and_with_local_override() {
     // A folder outside of all profiles falls back to the default profile.
     let r = which::which(&env, &config, &env.home.join("tmp").display().to_string()).unwrap();
     assert_eq!(r.profile_id.as_deref(), Some("privat"));
-    assert_eq!(r.via.as_deref(), Some("Standard-Profil"));
+    assert_eq!(r.via.as_deref(), Some("Standard-Key"));
 
     // A repo with its own core.sshCommand is reported as a mismatch.
     let repo = env.home.join("dev/kunde-a/special");
@@ -282,7 +282,7 @@ fn which_outside_profiles_and_with_local_override() {
     assert_eq!(r.key_path, None);
     assert!(r.notes.iter().any(|n| n.contains("kein core.sshCommand")));
     let r = which::which(&env, &config, &env.home.join("plain").display().to_string()).unwrap();
-    assert!(r.notes.iter().any(|n| n.contains("kein Standard-Profil")));
+    assert!(r.notes.iter().any(|n| n.contains("keinen Standard-Key")));
 }
 
 #[test]

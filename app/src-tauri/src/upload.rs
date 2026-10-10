@@ -106,7 +106,7 @@ fn resolve(env: &Env, id: &str, host: &str) -> CmdResult<Resolved> {
         .iter()
         .find(|h| h.provider.is_git_host() && (h.target_name() == host || h.hostname.eq_ignore_ascii_case(host)))
         .cloned()
-        .ok_or_else(|| CmdError::other(format!("Profil „{id}“ hat kein Git-Konto {host}")))?;
+        .ok_or_else(|| CmdError::other(format!("Key „{id}“ hat kein Git-Konto {host}")))?;
     let api = Api::new(env, entry.provider, &entry.hostname);
     Ok(Resolved { profile, host: entry, api })
 }

@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { renderApp } from "@/test/render";
 
@@ -10,7 +10,7 @@ describe("import from ~/.ssh/config", () => {
     expect(router.state.location.pathname).toBe("/import");
   });
 
-  it("imports, writes the configs and removes the old entries", async () => {
+  it("imports, writes the configs and removes the old entries in one click", async () => {
     const { user, backend } = await renderApp("/import");
     const pflege = await screen.findByRole("region", { name: "Pflegeabc Account" });
     expect(within(pflege).getByText("~/.ssh/pflegeabc/id_ed25519")).toBeInTheDocument();
@@ -20,36 +20,44 @@ describe("import from ~/.ssh/config", () => {
     await user.clear(within(pflege).getByLabelText("Name"));
     await user.type(within(pflege).getByLabelText("Name"), "Pflege ABC");
     const scomm = screen.getByRole("region", { name: "S-Communication" });
-    await user.type(within(scomm).getByLabelText("Projektordner (optional)"), "~/dev/sparkasse-neu");
+    await user.type(within(scomm).getByLabelText("Git-Ordner (optional)"), "~/dev/sparkasse-neu");
+    expect(screen.getByRole("checkbox", { name: /Alte Einträge danach/ })).toBeChecked();
     await user.click(screen.getByRole("button", { name: "2 Keys übernehmen" }));
 
-    expect(await screen.findByRole("heading", { name: "2. Keybund-Configs schreiben" })).toBeInTheDocument();
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("Alles übernommen: 2 Keys, alte Einträge entfernt");
+    expect(within(status).getByText("Backup: ~/.ssh/config.keybund-backup")).toBeInTheDocument();
+    expect(within(status).getByRole("link", { name: "Key pflegeabc öffnen" })).toBeInTheDocument();
     expect(backend.state.profiles.find((p) => p.id === "pflegeabc")).toMatchObject({
       name: "Pflege ABC",
       hosts: [{ alias: "pflegeabc", hostname: "github.com" }],
     });
     expect(backend.state.profiles.find((p) => p.id === "s-communication")!.folders).toEqual(["~/dev/sparkasse-neu/"]);
-
-    // Cleanup waits until the configs are written.
-    const cleanup = screen.getByRole("button", { name: "Alte Einträge entfernen" });
-    expect(cleanup).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Configs schreiben" }));
-    expect(await screen.findByRole("button", { name: "Alte Einträge entfernen" })).toBeEnabled();
-    expect(screen.getByText("-Host pflegeabc")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Alte Einträge entfernen" }));
-
-    expect(await screen.findByText(/Alles übernommen/)).toBeInTheDocument();
     expect(backend.state.sshBlocks).toEqual([]);
+    expect(screen.queryByText(/nicht zu deinen Keys/)).not.toBeInTheDocument();
   });
 
-  it("can skip a proposal", async () => {
+  it("can skip a proposal and keep the old entries", async () => {
     const { user, backend } = await renderApp("/import");
     await user.click(await screen.findByRole("checkbox", { name: "Pflegeabc Account übernehmen" }));
+    await user.click(screen.getByRole("checkbox", { name: /Alte Einträge danach/ }));
     await user.click(screen.getByRole("button", { name: "1 Key übernehmen" }));
-    await screen.findByRole("heading", { name: "2. Keybund-Configs schreiben" });
+    expect(await screen.findByRole("status")).toHaveTextContent("Alles übernommen: 1 Key");
     expect(backend.state.profiles.some((p) => p.id === "pflegeabc")).toBe(false);
     expect(backend.state.profiles.some((p) => p.id === "s-communication")).toBe(true);
+    expect(backend.state.sshBlocks).toHaveLength(2);
     expect(screen.getByRole("region", { name: "Pflegeabc Account" })).toBeInTheDocument();
+  });
+
+  it("removes old entries that Keybund covers already", async () => {
+    const { user, backend } = await renderApp("/import");
+    await user.click(await screen.findByRole("checkbox", { name: /Alte Einträge danach/ }));
+    await user.click(screen.getByRole("button", { name: "2 Keys übernehmen" }));
+    await user.click(await screen.findByText("Änderung ansehen"));
+    expect(screen.getByText("-Host pflegeabc")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Alte Einträge entfernen" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Alte Einträge entfernen" })).not.toBeInTheDocument());
+    expect(backend.state.sshBlocks).toEqual([]);
   });
 
   it("shows when nothing is left", async () => {

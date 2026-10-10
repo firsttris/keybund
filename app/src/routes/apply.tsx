@@ -15,10 +15,11 @@ export function ApplyPage() {
     <>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1.5">
-          <h1 className="m-0 text-[22px] font-semibold tracking-tight">Änderungen anwenden</h1>
+          <h1 className="m-0 text-[22px] font-semibold tracking-tight">Configs neu schreiben</h1>
           <p className="m-0 max-w-[640px] text-muted-foreground">
-            Keybund schreibt nur seine eigenen Dateien und je eine Include-Zeile in ~/.ssh/config und ~/.gitconfig. Vor dem
-            ersten Schreiben wird von deinen Dateien ein Backup angelegt.
+            Was du in Keybund änderst, wird sofort geschrieben. Diese Dateien passen trotzdem nicht zu deinen Keys – meist, weil
+            sie von Hand geändert oder gelöscht wurden. Keybund schreibt nur seine eigenen Dateien und je eine Include-Zeile in
+            ~/.ssh/config und ~/.gitconfig; von deinen Dateien gibt es vorher ein Backup.
           </p>
         </div>
         <Button
@@ -37,7 +38,7 @@ export function ApplyPage() {
           }
         >
           {apply.isPending && <Spinner className="size-3.5" />}
-          Anwenden
+          Neu schreiben
         </Button>
       </div>
       {plan.isPending && <Spinner />}
@@ -52,7 +53,7 @@ export function ApplyPage() {
       {plan.isSuccess && changes.length === 0 && (
         <p role="status" className="m-0 flex items-center gap-2 text-success">
           <Check aria-hidden className="size-4" />
-          Alle Configs sind aktuell.
+          Alle Configs passen zu deinen Keys.
         </p>
       )}
       {changes.length > 0 && <DiffView changes={changes} />}

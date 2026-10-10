@@ -28,7 +28,7 @@ fn theme() -> ColorfulTheme {
 pub fn list(env: &Env, all: bool) -> Result<ExitCode> {
     let config = store::load(env)?;
     if config.profiles.is_empty() {
-        println!("Noch keine Profile. Mit `keybund new` ein Projekt anlegen.");
+        println!("Noch keine Keys. Mit `keybund new` einen anlegen.");
         return Ok(ExitCode::SUCCESS);
     }
     for p in config.profiles.iter().filter(|p| all || !p.archived) {
@@ -116,7 +116,7 @@ pub struct NewArgs {
     /// Anzeigename, z. B. „Kunde C“
     #[arg(long)]
     name: Option<String>,
-    /// Profil-ID (Standard: aus dem Namen abgeleitet)
+    /// Key-ID (Standard: aus dem Namen abgeleitet)
     #[arg(long)]
     id: Option<String>,
     #[arg(long)]
@@ -133,7 +133,7 @@ pub struct NewArgs {
     user: Option<String>,
     #[arg(long)]
     port: Option<u16>,
-    /// Projektordner (wird angelegt, falls nötig)
+    /// Git-Ordner (wird angelegt, falls nötig)
     #[arg(long)]
     folder: Vec<String>,
     #[arg(long)]
@@ -149,7 +149,7 @@ pub struct NewArgs {
     /// Kommentar für einen neuen Key
     #[arg(long)]
     comment: Option<String>,
-    /// Als Standard-Profil setzen
+    /// Als Standard-Key setzen
     #[arg(long)]
     default: bool,
     /// Ohne Rückfragen anwenden
@@ -183,15 +183,15 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
     // 1. Name
     let name = match args.name.clone() {
         Some(n) => n,
-        None if tty => ask("Projektname", None)?,
+        None if tty => ask("Name des Keys", None)?,
         None => require(None, "--name")?,
     };
     let id = args.id.clone().unwrap_or_else(|| store::slugify(&name));
     if !store::is_valid_id(&id) {
-        bail!("Ungültige Profil-ID „{id}“ – mit --id angeben");
+        bail!("Ungültige Key-ID „{id}“ – mit --id angeben");
     }
     if config.profiles.iter().any(|p| p.id == id) {
-        bail!("Profil „{id}“ existiert bereits");
+        bail!("Einen Key „{id}“ gibt es schon");
     }
 
     // 2. Provider und Host
@@ -229,7 +229,7 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
     // 3. Projektordner
     let mut folders = args.folder.clone();
     if folders.is_empty() && tty && provider.is_git_host() {
-        folders.push(ask("Projektordner", Some(config.settings.project_folder(&id)))?);
+        folders.push(ask("Git-Ordner", Some(config.settings.project_folder(&id)))?);
     }
     let folders: Vec<String> = folders
         .iter()
@@ -307,7 +307,7 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
         config.default_profile = Some(id.clone());
     }
     store::save(env, &config)?;
-    ui::success(&format!("Profil „{name}“ gespeichert"));
+    ui::success(&format!("Key „{name}“ gespeichert"));
 
     // 6. Diff anzeigen und anwenden
     if !args.no_apply {
@@ -429,7 +429,7 @@ pub fn test(env: &Env, id: &str, host: Option<&str>) -> Result<ExitCode> {
 
 fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCode> {
     if profile.hosts.is_empty() {
-        bail!("Profil „{}“ hat keinen Host", profile.id);
+        bail!("Key „{}“ hat keinen Host", profile.id);
     }
     let hosts: Vec<&HostEntry> = profile
         .hosts
@@ -441,7 +441,7 @@ fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCod
         })
         .collect();
     if let (true, Some(name)) = (hosts.is_empty(), only) {
-        bail!("Profil „{}“ hat keinen Host {name}", profile.id);
+        bail!("Key „{}“ hat keinen Host {name}", profile.id);
     }
     let mut ok = true;
     let mut remembered = None;
@@ -460,6 +460,9 @@ fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCod
             ui::error(&format!("{}: {}", r.host, r.message));
             print_steps(&r.steps);
             ui::hint(&format!("Befehl: {}", r.command));
+            if r.key_rejected {
+                ui::hint(&format!("Key eintragen: keybund install-key {} --host {}", profile.id, host.target_name()));
+            }
         }
     }
     if let Some(r) = remembered {
@@ -534,7 +537,7 @@ pub fn which(env: &Env, target: Option<&str>) -> Result<ExitCode> {
     }
     if let Some(id) = &r.profile_id {
         let name = config.profile(id).map(|p| p.name.clone()).unwrap_or_else(|_| id.clone());
-        ui::row("Profil", &name);
+        ui::row("Key", &name);
     }
     if let Some(src) = &r.source {
         let via = r.via.as_deref().map(|v| format!(" · via {v}")).unwrap_or_default();
@@ -569,15 +572,15 @@ pub fn clone(env: &Env, url: &str, profile: Option<&str>, dest: Option<PathBuf>)
             let matches = clone_mod::matching_profiles(&config, &parsed);
             match matches.as_slice() {
                 [only] => only,
-                [] => bail!("Kein Profil hat den Host {} – mit --profile wählen", parsed.host),
+                [] => bail!("Kein Key hat den Host {} – mit --key wählen", parsed.host),
                 many if interactive() => {
                     let items: Vec<&str> = many.iter().map(|p| p.name.as_str()).collect();
-                    let idx = Select::with_theme(&theme()).with_prompt("Profil").items(&items).default(0).interact()?;
+                    let idx = Select::with_theme(&theme()).with_prompt("Key").items(&items).default(0).interact()?;
                     many[idx]
                 }
                 many => {
                     let ids: Vec<&str> = many.iter().map(|p| p.id.as_str()).collect();
-                    bail!("Mehrere Profile nutzen {}: {} – mit --profile wählen", parsed.host, ids.join(", "))
+                    bail!("Mehrere Keys nutzen {}: {} – mit --key wählen", parsed.host, ids.join(", "))
                 }
             }
         }
@@ -586,7 +589,7 @@ pub fn clone(env: &Env, url: &str, profile: Option<&str>, dest: Option<PathBuf>)
         Some(d) => d,
         None => clone_mod::target_dir(env, profile, &parsed)?,
     };
-    ui::hint(&format!("Profil „{}“ → {}", profile.name, env.contract(&target)));
+    ui::hint(&format!("Key „{}“ → {}", profile.name, env.contract(&target)));
     let target = clone_mod::clone(env, profile, url, Some(target))?;
     ui::success(&format!("Geklont nach {}", env.contract(&target)));
     Ok(ExitCode::SUCCESS)
@@ -666,7 +669,7 @@ pub fn set_default(env: &Env, id: &str) -> Result<ExitCode> {
     config.profile(id)?;
     config.default_profile = Some(id.to_string());
     store::save(env, &config)?;
-    ui::success(&format!("Standard-Profil: {id}"));
+    ui::success(&format!("Standard-Key: {id}"));
     ui::hint("Mit `keybund apply` übernehmen.");
     Ok(ExitCode::SUCCESS)
 }
@@ -677,7 +680,7 @@ pub fn archive(env: &Env, id: &str, yes: bool) -> Result<ExitCode> {
     if !yes
         && interactive()
         && !Confirm::with_theme(&theme())
-            .with_prompt(format!("Profil „{name}“ archivieren? Der Key wandert nach ~/.ssh/archive/"))
+            .with_prompt(format!("Key „{name}“ archivieren? Der Key wandert nach ~/.ssh/archive/"))
             .default(false)
             .interact()?
     {
@@ -736,7 +739,7 @@ pub fn import(env: &Env, all: bool, yes: bool, keep_old: bool) -> Result<ExitCod
             return Ok(ExitCode::SUCCESS);
         }
         let ids = import_mod::import(env, &chosen)?;
-        ui::success(&format!("{} Profil(e) angelegt: {}", ids.len(), ids.join(", ")));
+        ui::success(&format!("{} Key(s) übernommen: {}", ids.len(), ids.join(", ")));
         let config = store::load(env)?;
         if !confirm_and_apply(env, &apply::plan(env, &config)?, !tty)? {
             ui::warn("Configs nicht geschrieben – später mit `keybund apply`.");
@@ -789,7 +792,7 @@ pub fn uninstall(env: &Env, restore_backups: bool, purge: bool, yes: bool) -> Re
     ui::hint("Deine Keys in ~/.ssh sind unverändert.");
     if !purge {
         ui::hint(
-            "Die Profile liegen weiter in ~/.config/keybund/profiles.toml – `keybund apply` richtet alles wieder ein.",
+            "Deine Keys stehen weiter in ~/.config/keybund/profiles.toml – `keybund apply` richtet alles wieder ein.",
         );
     }
     Ok(ExitCode::SUCCESS)
@@ -797,17 +800,18 @@ pub fn uninstall(env: &Env, restore_backups: bool, purge: bool, yes: bool) -> Re
 
 #[derive(Args)]
 pub struct EditArgs {
-    /// Profil-ID
+    /// Key-ID
+    #[arg(value_name = "KEY")]
     profile: String,
     /// Neuer Anzeigename
     #[arg(long)]
     name: Option<String>,
     #[arg(long)]
     color: Option<String>,
-    /// Projektordner hinzufügen (wird angelegt, falls nötig)
+    /// Git-Ordner hinzufügen (wird angelegt, falls nötig)
     #[arg(long, value_name = "ORDNER")]
     add_folder: Vec<String>,
-    /// Projektordner entfernen
+    /// Git-Ordner entfernen
     #[arg(long, value_name = "ORDNER")]
     remove_folder: Vec<String>,
     #[arg(long)]
@@ -873,7 +877,7 @@ pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
         let count = p.folders.len();
         p.folders.retain(|f| f != &normalized && f != folder);
         if p.folders.len() == count {
-            bail!("Profil „{}“ hat den Ordner {folder} nicht", p.id);
+            bail!("Key „{}“ hat den Ordner {folder} nicht", p.id);
         }
         changes.push(format!("− Ordner {normalized}"));
     }
@@ -916,7 +920,7 @@ pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
         let count = p.hosts.len();
         p.hosts.retain(|h| h.alias.as_deref() != Some(name.as_str()) && !(h.alias.is_none() && &h.hostname == name));
         if p.hosts.len() == count {
-            bail!("Profil „{}“ hat keinen Host {name}", p.id);
+            bail!("Key „{}“ hat keinen Host {name}", p.id);
         }
         changes.push(format!("− Host {name}"));
     }
@@ -946,7 +950,7 @@ pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
     for c in &changes {
         ui::row("", c);
     }
-    ui::success(&format!("Profil „{}“ gespeichert", args.profile));
+    ui::success(&format!("Key „{}“ gespeichert", args.profile));
     if args.no_apply {
         return Ok(ExitCode::SUCCESS);
     }
@@ -1009,7 +1013,7 @@ pub fn trust(env: &Env, id: &str, host: Option<&str>, yes: bool) -> Result<ExitC
         })
         .collect();
     if targets.is_empty() {
-        bail!("Profil „{id}“ hat keinen Host {}", host.unwrap_or_default());
+        bail!("Key „{id}“ hat keinen Host {}", host.unwrap_or_default());
     }
     for target in targets {
         if keybund_core::hostkeys::is_known(env, &config.settings, p, target) {
@@ -1043,8 +1047,8 @@ pub fn install_key(env: &Env, id: &str, host: Option<&str>, tokens: &TokenOption
         .collect();
     if targets.is_empty() {
         match host {
-            Some(name) => bail!("Profil „{id}“ hat keinen Host {name}"),
-            None => bail!("Profil „{id}“ hat keinen Host"),
+            Some(name) => bail!("Key „{id}“ hat keinen Host {name}"),
+            None => bail!("Key „{id}“ hat keinen Host"),
         }
     }
     let mut token_from_stdin = None;

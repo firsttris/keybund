@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ImportProposal, NewProject, Plan, Profile, ProfilesView } from "../bindings";
+import type { ImportDone, ImportProposal, NewProject, Plan, Profile, ProfilesView } from "../bindings";
 import { createMockBackend, seedState } from "./backend";
 
 function backend() {
@@ -53,10 +53,18 @@ describe("mock backend contract", () => {
     });
   });
 
-  it("refuses to apply a plan that changed since the preview", async () => {
+  it("writes changes right away", async () => {
     const b = backend();
     const p = b.state.profiles[1];
     await b.invoke("update_profile", { profile: { ...p, git: { ...p.git!, sign: true } } as Profile });
+    await b.invoke("set_default_profile", { id: null });
+    expect(((await b.invoke("plan_changes")) as Plan).changes).toEqual([]);
+    expect(b.state.applied.get(`~/.config/keybund/git/${p.id}.gitconfig`)).toContain("gpgsign = true");
+  });
+
+  it("refuses to restore a file that changed since the preview", async () => {
+    const b = backend();
+    b.state.applied.set("~/.config/keybund/git/sparkasse.gitconfig", "kaputt\n");
     const plan = (await b.invoke("plan_changes")) as Plan;
     expect(plan.changes).toHaveLength(1);
     await expect(b.invoke("apply_changes", { expectedDiffs: [] })).rejects.toMatchObject({ kind: "stale_plan" });
@@ -64,19 +72,19 @@ describe("mock backend contract", () => {
     expect(((await b.invoke("plan_changes")) as Plan).changes).toEqual([]);
   });
 
-  it("archives and plans the deletion", async () => {
+  it("archives and removes the configs", async () => {
     const b = backend();
     const res = await b.invoke("archive_profile", { id: "kunde-b" });
     expect(res).toMatchObject({ key_path: "~/.ssh/archive/kunde-b_ed25519", remove_key_urls: ["https://github.com/settings/keys"] });
-    const plan = (await b.invoke("plan_changes")) as Plan;
-    expect(plan.changes.find((c) => c.path.endsWith("kunde-b.gitconfig"))?.kind).toBe("delete");
+    expect(b.state.applied.has("~/.config/keybund/git/kunde-b.gitconfig")).toBe(false);
+    expect(((await b.invoke("plan_changes")) as Plan).changes).toEqual([]);
     await expect(b.invoke("archive_profile", { id: "kunde-b" })).rejects.toMatchObject({ kind: "archived" });
   });
 
   it("resolves folders and hosts", async () => {
     const b = backend();
     expect(await b.invoke("which", { query: "~/dev/sparkasse/repo" })).toMatchObject({ profile_id: "sparkasse", mode: "folder" });
-    expect(await b.invoke("which", { query: "~/elsewhere" })).toMatchObject({ profile_id: "privat", via: "Standard-Profil" });
+    expect(await b.invoke("which", { query: "~/elsewhere" })).toMatchObject({ profile_id: "privat", via: "Standard-Key" });
     expect(await b.invoke("which", { query: "meinserver" })).toMatchObject({ profile_id: "privat", hostname: "1.2.3.4" });
   });
 
@@ -98,13 +106,23 @@ describe("mock backend contract", () => {
     expect(((await b.invoke("load_profiles")) as ProfilesView).import_available).toBe(2);
     expect(((await b.invoke("cleanup_preview")) as Plan).changes).toEqual([]);
 
-    await b.invoke("import_profiles", { chosen: proposals });
-    expect(((await b.invoke("load_profiles")) as ProfilesView).import_available).toBe(0);
+    await b.invoke("import_profiles", { chosen: proposals, removeOld: false });
+    const after = (await b.invoke("load_profiles")) as ProfilesView;
+    expect([after.import_available, after.pending_changes]).toEqual([0, 0]);
     const cleanup = (await b.invoke("cleanup_preview")) as Plan;
     expect(cleanup.changes[0]).toMatchObject({ path: "~/.ssh/config", user_file: true });
     await expect(b.invoke("cleanup_apply", { expectedDiffs: [] })).rejects.toMatchObject({ kind: "stale_plan" });
     await b.invoke("cleanup_apply", { expectedDiffs: cleanup.changes.map((c) => c.diff) });
     expect(b.state.sshBlocks).toEqual([]);
+  });
+
+  it("imports and removes the old entries in one step", async () => {
+    const b = backend();
+    const proposals = (await b.invoke("import_proposals")) as ImportProposal[];
+    const done = (await b.invoke("import_profiles", { chosen: proposals.slice(0, 1), removeOld: true })) as ImportDone;
+    expect(done.ids).toEqual(["pflegeabc"]);
+    expect(done.report.backups).toEqual(["~/.ssh/config.keybund-backup"]);
+    expect(b.state.sshBlocks.map((x) => x.pattern)).toEqual(["gitlab.sfp.berlin"]);
   });
 
   it("makes a plain git host the default when there is none", async () => {

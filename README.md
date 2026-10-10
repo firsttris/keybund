@@ -1,13 +1,14 @@
 # Keybund
 
-**SSH-Keys pro Projekt.** Keybund ordnet jedem Projekt ein Profil zu – Key, Hosts, Ordner, Git-Identität – und schreibt
-daraus Standard-Configs für OpenSSH und Git. Danach nehmen Terminal, Git und Dolphin automatisch den richtigen Key,
+**Der richtige SSH-Key, automatisch.** In Keybund legst du Keys an und sagst bei jedem, wo er gilt – Git-Ordner,
+GitHub/GitLab-Konten, Server. Daraus schreibt Keybund Standard-Configs für OpenSSH und Git. Danach nehmen Terminal, Git und Dolphin automatisch den richtigen Key,
 ohne dass Keybund läuft.
 
 - **Kein eigener Agent, kein eigenes Protokoll.** Keybund erzeugt nur `~/.ssh/config`-Blöcke und Gitconfig-Snippets.
 - **Eigene Dateien statt Fremdeingriff.** In deine Configs kommt genau je eine Include-Zeile, mit einmaligem Backup.
 - **Private Keys werden nie gelesen.** Keybund kennt nur Pfade, Fingerprints und Public Keys; erzeugt wird per `ssh-keygen`.
-- **Vorschau vor jedem Schreiben.** Jede Änderung wird als Diff gezeigt und erst nach Bestätigung atomar geschrieben.
+- **Sofort wirksam, nachvollziehbar.** Die App schreibt jede Änderung gleich (atomar, deine eigenen Dateien vorher mit
+  Backup); die generierte Config jedes Keys ist jederzeit einsehbar. Die CLI zeigt vor dem Schreiben den Diff.
 - **Ein Rust-Core, zwei Oberflächen:** CLI und GUI (Tauri). KRunner folgt.
 
 ## Der Key steht im Mittelpunkt
@@ -24,7 +25,8 @@ In Keybund legst du **Keys** an – „Privat“, „Kunde C“, „NAS“ – u
 Ein Key kann alles zugleich sein – z. B. „Privat“ als Standard, mit GitHub und deinem Heimserver. Neuer Key: Name
 eingeben, „Key anlegen“ – wo er gilt, legst du danach auf seiner Seite fest. Bei jeder Verwendung gibt es „Testen“
 (mit einer verständlichen Schritt-für-Schritt-Erklärung, was ssh gemacht hat) und, wo es geht, „Key eintragen“.
-Intern heißt ein Key mit seinen Verwendungen „Profil“ (`profiles.toml`, CLI).
+Schlägt ein Test fehl, weil der Server den Key nicht kennt, steht der passende Knopf gleich daneben („Jetzt bei GitHub
+eintragen“, „Key auf nas eintragen“). Gespeichert wird in `~/.config/keybund/profiles.toml`.
 
 ## Key bei GitHub und GitLab eintragen
 
@@ -34,8 +36,8 @@ du bestätigst ihn, fertig – kein Passwort, kein Token zum Abtippen. Selbst ge
 nehmen ein persönliches Zugriffstoken; Keybund öffnet die Seite dafür mit den richtigen Berechtigungen.
 
 Tokens werden nach dem Eintragen verworfen. Nur wenn du „Token im Schlüsselbund merken“ wählst, landen sie per
-`secret-tool` im Schlüsselbund (GNOME Keyring, KWallet) – je Profil und Host, weil jedes Profil meist ein anderes Konto
-ist. Achte beim Anmelden darauf, im Browser mit dem Konto des Profils angemeldet zu sein; Keybund zeigt danach, bei
+`secret-tool` im Schlüsselbund (GNOME Keyring, KWallet) – je Key und Host, weil jeder Key meist zu einem anderen Konto
+gehört. Achte beim Anmelden darauf, im Browser mit dem richtigen Konto angemeldet zu sein; Keybund zeigt danach, bei
 welchem Konto der Key gelandet ist. Bitbucket hat keine passende API, dort öffnet sich die Seite zum Eintragen.
 
 Die Anmeldung im Browser braucht registrierte OAuth-Apps: [docs/oauth-apps.md](docs/oauth-apps.md).
@@ -47,8 +49,8 @@ Bitbucket sind eingebaut und werden ohne Rückfrage nach `~/.ssh/known_hosts` ge
 zeigt Keybund vor der ersten Verbindung den Fingerprint (App: Dialog, CLI: Rückfrage oder `keybund trust`), und
 erst nach der Bestätigung verbindet sich ssh – mit `StrictHostKeyChecking=yes`.
 
-Die Host-Keys der Server eines Profils landen in einer eigenen Datei `~/.ssh/known_hosts.d/<profil>` (der
-`Host`-Block bekommt `UserKnownHostsFile ~/.ssh/known_hosts.d/<profil> ~/.ssh/known_hosts`) und wandern beim
+Die Host-Keys der Server eines Keys landen in einer eigenen Datei `~/.ssh/known_hosts.d/<key>` (der
+`Host`-Block bekommt `UserKnownHostsFile ~/.ssh/known_hosts.d/<key> ~/.ssh/known_hosts`) und wandern beim
 Archivieren mit nach `~/.ssh/archive/`. Abschaltbar in den Einstellungen bzw. mit
 `keybund config known-hosts-per-profile false`.
 
@@ -96,45 +98,47 @@ Daraus schreibt Keybund:
 | Datei | Inhalt | eingebunden über |
 | --- | --- | --- |
 | `~/.ssh/config.d/keybund.conf` | `Host`-Blöcke für Server mit Alias, je `IdentityFile` + `IdentitiesOnly yes` | `Include` ganz oben in `~/.ssh/config` |
-| `~/.config/keybund/git/index.gitconfig` | `core.sshCommand` des Standard-Profils, ein `includeIf "gitdir:…/"` pro Ordner | `[include]` in `~/.gitconfig` |
+| `~/.config/keybund/git/index.gitconfig` | `core.sshCommand` des Standard-Keys, ein `includeIf "gitdir:…/"` pro Ordner | `[include]` in `~/.gitconfig` |
 | `~/.config/keybund/git/<id>.gitconfig` | `user.name`, `user.email`, `core.sshCommand = ssh -i <key> -o IdentitiesOnly=yes -o AddKeysToAgent=yes`, Signing | `index.gitconfig` |
-| `~/.config/keybund/allowed_signers` | E-Mail + Pubkey je signierendem Profil | `gpg.ssh.allowedSignersFile` |
+| `~/.config/keybund/allowed_signers` | E-Mail + Pubkey je signierendem Key | `gpg.ssh.allowedSignersFile` |
 
 ## Umstieg mit bestehender `~/.ssh/config`
 
 Hast du schon Einträge wie `Host github.com` mit `IdentityFile`, übernimmt Keybund sie: in der App unter
 **Bestehende SSH-Config übernehmen** (die Startseite weist darauf hin) oder mit `keybund import`.
 
-1. Aus jedem `Host`-Block mit eigenem Key wird ein Profil mit genau diesem Key – nichts wird verschoben.
-   Ein `Host github.com` wird zum Standard-Profil, Aliase wie `Host pflegeabc` bleiben Aliase.
+In der App ist das ein Klick („2 Keys übernehmen“), der alle drei Schritte macht:
+
+1. Aus jedem `Host`-Block mit eigenem Key wird ein Key in Keybund – die Key-Dateien bleiben, wo sie sind.
+   Ein `Host github.com` wird zum Standard-Key, Aliase wie `Host pflegeabc` bleiben Aliase.
 2. Keybund schreibt seine Configs.
-3. Die übernommenen Blöcke werden aus `~/.ssh/config` entfernt (mit Diff und Backup). Das ist wichtig: Solange dort
-   ein `IdentityFile` für github.com steht, bietet ssh diesen Key zusätzlich zum Profil-Key an, und eine Anmeldung kann
+3. Die übernommenen Blöcke werden aus `~/.ssh/config` entfernt (vorher mit Backup; abwählbar). Das ist wichtig: Solange
+   dort ein `IdentityFile` für github.com steht, bietet ssh diesen Key zusätzlich zum Key aus Keybund an, und eine Anmeldung kann
    mit dem falschen Key gelingen. Der Verbindungstest prüft deshalb, welcher Key tatsächlich akzeptiert wurde, und der
    Doctor meldet solche Einträge.
 
 ## CLI
 
 ```text
-keybund list                     Profile mit Fingerprint, Ordnern, Hosts
-keybund show <profil>            Details und Pubkey
-keybund edit <profil> …          Name, Ordner, Hosts, Git-Identität, Signieren, Key ändern (siehe --help)
+keybund list                     Keys mit Fingerprint, Git-Ordnern, Hosts
+keybund show <key>               Details und Pubkey
+keybund edit <key> …             Name, Git-Ordner, Hosts, Git-Identität, Signieren, Key-Datei ändern (siehe --help)
 keybund new                      Neuen Key anlegen, Fragen im Terminal (oder alles über Optionen, siehe --help)
-keybund copy <profil> [--print]  Pubkey in die Zwischenablage (wl-copy, xclip oder xsel)
-keybund test <profil> [--host h] Verbindungstest, Exit-Code 0 bei Erfolg
-keybund install-key <profil> [--host h] [--token-stdin] [--remember]
+keybund copy <key> [--print]     Pubkey in die Zwischenablage (wl-copy, xclip oder xsel)
+keybund test <key> [--host h]    Verbindungstest, Exit-Code 0 bei Erfolg
+keybund install-key <key> [--host h] [--token-stdin] [--remember]
                                  Pubkey eintragen: Server wie ssh-copy-id, GitHub/GitLab per API
-keybund trust <profil> [--host h] Host-Keys prüfen und bestätigen (Fingerprint)
+keybund trust <key> [--host h]   Host-Keys prüfen und bestätigen (Fingerprint)
 keybund config [key] [wert]      Einstellungen: projects-dir, keys-dir, known-hosts-per-profile, absolute-ssh-include
 keybund which [pfad|host]        Welcher Key wird hier benutzt – und warum?
-keybund clone <url> [-p id]      Klont ins richtige Profil, mit dem richtigen Key
+keybund clone <url> [--key id]   Klont in den Git-Ordner des passenden Keys
 keybund apply [--dry-run] [-y]   Diff zeigen bzw. schreiben
 keybund doctor [--fix]           Alle Checks, Exit-Code ≠ 0 bei Problemen
 keybund keys                     Vorhandene Keys in ~/.ssh
 keybund import [--all] [-y]      Bestehende ~/.ssh/config übernehmen, alte Einträge danach entfernen
 keybund uninstall [--restore-backups] [--purge]   Alles entfernen, was Keybund geschrieben hat (Keys bleiben)
-keybund default <profil>         Standard-Profil setzen
-keybund archive <profil>         Key nach ~/.ssh/archive, Configs entfernen
+keybund default <key>            Standard-Key setzen
+keybund archive <key>            Key nach ~/.ssh/archive, Configs entfernen
 ```
 
 Beispiel ohne Rückfragen:
@@ -146,10 +150,12 @@ keybund new --name "Kunde C" --provider github --folder ~/dev/kunde-c \
 
 ## GUI
 
-Seitenleiste mit deinen Keys (und wofür sie gelten), Startseite mit einer kurzen Erklärung, wie Keybund funktioniert,
-„Neuer Key“ als ein einziges kurzes Formular, Key-Seite mit „Wo wird dieser Key benutzt?“ (Git-Ordner, Git-Konten,
-Server, Standard – jeweils mit Testen und Key eintragen), Git-Identität und generierter Config. Dazu „Welcher Key?“
-mit Doctor, Clone-Helfer, Diff-Ansicht zum Anwenden, Übernehmen einer bestehenden `~/.ssh/config` und Einstellungen.
+Seitenleiste mit deinen Keys (und wofür sie gelten) und einer Suche, die auch beantwortet, welcher Key für einen
+Ordner oder Server gilt (Enter). Die Startseite zeigt, was zu tun ist – fehlgeschlagene Tests, Hinweise vom Doctor,
+unbenutzte Keys – oder „Alles in Ordnung“, dazu eine kurze Erklärung, wie Keybund funktioniert. „Neuer Key“ ist ein
+einziges kurzes Formular, die Key-Seite zeigt „Wo wird dieser Key benutzt?“ (Git-Ordner, Git-Konten, Server, Standard –
+jeweils mit Testen und Key eintragen), Git-Identität und generierte Config. Änderungen gelten sofort. Dazu Doctor,
+Clone-Helfer, Übernehmen einer bestehenden `~/.ssh/config` und Einstellungen (Spezielles unter „Erweitert“).
 
 ## Aufbau
 
@@ -183,7 +189,7 @@ Jede Schicht hat eigene Tests, alle laufen in der CI (`.github/workflows/ci.yml`
 | Schicht | Was | Wo |
 | --- | --- | --- |
 | Unit (Rust) | Parsing, Validierung, Diff, Include-Logik, Provider-Ausgaben, URL-Parsing | `crates/*/src/**` |
-| Snapshot | `render` ist rein funktional, jede Profil-Kombination hat eine Golden-File (insta) | `crates/core/src/snapshots/` |
+| Snapshot | `render` ist rein funktional, jede Key-Kombination hat eine Golden-File (insta) | `crates/core/src/snapshots/` |
 | Integration (Rust) | `apply` gegen ein temporäres HOME, Auflösung mit echtem `git` und `ssh -G`, Doctor, Archiv | `crates/core/tests/` |
 | Integration (sshd) | Echter `sshd` auf localhost: Passphrase einmal, danach hält der Agent den Key (Test und `git`), falscher Key erkannt, Key auf Server eintragen | `crates/core/tests/sshd.rs` |
 | Integration (API) | Device Flow und Key-Upload gegen eine nachgebaute GitHub-/GitLab-API (mockito) | `crates/core/tests/upload.rs` |
@@ -230,7 +236,7 @@ Die Workflows kommen aus [firsttris/workflows](https://github.com/firsttris/work
 - [x] Phase 2 – GUI-MVP
 - [x] Phase 3 – Clone-Helfer, „Welcher Key?“, Archivieren, SSH-Signing, Warnung bei alten Keys
 - [x] Key-Upload per API (GitHub, GitLab; Device Flow und Token), Key auf Server eintragen
-- [x] Host-Keys bestätigen, known_hosts pro Profil, letzter Test bleibt gespeichert, Ordner einstellbar
+- [x] Host-Keys bestätigen, known_hosts pro Key, letzter Test bleibt gespeichert, Ordner einstellbar
 - [ ] Phase 4 – KRunner, Flatpak
 - [ ] Phase 5/6 – macOS und Windows
 

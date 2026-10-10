@@ -306,7 +306,10 @@ function UsageRow({
   );
 }
 
-function TestResult({ test }: { test: ReturnType<typeof useTestConnection> }) {
+/** The one thing to do when the server does not know the key yet. */
+type Fix = { text: string; label: string; onClick: () => void; busy?: boolean };
+
+function TestResult({ test, fix }: { test: ReturnType<typeof useTestConnection>; fix?: Fix | null }) {
   if (test.isPending) return <Spinner label="Teste Verbindung" />;
   if (test.isError) return <FieldError>{errorMessage(test.error)}</FieldError>;
   const result = test.data;
@@ -317,6 +320,15 @@ function TestResult({ test }: { test: ReturnType<typeof useTestConnection> }) {
         {result.success ? <Check aria-hidden className="size-4" /> : <X aria-hidden className="size-4" />}
         {result.message}
       </span>
+      {result.key_rejected && fix && (
+        <div className="flex flex-wrap items-center gap-3 rounded-[10px] border border-border bg-background p-3 text-[13px]">
+          <span className="min-w-[220px] flex-1 text-muted-foreground">{fix.text}</span>
+          <Button size="sm" onClick={fix.onClick} disabled={fix.busy}>
+            {fix.busy && <Spinner className="size-3" />}
+            {fix.label}
+          </Button>
+        </div>
+      )}
       {result.other_key && (
         <div role="alert" className="flex flex-col gap-1.5 rounded-[10px] border border-amber-500/35 bg-amber-500/5 p-3.5 text-[13px]">
           <span className="font-medium">Dieser Key wurde nicht benutzt</span>
@@ -375,7 +387,18 @@ function AccountRow({ profile, host, onRemove }: { profile: Profile; host: HostE
       }
     >
       {uploading && <KeyUpload profile={profile} host={name} onUploaded={() => test.mutate({ id: profile.id, host: name })} />}
-      <TestResult test={test} />
+      <TestResult
+        test={test}
+        fix={
+          uploading
+            ? null
+            : {
+                text: `Der Key steht noch nicht in deinem ${provider}-Konto. Keybund kann ihn eintragen – danach klappt die Anmeldung.`,
+                label: `Jetzt bei ${provider} eintragen`,
+                onClick: () => setUploading(true),
+              }
+        }
+      />
     </UsageRow>
   );
 }
@@ -386,6 +409,9 @@ function ServerRow({ profile, host, onRemove }: { profile: Profile; host: HostEn
   const name = host.alias ?? host.hostname;
   const result = install.data ?? null;
   const target = `${host.user ? `${host.user}@` : ""}${host.hostname}${host.port && host.port !== 22 ? `:${host.port}` : ""}`;
+  // Test right after installing, so the row shows whether it worked.
+  const installKey = () =>
+    install.mutate({ id: profile.id, host: name }, { onSuccess: (r) => r.success && test.mutate({ id: profile.id, host: name }) });
   return (
     <UsageRow
       icon={<Server aria-hidden className="size-4 text-muted-foreground" />}
@@ -398,7 +424,7 @@ function ServerRow({ profile, host, onRemove }: { profile: Profile; host: HostEn
       actions={
         !profile.archived && (
           <>
-            <Button variant="ghost" size="sm" disabled={install.isPending} onClick={() => install.mutate({ id: profile.id, host: name })}>
+            <Button variant="ghost" size="sm" disabled={install.isPending} onClick={installKey}>
               {install.isPending && <Spinner className="size-3" />}
               Key eintragen
             </Button>
@@ -418,12 +444,20 @@ function ServerRow({ profile, host, onRemove }: { profile: Profile; host: HostEn
         {result && <span className={result.success ? "text-success" : "text-danger"}>{result.message}</span>}
         {install.isError && <span className="text-danger">{errorMessage(install.error)}</span>}
       </div>
-      <TestResult test={test} />
+      <TestResult
+        test={test}
+        fix={{
+          text: `${name} kennt diesen Key noch nicht. Keybund trägt ihn dort ein wie ssh-copy-id – dafür fragt der Server einmal nach deinem Passwort.`,
+          label: `Key auf ${name} eintragen`,
+          onClick: installKey,
+          busy: install.isPending,
+        }}
+      />
     </UsageRow>
   );
 }
 
-/** Adds a project folder; asks for the git identity and the hoster if missing. */
+/** Adds a git folder; asks for the git identity and the hoster if missing. */
 function FolderForm({ profile, onDone }: { profile: Profile; onDone: () => void }) {
   const update = useUpdateProfile();
   const settings = useSettings();
@@ -544,33 +578,43 @@ function KeyCard({ view, onCopy }: { view: ProfileView; onCopy: () => void }) {
         </div>
       </CardHeader>
       <p className="m-0 text-[13px] leading-normal text-muted-foreground">
-        Ein SSH-Key hat zwei Teile: den <span className="text-foreground">öffentlichen Teil</span> („Pubkey“, unten) gibst du an
-        GitHub, GitLab oder einen Server weiter. Der <span className="text-foreground">private Teil</span>{" "}
-        <span className="font-mono">{key.path}</span> bleibt auf deinem Rechner – damit beweist ssh, dass du es bist.
+        Der öffentliche Teil („Pubkey“) kommt zu GitHub, GitLab oder auf Server, der private bleibt auf deinem Rechner.
       </p>
-      {key.public_key && (
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-background py-1 pr-1 pl-3.5">
-          <code data-testid="public-key" className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-secondary-foreground">
-            {key.public_key}
-          </code>
-          <Button aria-label="Pubkey kopieren" size="icon" variant="secondary" onClick={onCopy} disabled={view.profile.archived}>
-            <Copy aria-hidden />
-          </Button>
+      <details className="group">
+        <summary className="cursor-pointer text-[13px] text-muted-foreground select-none hover:text-foreground">
+          Pubkey, Fingerprint und Datei anzeigen
+        </summary>
+        <div className="mt-3 flex flex-col gap-4">
+          <p className="m-0 text-[13px] leading-normal text-muted-foreground">
+            Ein SSH-Key hat zwei Teile: den <span className="text-foreground">öffentlichen Teil</span> („Pubkey“, unten) gibst du an
+            GitHub, GitLab oder einen Server weiter. Der <span className="text-foreground">private Teil</span>{" "}
+            <span className="font-mono">{key.path}</span> bleibt auf deinem Rechner – damit beweist ssh, dass du es bist.
+          </p>
+          {key.public_key && (
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-background py-1 pr-1 pl-3.5">
+              <code data-testid="public-key" className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-secondary-foreground">
+                {key.public_key}
+              </code>
+              <Button aria-label="Pubkey kopieren" size="icon" variant="secondary" onClick={onCopy} disabled={view.profile.archived}>
+                <Copy aria-hidden />
+              </Button>
+            </div>
+          )}
+          <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
+            {[
+              ["Typ", key.key_type?.replace("ssh-", "") ?? "–", true],
+              ["Datei", key.path, true],
+              ["Fingerprint", key.fingerprint ?? "–", true],
+              ["Erstellt", key.created ? `${formatDate(key.created)} · ${formatAge(key.age_days)}` : "–", false],
+            ].map(([label, value, isMono]) => (
+              <div key={label as string} className="flex min-w-0 flex-col gap-1">
+                <dt className="text-xs text-muted-foreground">{label}</dt>
+                <dd className={isMono ? `${mono} m-0 break-all` : "m-0 text-[13px]"}>{value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
-      )}
-      <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
-        {[
-          ["Typ", key.key_type?.replace("ssh-", "") ?? "–", true],
-          ["Datei", key.path, true],
-          ["Fingerprint", key.fingerprint ?? "–", true],
-          ["Erstellt", key.created ? `${formatDate(key.created)} · ${formatAge(key.age_days)}` : "–", false],
-        ].map(([label, value, isMono]) => (
-          <div key={label as string} className="flex min-w-0 flex-col gap-1">
-            <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className={isMono ? `${mono} m-0 break-all` : "m-0 text-[13px]"}>{value}</dd>
-          </div>
-        ))}
-      </dl>
+      </details>
     </Card>
   );
 }
@@ -761,7 +805,7 @@ function DangerCard({ view }: { view: ProfileView }) {
           <AlertDialogContent>
             <AlertDialogTitle>„{profile.name}“ archivieren?</AlertDialogTitle>
             <AlertDialogDescription>
-              Der Key wandert nach ~/.ssh/archive/, die Regeln für Git und ssh werden beim nächsten Anwenden entfernt.
+              Der Key wandert nach ~/.ssh/archive/, die Regeln für Git und ssh werden sofort entfernt.
               Denk daran, den Key auch bei GitHub & Co. und auf Servern zu löschen.
             </AlertDialogDescription>
             <AlertDialogFooter>
@@ -773,7 +817,7 @@ function DangerCard({ view }: { view: ProfileView }) {
                       toast.success(`${profile.name} archiviert`, {
                         description: res.remove_key_urls.length ? `Key beim Provider entfernen: ${res.remove_key_urls[0]}` : undefined,
                       });
-                      navigate({ to: "/apply" });
+                      navigate({ to: "/" });
                     },
                   })
                 }

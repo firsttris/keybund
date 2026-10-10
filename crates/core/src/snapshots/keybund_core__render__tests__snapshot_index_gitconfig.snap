@@ -5,7 +5,7 @@ expression: "index_gitconfig(&sample(), &Env::with_home(\"/home/t\"))"
 # Managed by Keybund – manual changes will be overwritten.
 # Included from ~/.gitconfig.
 
-# Standard-Profil: Privat
+# Standard-Key: Privat
 [core]
 	sshCommand = ssh -i ~/.ssh/privat_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes
 

@@ -98,7 +98,7 @@ fn two_customers_on_github_full_lifecycle() {
         .args(["clone", "git@github.com:team/portal.git"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("Mehrere Profile nutzen github.com"));
+        .stderr(predicate::str::contains("Mehrere Keys nutzen github.com"));
     sb.cmd().args(["clone", "git@github.com:team/portal.git", "--profile", "kunde-a"]).assert().success();
     let cloned = sb.path("dev/kunde-a/portal");
     assert!(cloned.join(".git").is_dir());

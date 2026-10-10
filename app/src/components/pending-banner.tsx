@@ -3,7 +3,10 @@ import { RefreshCw } from "lucide-react";
 import { useProfiles } from "@/lib/queries";
 import { formatDay, plural } from "@/lib/utils";
 
-/** Footer line: configs in sync, or a link to the pending diff. */
+/**
+ * Footer line. Changes in Keybund are written right away, so a difference
+ * means a file was edited or deleted outside Keybund.
+ */
 export function ConfigStatus() {
   const { data } = useProfiles();
   if (!data) return null;
@@ -12,16 +15,19 @@ export function ConfigStatus() {
       <footer className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2 text-xs text-muted-foreground">
         <span aria-hidden className="size-[7px] rounded-full bg-emerald-500" />
         <span>Configs aktuell</span>
-        {data.last_applied != null && <span>· zuletzt angewendet {formatDay(data.last_applied)}</span>}
+        {data.last_applied != null && <span>· zuletzt geschrieben {formatDay(data.last_applied)}</span>}
       </footer>
     );
   }
   return (
     <footer className="mt-auto flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
       <RefreshCw aria-hidden className="size-3.5 text-warning" />
-      <span className="flex-1">{plural(data.pending_changes, "Datei ist", "Dateien sind")} nicht aktuell</span>
+      <span className="flex-1">
+        {plural(data.pending_changes, "Config-Datei passt", "Config-Dateien passen")} nicht zu deinen Keys – wurde sie außerhalb
+        von Keybund geändert?
+      </span>
       <Link to="/apply" className="font-medium text-foreground underline-offset-4 hover:underline">
-        Vorschau &amp; anwenden
+        Ansehen &amp; neu schreiben
       </Link>
     </footer>
   );

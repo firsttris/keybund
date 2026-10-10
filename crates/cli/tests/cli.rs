@@ -18,7 +18,7 @@ fn help_lists_all_commands() {
 #[test]
 fn list_without_profiles() {
     let sb = Sandbox::new();
-    sb.cmd().arg("list").assert().success().stdout(predicate::str::contains("Noch keine Profile"));
+    sb.cmd().arg("list").assert().success().stdout(predicate::str::contains("Noch keine Keys"));
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn new_rejects_duplicate_and_nested_folders() {
         .args(args)
         .assert()
         .failure()
-        .stderr(predicate::str::contains("existiert bereits"));
+        .stderr(predicate::str::contains("gibt es schon"));
     sb.cmd()
         .args([
             "new",
@@ -150,7 +150,7 @@ fn copy_print_outputs_public_key() {
 #[test]
 fn unknown_profile_is_a_clear_error() {
     let sb = Sandbox::new();
-    sb.cmd().args(["show", "nope"]).assert().code(2).stderr(predicate::str::contains("Profil „nope“ existiert nicht"));
+    sb.cmd().args(["show", "nope"]).assert().code(2).stderr(predicate::str::contains("Key „nope“ existiert nicht"));
 }
 
 #[test]
@@ -268,7 +268,7 @@ fn which_host_uses_ssh_g() {
         ));
         sb.cmd().args(["which", "meinserver"]).assert().success().stdout(
             predicate::str::contains("~/.ssh/server_ed25519")
-                .and(predicate::str::contains("Profil         Server"))
+                .and(predicate::str::contains("Key            Server"))
                 .and(predicate::str::contains("t@1.2.3.4:22"))
                 .and(predicate::str::contains("keybund.conf · via Host meinserver"))
                 .and(predicate::str::contains("ja, nur dieser Key wird angeboten")),
@@ -314,7 +314,7 @@ fn test_generic_server_and_missing_host() {
             .args(["test", "server", "--host", "nas"])
             .assert()
             .code(2)
-            .stderr(predicate::str::contains("Profil „server“ hat keinen Host nas"));
+            .stderr(predicate::str::contains("Key „server“ hat keinen Host nas"));
     }
 }
 
@@ -329,7 +329,7 @@ fn clone_errors_are_explained() {
         .args(["clone", "git@codeberg.org:a/b.git"])
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("Kein Profil hat den Host codeberg.org"));
+        .stderr(predicate::str::contains("Kein Key hat den Host codeberg.org"));
     sb.cmd().args(["clone", "kaputt"]).assert().code(2).stderr(predicate::str::contains("Ungültige Repo-URL"));
     std::fs::create_dir_all(sb.path("dev/p/b")).unwrap();
     sb.cmd()
@@ -358,7 +358,7 @@ fn invalid_id_and_existing_key_errors() {
         .args(args)
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("Ungültige Profil-ID"));
+        .stderr(predicate::str::contains("Ungültige Key-ID"));
     sb.cmd()
         .args(["new", "--name", "X", "--key", "~/.ssh/missing", "--yes"])
         .args(args)
@@ -404,7 +404,7 @@ fn import_takes_over_an_existing_ssh_config() {
     assert!(!sb.path(".config/keybund/profiles.toml").exists());
 
     sb.cmd().args(["import", "--all", "--yes"]).assert().success().stdout(
-        predicate::str::contains("2 Profil(e) angelegt: privat, pflegeabc")
+        predicate::str::contains("2 Key(s) übernommen: privat, pflegeabc")
             .and(predicate::str::contains("Übernommene Einträge aus ~/.ssh/config entfernen"))
             .and(
                 predicate::str::contains("-IdentityFile ~/.ssh/privat_ed25519")

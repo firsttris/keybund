@@ -18,6 +18,7 @@ import type {
   GeneratedFile,
   HostEntry,
   ImportCandidate,
+  ImportDone,
   ImportProposal,
   InstallResult,
   KeyInfo,
@@ -255,7 +256,7 @@ function sshCommand(path: string) {
 }
 
 export function renderProfileGitconfig(p: Profile): string {
-  let out = `${MANAGED}\n# Profil: ${p.name}\n`;
+  let out = `${MANAGED}\n# Key: ${p.name}\n`;
   if (p.git) {
     out += `[user]\n\tname = ${p.git.name}\n\temail = ${p.git.email}\n`;
     if (p.git.sign) out += `\tsigningkey = ${p.key.path}.pub\n`;
@@ -282,7 +283,7 @@ function sshHostBlocks(p: Profile, settings?: Settings): string {
   return p.hosts
     .filter((h) => sshPatterns(h).length > 0)
     .map((h) => {
-      let block = `# Profil: ${p.name}\nHost ${sshPatterns(h).join(" ")}\n    HostName ${h.hostname}\n`;
+      let block = `# Key: ${p.name}\nHost ${sshPatterns(h).join(" ")}\n    HostName ${h.hostname}\n`;
       const user = h.user ?? (h.provider === "generic" ? null : "git");
       if (user) block += `    User ${user}\n`;
       if (h.port != null) block += `    Port ${h.port}\n`;
@@ -307,7 +308,7 @@ function renderAll(state: MockState, profiles = state.profiles, def = state.defa
   files.set("~/.ssh/config.d/keybund.conf", `${MANAGED}\n${ssh.map((b) => `\n${b}`).join("")}\nHost *\n`);
   let index = `${MANAGED}\n# Included from ~/.gitconfig.\n`;
   const defProfile = active.find((p) => p.id === def);
-  if (defProfile) index += `\n# Standard-Profil: ${defProfile.name}\n[core]\n\tsshCommand = ${sshCommand(defProfile.key.path)}\n`;
+  if (defProfile) index += `\n# Standard-Key: ${defProfile.name}\n[core]\n\tsshCommand = ${sshCommand(defProfile.key.path)}\n`;
   for (const p of active) if (p.folders.length) index += `\n${includeIfBlocks(p)}`;
   files.set("~/.config/keybund/git/index.gitconfig", index);
   for (const p of active) files.set(`~/.config/keybund/git/${p.id}.gitconfig`, renderProfileGitconfig(p));
@@ -396,7 +397,7 @@ function proposals(state: MockState): ImportProposal[] {
         make_default: asDefault,
         blocks: [b.pattern],
         key_exists: state.keys.has(b.identity),
-        notes: asDefault ? [`Wird Standard-Profil: gilt für ${b.hostname} in allen Ordnern ohne eigenes Profil`] : [],
+        notes: asDefault ? [`Wird Standard-Key: gilt für ${b.hostname} in allen Ordnern ohne eigenen Key`] : [],
       };
     });
 }
@@ -465,7 +466,7 @@ function hostFingerprint(h: HostEntry): string {
 function hostOf(state: MockState, id: string, host: string | null | undefined): { p: Profile; h: HostEntry } {
   const p = find(state, id);
   const h = host ? p.hosts.find((x) => x.alias === host || x.hostname === host) : p.hosts[0];
-  if (!h) throw new MockError("other", host ? `Profil „${p.id}“ hat keinen Host ${host}` : `Profil „${p.id}“ hat keinen Host`);
+  if (!h) throw new MockError("other", host ? `Key „${p.id}“ hat keinen Host ${host}` : `Key „${p.id}“ hat keinen Host`);
   return { p, h };
 }
 
@@ -476,7 +477,7 @@ function hostKeyKnown(state: MockState, h: HostEntry): boolean {
 function gitHost(state: MockState, id: string, host: string): { p: Profile; h: HostEntry } {
   const p = find(state, id);
   const h = p.hosts.find((x) => x.provider !== "generic" && (x.alias === host || x.hostname === host));
-  if (!h) throw new MockError("other", `Profil „${p.id}“ hat kein Git-Konto ${host}`);
+  if (!h) throw new MockError("other", `Key „${p.id}“ hat kein Git-Konto ${host}`);
   return { p, h };
 }
 
@@ -517,7 +518,7 @@ function view(state: MockState, p: Profile): ProfileView {
 
 function find(state: MockState, id: string): Profile {
   const p = state.profiles.find((x) => x.id === id);
-  if (!p) throw new MockError("profile_not_found", `Profil „${id}“ existiert nicht`);
+  if (!p) throw new MockError("profile_not_found", `Key „${id}“ existiert nicht`);
   return p;
 }
 
@@ -531,17 +532,17 @@ function validate(profiles: Profile[]) {
   for (let i = 0; i < folders.length; i++)
     for (let j = i + 1; j < folders.length; j++)
       if (folders[i].startsWith(folders[j]) || folders[j].startsWith(folders[i]))
-        throw new MockError("nested_folders", `Projektordner überschneiden sich: ${folders[i]} und ${folders[j]}`);
+        throw new MockError("nested_folders", `Git-Ordner überschneiden sich: ${folders[i]} und ${folders[j]}`);
   const patterns = new Set<string>();
   for (const h of profiles.filter((p) => !p.archived).flatMap((p) => p.hosts)) {
     for (const pattern of sshPatterns(h)) {
-      if (patterns.has(pattern)) throw new MockError("duplicate_alias", `Host „${pattern}“ ist mehreren Profilen zugeordnet`);
+      if (patterns.has(pattern)) throw new MockError("duplicate_alias", `Host „${pattern}“ gehört schon zu einem anderen Key`);
       patterns.add(pattern);
     }
   }
   const ids = new Set<string>();
   for (const p of profiles) {
-    if (ids.has(p.id)) throw new MockError("duplicate_id", `Profil-ID „${p.id}“ ist doppelt vergeben`);
+    if (ids.has(p.id)) throw new MockError("duplicate_id", `Einen Key „${p.id}“ gibt es schon`);
     ids.add(p.id);
   }
 }
@@ -599,7 +600,7 @@ function dolphinChecks(state: MockState): Check[] {
           id: "dolphin",
           status: "warn",
           title: `Dolphin sieht die Keybund-Config nicht (libssh ${v})`,
-          detail: "libssh vor 0.10.2 versteht ~ in Include nicht – sftp:// in Dolphin nutzt dann nicht den Profil-Key. Abhilfe: Include mit vollem Pfad schreiben.",
+          detail: "libssh vor 0.10.2 versteht ~ in Include nicht – sftp:// in Dolphin nutzt dann nicht den Key aus Keybund. Abhilfe: Include mit vollem Pfad schreiben.",
           fix: { type: "absolute_ssh_include" },
         },
   ];
@@ -633,19 +634,19 @@ function which(state: MockState, query: string): WhichResult {
       .filter(({ f }) => dir.startsWith(f))
       .sort((a, b) => b.f.length - a.f.length)[0];
     const p = match?.p ?? active.find((x) => x.id === state.defaultProfile);
-    if (!p) return { ...base, notes: ["Ordner gehört zu keinem Profil und es gibt kein Standard-Profil."] };
+    if (!p) return { ...base, notes: ["Ordner gehört zu keinem Key und es gibt keinen Standard-Key."] };
     return {
       ...base,
       key_path: p.key.path,
       fingerprint: keyInfo(state, p.key.path).fingerprint,
       profile_id: p.id,
       source: match ? `~/.config/keybund/git/${p.id}.gitconfig` : "~/.config/keybund/git/index.gitconfig",
-      via: match ? `includeIf "gitdir:${match.f}"` : "Standard-Profil",
+      via: match ? `includeIf "gitdir:${match.f}"` : "Standard-Key",
       identities_only: true,
       git_name: p.git?.name ?? null,
       git_email: p.git?.email ?? null,
       agent_loaded: true,
-      notes: match ? [] : ["Ordner gehört zu keinem Profil, es gilt das Standard-Profil."],
+      notes: match ? [] : ["Ordner gehört zu keinem Key, es gilt der Standard-Key."],
     };
   }
   const aliased = active.find((p) => p.hosts.some((h) => h.alias === q));
@@ -676,7 +677,7 @@ function which(state: MockState, query: string): WhichResult {
     identities_only: false,
     notes: users.length
       ? [`Für Git-Repos entscheidet der Ordner, nicht der Host (${q} wird von ${users.map((p) => p.name).join(", ")} genutzt).`]
-      : ["Kein Profil kennt diesen Host – ssh probiert die Standard-Keys."],
+      : ["Kein Key kennt diesen Host – ssh probiert die Standard-Keys."],
   };
 }
 
@@ -729,6 +730,7 @@ export function createMockBackend(state: MockState = seedState()) {
           next[key] = v.length > 1 ? v.replace(/\/+$/, "") : v;
         }
         state.settings = next;
+        markApplied(state);
         return structuredClone(next);
       }
       case "normalize_folder":
@@ -736,14 +738,14 @@ export function createMockBackend(state: MockState = seedState()) {
       case "preview_new_project": {
         const project = args.project as NewProject;
         if (state.profiles.some((p) => p.id === project.profile.id))
-          throw new MockError("duplicate_id", `Profil-ID „${project.profile.id}“ ist doppelt vergeben`);
+          throw new MockError("duplicate_id", `Einen Key „${project.profile.id}“ gibt es schon`);
         return planFor(state, withNewProject(state, project), state.defaultProfile ?? project.profile.id);
       }
       case "create_project": {
         await sleep(state.latency);
         const project = args.project as NewProject;
         if (state.profiles.some((p) => p.id === project.profile.id))
-          throw new MockError("duplicate_id", `Profil-ID „${project.profile.id}“ ist doppelt vergeben`);
+          throw new MockError("duplicate_id", `Einen Key „${project.profile.id}“ gibt es schon`);
         const profiles = withNewProject(state, project);
         const p = profiles[profiles.length - 1];
         if (project.key.type === "generate") {
@@ -782,10 +784,12 @@ export function createMockBackend(state: MockState = seedState()) {
         find(state, next.id);
         validate(profiles);
         state.profiles = profiles;
+        markApplied(state);
         return view(state, next);
       }
       case "set_default_profile":
         state.defaultProfile = (args.id as string | null) ?? null;
+        markApplied(state);
         return null;
       case "copy_public_key": {
         const key = keyInfo(state, find(state, String(args.id)).key.path).public_key;
@@ -801,7 +805,7 @@ export function createMockBackend(state: MockState = seedState()) {
         const p = find(state, String(args.id));
         const wanted = args.host as string | null | undefined;
         const h = wanted ? p.hosts.find((x) => x.alias === wanted || x.hostname === wanted) : p.hosts[0];
-        if (!h) throw new MockError("no_host", wanted ? `Profil „${p.id}“ hat keinen Host ${wanted}` : `Profil „${p.id}“ hat keinen Host`);
+        if (!h) throw new MockError("no_host", wanted ? `Key „${p.id}“ hat keinen Host ${wanted}` : `Key „${p.id}“ hat keinen Host`);
         // Like StrictHostKeyChecking=yes: no connection to an unconfirmed host.
         const unconfirmed = !hostKeyKnown(state, h) && !PINNED_HOSTS.includes(h.hostname) && !state.unreachable.includes(h.hostname);
         if (unconfirmed) {
@@ -814,6 +818,7 @@ export function createMockBackend(state: MockState = seedState()) {
             command: `ssh -T -o StrictHostKeyChecking=yes ${h.alias ?? h.hostname}`,
             used_key: null,
             other_key: false,
+            key_rejected: false,
             steps: [
               { ok: null, text: `Verbinde mit ${h.hostname}, Port ${h.port ?? 22}` },
               { ok: false, text: "Host-Key nicht bestätigt oder geändert – Verbindung abgebrochen" },
@@ -821,7 +826,10 @@ export function createMockBackend(state: MockState = seedState()) {
             log: "Host key verification failed.",
           } satisfies ProbeResult;
         }
-        const ok = p.id !== "kunde-b" && !state.unreachable.includes(h.hostname);
+        // Kunde B's key is not in its GitHub account until it is uploaded.
+        const where = `${h.hostname}:${p.key.path}`;
+        const registered = p.id !== "kunde-b" || state.uploadedKeys.includes(where) || state.installedKeys.includes(where);
+        const ok = registered && !state.unreachable.includes(h.hostname);
         const user = h.user ?? (h.provider === "generic" ? "tristan" : "git");
         const steps: ProbeResult["steps"] = state.unreachable.includes(h.hostname)
           ? [
@@ -855,6 +863,7 @@ export function createMockBackend(state: MockState = seedState()) {
           command: `ssh -T -o PasswordAuthentication=no -o IdentitiesOnly=yes -o AddKeysToAgent=yes -i ${p.key.path} ${h.alias ?? h.hostname}`,
           used_key: ok ? p.key.path : null,
           other_key: false,
+          key_rejected: !registered && !state.unreachable.includes(h.hostname),
           steps,
           log: [`OpenSSH_9.6p1`, `debug1: Connecting to ${h.hostname} port ${h.port ?? 22}.`, ...steps.map((s) => `debug1: ${s.text}`)].join("\n"),
         };
@@ -862,6 +871,7 @@ export function createMockBackend(state: MockState = seedState()) {
           Object.assign(result, {
             success: false,
             other_key: true,
+            key_rejected: true,
             used_key: "~/.ssh/privat_ed25519",
             account: "@firsttris",
             message: "Angemeldet als @firsttris, aber mit ~/.ssh/privat_ed25519 statt mit diesem Key",
@@ -875,7 +885,7 @@ export function createMockBackend(state: MockState = seedState()) {
         const p = find(state, String(args.id));
         const name = String(args.host);
         const h = p.hosts.find((x) => x.alias === name || x.hostname === name);
-        if (!h) throw new MockError("other", `Profil „${p.id}“ hat keinen Server ${name}`);
+        if (!h) throw new MockError("other", `Key „${p.id}“ hat keinen Server ${name}`);
         const key = `${h.hostname}:${p.key.path}`;
         if (!hostKeyKnown(state, h) && !state.unreachable.includes(h.hostname)) {
           return { success: false, already_present: false, message: `Host-Key von ${h.hostname} ist noch nicht bestätigt`, output: "Host key verification failed." } satisfies InstallResult;
@@ -1060,14 +1070,14 @@ export function createMockBackend(state: MockState = seedState()) {
         const p = find(state, String(args.profileId));
         const name = String(args.url).split(/[/:]/).pop()!.replace(/\.git$/, "");
         const target = (args.target as string | null) || (p.folders[0] ? `${p.folders[0]}${name}` : null);
-        if (!target) throw new MockError("no_folder", `Profil „${p.id}“ hat keinen Projektordner`);
+        if (!target) throw new MockError("no_folder", `Key „${p.id}“ hat keinen Git-Ordner`);
         if (state.cloned.includes(target)) throw new MockError("target_exists", `Zielordner existiert bereits: ${target}`);
         state.cloned.push(target);
         return target;
       }
       case "archive_profile": {
         const p = find(state, String(args.id));
-        if (p.archived) throw new MockError("archived", `Profil „${p.id}“ ist archiviert`);
+        if (p.archived) throw new MockError("archived", `Key „${p.id}“ ist archiviert`);
         const file = p.key.path.split("/").pop()!;
         const newPath = `~/.ssh/archive/${file}`;
         const key = state.keys.get(p.key.path);
@@ -1076,6 +1086,7 @@ export function createMockBackend(state: MockState = seedState()) {
         p.key = { ...p.key, path: newPath };
         p.archived = true;
         if (state.defaultProfile === p.id) state.defaultProfile = null;
+        markApplied(state);
         const result: ArchiveResult = {
           key_path: newPath,
           remove_key_urls: p.hosts.flatMap((h) =>
@@ -1114,7 +1125,14 @@ export function createMockBackend(state: MockState = seedState()) {
         state.profiles = profiles;
         const def = chosen.find((c) => c.make_default);
         if (def) state.defaultProfile = def.profile.id;
-        return added.map((p) => p.id);
+        markApplied(state);
+        const done: ImportDone = { ids: added.map((p) => p.id), report: { written: [...state.applied.keys()], deleted: [], backups: [] } };
+        if (args.removeOld && cleanupPlan(state).changes.length) {
+          state.sshBlocks = state.sshBlocks.filter((b) => !covered(state, b));
+          done.report.written.push("~/.ssh/config");
+          done.report.backups.push("~/.ssh/config.keybund-backup");
+        }
+        return done;
       }
       case "cleanup_preview":
         return cleanupPlan(state);

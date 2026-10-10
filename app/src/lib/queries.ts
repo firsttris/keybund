@@ -53,11 +53,16 @@ function useInvalidateAll() {
   return () => client.invalidateQueries();
 }
 
+/** Changes are written right away; one toast says so (repeated saves replace it). */
+export function toastSaved() {
+  toast.success("Gespeichert", { id: "saved", description: "Git und ssh benutzen es ab sofort." });
+}
+
 export function useUpdateProfile() {
   const invalidate = useInvalidateAll();
   return useMutation({
     mutationFn: (profile: Profile) => api.updateProfile(profile),
-    onSuccess: invalidate,
+    onSuccess: () => (toastSaved(), invalidate()),
     onError: (e) => toast.error(errorMessage(e)),
   });
 }
@@ -66,7 +71,7 @@ export function useSetDefault() {
   const invalidate = useInvalidateAll();
   return useMutation({
     mutationFn: (id: string | null) => api.setDefaultProfile(id),
-    onSuccess: invalidate,
+    onSuccess: () => (toastSaved(), invalidate()),
     onError: (e) => toast.error(errorMessage(e)),
   });
 }
@@ -136,7 +141,7 @@ export function useCleanupPreview() {
 export function useImportProfiles() {
   const invalidate = useInvalidateAll();
   return useMutation({
-    mutationFn: (chosen: ImportProposal[]) => api.importProfiles(chosen),
+    mutationFn: ({ chosen, removeOld }: { chosen: ImportProposal[]; removeOld: boolean }) => api.importProfiles(chosen, removeOld),
     onSuccess: invalidate,
   });
 }

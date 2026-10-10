@@ -16,19 +16,19 @@ describe("uninstall", () => {
     await user.click(screen.getByRole("button", { name: "Keybund entfernen" }));
     const dialog = await screen.findByRole("alertdialog");
     await user.click(within(dialog).getByRole("button", { name: "Entfernen" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Die Profile sind noch da");
+    expect(await screen.findByRole("status")).toHaveTextContent("Keybund kennt deine Keys noch");
     expect(backend.state.installed).toBe(false);
     expect(backend.state.profiles.length).toBeGreaterThan(0);
   });
 
   it("can purge the profiles too", async () => {
     const { user, backend } = await renderApp("/uninstall");
-    await user.click(await screen.findByRole("checkbox", { name: /Auch die Profile löschen/ }));
+    await user.click(await screen.findByRole("checkbox", { name: /Auch Keybunds Liste der Keys löschen/ }));
     expect(await screen.findByText("~/.config/keybund/profiles.toml")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Originale aus dem Backup/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Keybund entfernen" }));
     await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Entfernen" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Auch die Profile sind gelöscht");
+    expect(await screen.findByRole("status")).toHaveTextContent("Auch die Liste deiner Keys ist gelöscht");
     expect(backend.state.profiles).toEqual([]);
   });
 });

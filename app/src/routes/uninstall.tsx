@@ -42,7 +42,9 @@ export function UninstallPage() {
         <p role="status" className="m-0 flex items-center gap-2 text-success">
           <Check aria-hidden className="size-4" />
           Keybund ist entfernt.{" "}
-          {opts.purge ? "Auch die Profile sind gelöscht." : "Die Profile sind noch da – „Anwenden“ richtet alles wieder ein."}
+          {opts.purge
+            ? "Auch die Liste deiner Keys ist gelöscht – die Key-Dateien in ~/.ssh bleiben."
+            : "Keybund kennt deine Keys noch – „Configs neu schreiben“ richtet alles wieder ein."}
         </p>
       ) : (
         <>
@@ -72,7 +74,7 @@ export function UninstallPage() {
                 onChange={(e) => setOpts((o) => ({ ...o, purge: e.target.checked }))}
               />
               <span className="flex flex-col gap-0.5">
-                <span className="font-medium">Auch die Profile löschen</span>
+                <span className="font-medium">Auch Keybunds Liste der Keys löschen</span>
                 <span className="text-muted-foreground">~/.config/keybund/profiles.toml – ohne lässt sich Keybund später wieder einrichten.</span>
               </span>
             </label>

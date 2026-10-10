@@ -5,7 +5,7 @@ expression: ssh_config(&sample())
 # Managed by Keybund – manual changes will be overwritten.
 # Included from the top of ~/.ssh/config.
 
-# Profil: Privat
+# Key: Privat
 Host meinserver 1.2.3.4
     HostName 1.2.3.4
     User tristan

@@ -9,7 +9,7 @@ describe("profile page", () => {
     expect(screen.getByText("~/.ssh/sparkasse_ed25519", { selector: "dd" })).toBeInTheDocument();
     expect(screen.getByTestId("public-key")).toHaveTextContent(/^ssh-ed25519 .* tristan@zentrale-sparkasse$/);
     expect(screen.getByText("Configs aktuell")).toBeInTheDocument();
-    expect(screen.getByText(/zuletzt angewendet (heute|gestern), \d\d:\d\d/)).toBeInTheDocument();
+    expect(screen.getByText(/zuletzt geschrieben (heute|gestern), \d\d:\d\d/)).toBeInTheDocument();
     expect(screen.getByText("Im Agent geladen")).toBeInTheDocument();
   });
 
@@ -26,10 +26,20 @@ describe("profile page", () => {
     expect(backend.state.clipboard).toMatch(/^ssh-ed25519 /);
   });
 
-  it("toggling signing marks configs as outdated", async () => {
-    const { user } = await renderApp("/profile/sparkasse");
+  it("toggling signing is written right away", async () => {
+    const { user, backend } = await renderApp("/profile/sparkasse");
     await user.click(await screen.findByRole("switch", { name: "Commits signieren" }));
-    expect(await screen.findByText("1 Datei ist nicht aktuell")).toBeInTheDocument();
+    expect(await screen.findByText("Gespeichert")).toBeInTheDocument();
+    expect(backend.state.applied.get("~/.config/keybund/git/sparkasse.gitconfig")).toContain("gpgsign = true");
+    expect(screen.getByText("Configs aktuell")).toBeInTheDocument();
+  });
+
+  it("keeps the key details folded", async () => {
+    const { user } = await renderApp("/profile/sparkasse");
+    const details = (await screen.findByText("Pubkey, Fingerprint und Datei anzeigen")).closest("details")!;
+    expect(details).not.toHaveAttribute("open");
+    await user.click(screen.getByText("Pubkey, Fingerprint und Datei anzeigen"));
+    expect(details).toHaveAttribute("open");
   });
 
   it("validates the e-mail before saving the identity", async () => {
@@ -61,7 +71,41 @@ describe("sidebar and home", () => {
     expect(rest.map((l) => l.textContent)).toEqual(["Sparkasse~/dev/sparkasse/ · GitLab", "Kunde B~/dev/kunde-b/ · GitHub"]);
     expect(within(screen.getByRole("navigation", { name: "Archiv" })).getByText("Bundesagentur")).toBeInTheDocument();
     expect(await screen.findByLabelText("1 Hinweise")).toBeInTheDocument();
-    expect(await screen.findByRole("alert")).toHaveTextContent("Include steht nicht ganz oben");
+    expect(screen.queryByRole("link", { name: "Welcher Key?" })).not.toBeInTheDocument();
+  });
+
+  it("shows what needs attention on the home page", async () => {
+    await renderApp("/", (b) => {
+      b.state.lastTests.set("kunde-b", { success: false, account: null, message: "GitHub kennt diesen Key nicht", at: Date.now() });
+    });
+    const todo = await screen.findByRole("list", { name: "Zu tun" });
+    await waitFor(() => expect(within(todo).getAllByRole("listitem")).toHaveLength(3));
+    const [test, doctor, imported] = within(todo).getAllByRole("listitem");
+    expect(test).toHaveTextContent("Kunde B: GitHub kennt diesen Key nicht");
+    expect(within(test).getByRole("link", { name: "Beheben" }).getAttribute("href")).toMatch(/\/profile\/kunde-b$/);
+    expect(doctor).toHaveTextContent("Include steht nicht ganz oben");
+    expect(imported).toHaveTextContent("2 Einträge mit eigenem Key");
+  });
+
+  it("says when everything is fine", async () => {
+    await renderApp("/", (b) => {
+      b.state.doctorIncludeOnTop = true;
+      b.state.sshBlocks = [];
+    });
+    expect(await screen.findByText(/Alles in Ordnung – Git und ssh nehmen automatisch den richtigen Key/)).toBeInTheDocument();
+  });
+
+  it("answers which key applies from the search", async () => {
+    const { user, router } = await renderApp("/");
+    await user.type(await screen.findByLabelText("Keys durchsuchen"), "~/dev/sparkasse/app");
+    expect(screen.getByText("Kein Key passt")).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Welcher Key gilt für „~/dev/sparkasse/app“?" }));
+    expect(router.state.location.pathname).toBe("/which");
+    expect(await screen.findByTestId("which-result")).toHaveTextContent("sparkasse_ed25519");
+    // Enter does the same.
+    await user.clear(screen.getByLabelText("Keys durchsuchen"));
+    await user.type(screen.getByLabelText("Keys durchsuchen"), "meinserver{Enter}");
+    expect(await screen.findByTestId("which-result")).toHaveTextContent("tristan@1.2.3.4:22");
   });
 
   it("shows a card per key and finds keys by folder or server", async () => {
@@ -95,10 +139,11 @@ describe("sidebar and home", () => {
     const sidebar = screen.getByRole("navigation", { name: "Keys" });
     expect(within(sidebar).getByText("noch nicht benutzt")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Keys durchsuchen"), "5.6.7");
-    expect(within(sidebar).getAllByRole("link")).toHaveLength(1);
+    expect(within(sidebar).getAllByRole("link")).toHaveLength(2);
+    expect(within(sidebar).getAllByRole("link")[0]).toHaveTextContent("Hetzner");
     await user.clear(screen.getByLabelText("Keys durchsuchen"));
     await user.type(screen.getByLabelText("Keys durchsuchen"), "kunde-b");
-    expect(within(sidebar).getByRole("link")).toHaveTextContent("Kunde B");
+    expect(within(sidebar).getAllByRole("link")[0]).toHaveTextContent("Kunde B");
   });
 
   it("explains how Keybund works and can hide it", async () => {
@@ -127,26 +172,29 @@ describe("sidebar and home", () => {
 });
 
 describe("apply page", () => {
-  it("shows the diff and applies it", async () => {
-    const { user } = await renderApp("/apply", (b) => {
-      b.state.defaultProfile = "sparkasse";
+  it("restores files that were changed outside Keybund", async () => {
+    const { user } = await renderApp("/", (b) => {
+      b.state.applied.set("~/.config/keybund/git/sparkasse.gitconfig", "kaputt\n");
     });
-    expect(await screen.findByText(/^\+\s+sshCommand = ssh -i ~\/\.ssh\/sparkasse_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes$/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Anwenden" }));
-    expect(await screen.findByText("Alle Configs sind aktuell.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Anwenden" })).toBeDisabled();
+    expect(await screen.findByText(/1 Config-Datei passt nicht zu deinen Keys/)).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Ansehen & neu schreiben" }));
+    expect(await screen.findByRole("heading", { name: "Configs neu schreiben" })).toBeInTheDocument();
+    expect(await screen.findByText("-kaputt")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Neu schreiben" }));
+    expect(await screen.findByText("Alle Configs passen zu deinen Keys.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Neu schreiben" })).toBeDisabled();
   });
 
   it("asks to reload when the plan changed meanwhile", async () => {
     const { user, backend } = await renderApp("/apply", (b) => {
-      b.state.defaultProfile = "sparkasse";
+      b.state.applied.set("~/.config/keybund/git/sparkasse.gitconfig", "kaputt\n");
     });
-    await screen.findByText(/sparkasse_ed25519/);
-    backend.state.defaultProfile = "kunde-b";
-    await user.click(screen.getByRole("button", { name: "Anwenden" }));
+    await screen.findByText("-kaputt");
+    backend.state.applied.set("~/.config/keybund/git/kunde-b.gitconfig", "auch kaputt\n");
+    await user.click(screen.getByRole("button", { name: "Neu schreiben" }));
     expect(await screen.findByText(/Bitte Vorschau neu laden/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Vorschau neu laden" }));
-    expect(await screen.findByText(/kunde-b_ed25519 -o/)).toBeInTheDocument();
+    expect(await screen.findByText("-auch kaputt")).toBeInTheDocument();
   });
 });
 

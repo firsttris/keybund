@@ -1,49 +1,24 @@
 import { Link } from "@tanstack/react-router";
-import { AlertTriangle, Folder, GitBranch, Plus, Server, Star } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Folder, GitBranch, Info, Plus, Server, Star, XCircle } from "lucide-react";
 import { ColorDot } from "@/components/color-dot";
 import { HowItWorks } from "@/components/how-it-works";
 import { ConfigStatus } from "@/components/pending-banner";
 import { buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import type { ProfileView } from "@/lib/bindings";
-import { activeKeys, gitAccounts, servers } from "@/lib/categories";
+import { activeKeys, gitAccounts, servers, usageParts } from "@/lib/categories";
 import { useDoctor, useProfiles } from "@/lib/queries";
 import { cn, formatRelative, providerLabel } from "@/lib/utils";
 
 export function HomePage() {
   const { data, isPending } = useProfiles();
-  const doctor = useDoctor();
-  const problems = doctor.data?.checks.filter((c) => c.status !== "ok") ?? [];
   const keys = activeKeys(data?.profiles ?? []);
 
   if (isPending) return <Spinner />;
   return (
     <>
-      {problems.length > 0 && (
-        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-[10px] border border-amber-500/35 bg-amber-500/5 px-4 py-3">
-          <AlertTriangle aria-hidden className="size-4 text-warning" />
-          <span className="flex-1 text-[13px]">
-            <span className="font-medium">{problems[0].title}</span>
-            {problems.length > 1 && <span className="text-muted-foreground"> und {problems.length - 1} weitere Hinweise</span>}
-          </span>
-          <Link to="/doctor" className="text-[13px] font-medium text-foreground">
-            Zum Doctor
-          </Link>
-        </div>
-      )}
-      {data && data.import_available > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-[10px] border border-blue-500/35 bg-blue-500/5 px-4 py-3">
-          <span className="flex-1 text-[13px]">
-            In deiner <span className="font-mono">~/.ssh/config</span> stehen{" "}
-            {data.import_available === 1 ? "ein Eintrag" : `${data.import_available} Einträge`} mit eigenem Key, die Keybund
-            übernehmen kann.
-          </span>
-          <Link to="/import" className="text-[13px] font-medium text-foreground">
-            Übernehmen
-          </Link>
-        </div>
-      )}
-      <h1 className="m-0 text-[26px] font-semibold tracking-tight">Deine SSH-Keys</h1>
+      <h1 className="m-0 text-[26px] font-semibold tracking-tight">Übersicht</h1>
+      <Todo />
       <HowItWorks forceOpen={keys.length === 0} />
       {keys.length === 0 ? (
         <div className="flex max-w-[520px] flex-col gap-3 rounded-xl border border-dashed border-border p-8">
@@ -62,14 +37,129 @@ export function HomePage() {
           </div>
         </div>
       ) : (
-        <ul aria-label="Keys" className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 p-0">
-          {keys.map((v) => (
-            <KeyCard key={v.profile.id} view={v} />
-          ))}
-        </ul>
+        <section aria-labelledby="keys-title" className="flex flex-col gap-3">
+          <h2 id="keys-title" className="m-0 text-[15px] font-semibold">
+            Deine SSH-Keys
+          </h2>
+          <ul aria-label="Keys" className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 p-0">
+            {keys.map((v) => (
+              <KeyCard key={v.profile.id} view={v} />
+            ))}
+          </ul>
+        </section>
       )}
       <ConfigStatus />
     </>
+  );
+}
+
+type TodoItem = { id: string; tone: "danger" | "warn" | "info"; text: React.ReactNode; link: React.ReactNode };
+
+const linkClass = "shrink-0 text-[13px] font-medium text-foreground";
+
+/** What needs attention right now – or a calm "all good". */
+function Todo() {
+  const { data } = useProfiles();
+  const doctor = useDoctor();
+  // Only claim "all good" once the doctor has answered.
+  if (!data || doctor.isPending) return null;
+  const keys = activeKeys(data.profiles);
+  const items: TodoItem[] = [];
+  for (const v of keys) {
+    if (v.last_test && !v.last_test.success) {
+      items.push({
+        id: `test-${v.profile.id}`,
+        tone: "danger",
+        text: (
+          <>
+            <span className="font-medium">{v.profile.name}:</span> {v.last_test.message}
+          </>
+        ),
+        link: (
+          <Link to="/profile/$id" params={{ id: v.profile.id }} className={linkClass}>
+            Beheben
+          </Link>
+        ),
+      });
+    }
+  }
+  for (const c of doctor.data?.checks.filter((c) => c.status !== "ok") ?? []) {
+    items.push({
+      id: `doctor-${c.id}`,
+      tone: c.status === "error" ? "danger" : "warn",
+      text: <span className="font-medium">{c.title}</span>,
+      link: (
+        <Link to="/doctor" className={linkClass}>
+          Zum Doctor
+        </Link>
+      ),
+    });
+  }
+  if (data.import_available > 0) {
+    items.push({
+      id: "import",
+      tone: "info",
+      text: (
+        <>
+          In deiner <span className="font-mono">~/.ssh/config</span> stehen{" "}
+          {data.import_available === 1 ? "ein Eintrag" : `${data.import_available} Einträge`} mit eigenem Key, die Keybund
+          übernehmen kann.
+        </>
+      ),
+      link: (
+        <Link to="/import" className={linkClass}>
+          Übernehmen
+        </Link>
+      ),
+    });
+  }
+  for (const v of keys) {
+    if (usageParts(v).length === 0) {
+      items.push({
+        id: `unused-${v.profile.id}`,
+        tone: "info",
+        text: (
+          <>
+            <span className="font-medium">{v.profile.name}</span> wird noch nirgends benutzt.
+          </>
+        ),
+        link: (
+          <Link to="/profile/$id" params={{ id: v.profile.id }} className={linkClass}>
+            Festlegen
+          </Link>
+        ),
+      });
+    }
+  }
+  if (keys.length === 0 && items.length === 0) return null;
+  if (items.length === 0) {
+    return (
+      <p role="status" className="m-0 flex items-center gap-2.5 rounded-[10px] border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-[13px]">
+        <CheckCircle2 aria-hidden className="size-4 text-success" />
+        Alles in Ordnung – Git und ssh nehmen automatisch den richtigen Key.
+      </p>
+    );
+  }
+  const icon = { danger: XCircle, warn: AlertTriangle, info: Info };
+  const color = { danger: "text-danger", warn: "text-warning", info: "text-blue-400" };
+  return (
+    <section aria-labelledby="todo-title" className="flex flex-col gap-2">
+      <h2 id="todo-title" className="m-0 text-[15px] font-semibold">
+        Zu tun
+      </h2>
+      <ul aria-labelledby="todo-title" className="m-0 flex list-none flex-col overflow-hidden rounded-[10px] border border-border p-0">
+        {items.map((item) => {
+          const Icon = icon[item.tone];
+          return (
+            <li key={item.id} className="flex flex-wrap items-center gap-3 border-b border-border-subtle bg-card px-4 py-3 last:border-b-0">
+              <Icon aria-hidden className={cn("size-4 shrink-0", color[item.tone])} />
+              <span className="min-w-[200px] flex-1 text-[13px]">{item.text}</span>
+              {item.link}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

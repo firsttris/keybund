@@ -24,6 +24,9 @@ pub struct ProbeResult {
     /// `true` if the server accepted a different key than the profile's,
     /// e.g. one from an `IdentityFile` in `~/.ssh/config`.
     pub other_key: bool,
+    /// The server refused the key (or took another one): it has to be
+    /// added to the account or the server – the UI offers that right away.
+    pub key_rejected: bool,
     /// What happened, step by step, in plain words (from `ssh -v`).
     pub steps: Vec<ProbeStep>,
     /// The complete output of `ssh -v`, for the curious and for bug reports.
@@ -200,6 +203,7 @@ pub fn evaluate(
         if result.success && expected.is_some_and(|e| e != fingerprint) {
             result.success = false;
             result.other_key = true;
+            result.key_rejected = true;
             let who = result.account.as_deref().map(|a| format!(" als {a}")).unwrap_or_default();
             result.message = format!(
                 "Angemeldet{who}, aber mit {} statt mit diesem Key",
@@ -281,6 +285,8 @@ pub fn interpret(host: &HostEntry, output: &str, code: Option<i32>, command: Str
         command,
         used_key: None,
         other_key: false,
+        // A wrong passphrase also ends in "Permission denied", but the key is fine.
+        key_rejected: !success && lower.contains("permission denied") && !lower.contains("passphrase"),
         steps: Vec::new(),
         log: String::new(),
     }
@@ -354,8 +360,15 @@ mod tests {
             Some(255),
             String::new(),
         );
-        assert!(!r.success);
+        assert!(!r.success && r.key_rejected);
         assert_eq!(r.message, "GitHub kennt diesen Key nicht");
+        let r = interpret(
+            &host(Provider::Github, "github.com"),
+            "ssh: connect to host github.com: timed out",
+            Some(255),
+            String::new(),
+        );
+        assert!(!r.key_rejected, "an unreachable host says nothing about the key");
     }
 
     const VERBOSE_OK: &str = "OpenSSH_9.6p1 Ubuntu-3ubuntu13\n\
@@ -380,7 +393,7 @@ mod tests {
         let gh = host(Provider::Github, "github.com");
         let r = evaluate(&env, &gh, VERBOSE_OK, Some(1), String::new(), Some("SHA256:aaaa"));
         assert!(!r.success);
-        assert!(r.other_key);
+        assert!(r.other_key && r.key_rejected);
         assert_eq!(r.account.as_deref(), Some("@firsttris"));
         assert_eq!(r.used_key.as_deref(), Some("~/.ssh/privat_ed25519"));
         assert_eq!(r.message, "Angemeldet als @firsttris, aber mit ~/.ssh/privat_ed25519 statt mit diesem Key");
@@ -399,6 +412,7 @@ mod tests {
         let r = interpret(&gh, out, Some(255), String::new());
         assert!(!r.success);
         assert!(r.message.starts_with("Passphrase konnte nicht abgefragt werden"));
+        assert!(!r.key_rejected);
         let out = "Load key \"/home/t/.ssh/a\": incorrect passphrase supplied to decrypt private key\ngit@github.com: Permission denied (publickey).";
         assert_eq!(interpret(&gh, out, Some(255), String::new()).message, "Passphrase falsch");
     }

@@ -58,7 +58,7 @@ export const commands = {
 	archiveProfile: (id: string) => typedError<ArchiveResult, CmdError>(__TAURI_INVOKE("archive_profile", { id })),
 	generatedConfig: (id: string) => typedError<GeneratedFile[], CmdError>(__TAURI_INVOKE("generated_config", { id })),
 	importProposals: () => typedError<ImportProposal[], CmdError>(__TAURI_INVOKE("import_proposals")),
-	importProfiles: (chosen: ImportProposal[]) => typedError<string[], CmdError>(__TAURI_INVOKE("import_profiles", { chosen })),
+	importProfiles: (chosen: ImportProposal[], removeOld: boolean) => typedError<ImportDone, CmdError>(__TAURI_INVOKE("import_profiles", { chosen, removeOld })),
 	cleanupPreview: () => typedError<Plan, CmdError>(__TAURI_INVOKE("cleanup_preview")),
 	cleanupApply: (expectedDiffs: string[]) => typedError<ApplyReport, CmdError>(__TAURI_INVOKE("cleanup_apply", { expectedDiffs })),
 	uninstallPreview: (opts: UninstallOptions) => typedError<UninstallPreview, CmdError>(__TAURI_INVOKE("uninstall_preview", { opts })),
@@ -216,6 +216,12 @@ export type ImportCandidate = {
 	used_by: string | null,
 };
 
+export type ImportDone = {
+	ids: string[],
+	/**  Everything written, including the backup of `~/.ssh/config`. */
+	report: ApplyReport,
+};
+
 /**  A profile Keybund proposes to create from existing ssh config. */
 export type ImportProposal = {
 	/**  Prefilled profile; name, id, color and folders can be changed. */
@@ -311,6 +317,11 @@ export type ProbeResult = {
 	 *  e.g. one from an `IdentityFile` in `~/.ssh/config`.
 	 */
 	other_key: boolean,
+	/**
+	 *  The server refused the key (or took another one): it has to be
+	 *  added to the account or the server – the UI offers that right away.
+	 */
+	key_rejected: boolean,
 	/**  What happened, step by step, in plain words (from `ssh -v`). */
 	steps: ProbeStep[],
 	/**  The complete output of `ssh -v`, for the curious and for bug reports. */

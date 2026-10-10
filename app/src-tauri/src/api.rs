@@ -236,13 +236,21 @@ pub fn create_project(env: &Env, project: &NewProject) -> CmdResult<CreatedProje
     })
 }
 
-/// Saves changes to an existing profile (the id cannot change).
+/// Saves `profiles.toml` and writes the configs right away, so a change in
+/// the GUI takes effect without an extra step (user files get a one-time
+/// backup before the first write).
+fn save_and_apply(env: &Env, config: &Config) -> CmdResult<ApplyReport> {
+    store::save(env, config)?;
+    Ok(apply::apply_config(env, config)?)
+}
+
+/// Saves changes to an existing key (the id cannot change) and applies them.
 pub fn update_profile(env: &Env, profile: Profile) -> CmdResult<ProfileView> {
     let mut config = store::load(env)?;
     let profile = normalized(env, profile);
     let slot = config.profile_mut(&profile.id)?;
     *slot = profile.clone();
-    store::save(env, &config)?;
+    save_and_apply(env, &config)?;
     Ok(profile_view(env, &config, &profile, None))
 }
 
@@ -264,8 +272,7 @@ pub fn preview_add_host(env: &Env, id: &str, host: HostEntry) -> CmdResult<Plan>
 /// Adds the server to the profile and writes the configs.
 pub fn add_host(env: &Env, id: &str, host: HostEntry) -> CmdResult<ProfileView> {
     let config = with_host(env, id, host)?;
-    store::save(env, &config)?;
-    apply::apply_config(env, &config)?;
+    save_and_apply(env, &config)?;
     let profile = config.profile(id)?;
     Ok(profile_view(env, &config, profile, None))
 }
@@ -276,7 +283,7 @@ fn host_of<'a>(profile: &'a Profile, host: Option<&str>) -> CmdResult<&'a HostEn
             .hosts
             .iter()
             .find(|h| h.target_name() == name || h.hostname == name)
-            .ok_or_else(|| CmdError::other(format!("Profil „{}“ hat keinen Host {name}", profile.id))),
+            .ok_or_else(|| CmdError::other(format!("Key „{}“ hat keinen Host {name}", profile.id))),
         None => Ok(profile.hosts.first().ok_or_else(|| Error::NoHost(profile.id.clone()))?),
     }
 }
@@ -300,7 +307,7 @@ pub fn settings(env: &Env) -> CmdResult<Settings> {
     Ok(store::load(env)?.settings)
 }
 
-/// Saves the settings; changes to the generated configs show up as pending.
+/// Saves the settings and rewrites the configs they affect.
 pub fn update_settings(env: &Env, settings: Settings) -> CmdResult<Settings> {
     let mut config = store::load(env)?;
     config.settings = Settings {
@@ -308,14 +315,14 @@ pub fn update_settings(env: &Env, settings: Settings) -> CmdResult<Settings> {
         keys_dir: store::normalize_dir(env, &settings.keys_dir)?,
         ..settings
     };
-    store::save(env, &config)?;
+    save_and_apply(env, &config)?;
     Ok(config.settings)
 }
 
 pub fn set_default_profile(env: &Env, id: Option<String>) -> CmdResult<()> {
     let mut config = store::load(env)?;
     config.default_profile = id;
-    store::save(env, &config)?;
+    save_and_apply(env, &config)?;
     Ok(())
 }
 
@@ -329,7 +336,8 @@ pub fn plan_changes(env: &Env) -> CmdResult<Plan> {
 }
 
 /// Applies the current plan, but only if it still matches the diffs the
-/// user has seen.
+/// user has seen. Changes made in the GUI are applied right away, so this
+/// is for files that were changed outside Keybund.
 pub fn apply_changes(env: &Env, expected_diffs: &[String]) -> CmdResult<ApplyReport> {
     let plan = plan_changes(env)?;
     let current: Vec<&str> = plan.changes.iter().map(|c| c.diff.as_str()).collect();
@@ -385,16 +393,34 @@ pub fn clone_repo(env: &Env, url: &str, profile_id: &str, target: Option<String>
 
 pub fn archive_profile(env: &Env, id: &str) -> CmdResult<archive::ArchiveResult> {
     let mut config = store::load(env)?;
-    Ok(archive::archive(env, &mut config, id)?)
+    let result = archive::archive(env, &mut config, id)?;
+    apply::apply_config(env, &config)?;
+    Ok(result)
 }
 
 pub fn import_proposals(env: &Env) -> CmdResult<Vec<ImportProposal>> {
     Ok(import::proposals_for(env)?)
 }
 
-/// Saves the chosen proposals as profiles (configs are written by the next apply).
-pub fn import_profiles(env: &Env, chosen: &[ImportProposal]) -> CmdResult<Vec<String>> {
-    Ok(import::import(env, chosen)?)
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ImportDone {
+    pub ids: Vec<String>,
+    /// Everything written, including the backup of `~/.ssh/config`.
+    pub report: ApplyReport,
+}
+
+/// Takes over the chosen proposals in one go: saves them as keys, writes
+/// the configs and (with `remove_old`) removes the old blocks from
+/// `~/.ssh/config`, which gets a backup first.
+pub fn import_profiles(env: &Env, chosen: &[ImportProposal], remove_old: bool) -> CmdResult<ImportDone> {
+    let ids = import::import(env, chosen)?;
+    let mut report = apply::apply_config(env, &store::load(env)?)?;
+    if remove_old {
+        let cleanup = apply::apply(env, &import::plan_cleanup(env)?)?;
+        report.written.extend(cleanup.written);
+        report.backups.extend(cleanup.backups);
+    }
+    Ok(ImportDone { ids, report })
 }
 
 /// Removing the blocks from `~/.ssh/config` that profiles now cover.
@@ -568,19 +594,35 @@ mod tests {
     }
 
     #[test]
-    fn update_and_apply_with_stale_check() {
+    fn changes_are_applied_right_away() {
         let (_d, env) = env();
         create_project(&env, &project("a")).unwrap();
         let mut view = load_profiles(&env).unwrap().profiles.remove(0);
         view.profile.git.as_mut().unwrap().sign = true;
         update_profile(&env, view.profile).unwrap();
+        assert!(std::fs::read_to_string(env.profile_gitconfig("a")).unwrap().contains("gpgsign = true"));
+        assert!(plan_changes(&env).unwrap().is_empty());
+
+        let mut s = settings(&env).unwrap();
+        s.known_hosts_per_profile = !s.known_hosts_per_profile;
+        update_settings(&env, s).unwrap();
+        set_default_profile(&env, None).unwrap();
+        assert!(!std::fs::read_to_string(env.index_gitconfig()).unwrap().contains("sshCommand"));
+        assert_eq!(load_profiles(&env).unwrap().pending_changes, 0);
+    }
+
+    #[test]
+    fn files_changed_outside_are_restored_with_stale_check() {
+        let (_d, env) = env();
+        create_project(&env, &project("a")).unwrap();
+        std::fs::write(env.profile_gitconfig("a"), "kaputt\n").unwrap();
 
         let plan = plan_changes(&env).unwrap();
         assert!(!plan.is_empty());
         let diffs: Vec<String> = plan.changes.iter().map(|c| c.diff.clone()).collect();
         assert_eq!(apply_changes(&env, &[]).unwrap_err().kind, "stale_plan");
         apply_changes(&env, &diffs).unwrap();
-        assert!(std::fs::read_to_string(env.profile_gitconfig("a")).unwrap().contains("gpgsign = true"));
+        assert!(std::fs::read_to_string(env.profile_gitconfig("a")).unwrap().contains("sshCommand"));
     }
 
     #[test]
@@ -604,7 +646,8 @@ mod tests {
         create_project(&env, &project("b")).unwrap();
         let res = archive_profile(&env, "b").unwrap();
         assert_eq!(res.key_path, "~/.ssh/archive/b_ed25519");
-        assert!(plan_changes(&env).unwrap().changes.iter().any(|c| c.path.ends_with("b.gitconfig")));
+        assert!(!env.profile_gitconfig("b").exists());
+        assert!(plan_changes(&env).unwrap().is_empty());
         set_default_profile(&env, Some("a".into())).unwrap();
         assert_eq!(load_profiles(&env).unwrap().default_profile.as_deref(), Some("a"));
     }
@@ -633,12 +676,11 @@ mod tests {
         assert_eq!(load_profiles(&env).unwrap().import_available, 1);
 
         let proposals = import_proposals(&env).unwrap();
-        assert_eq!(import_profiles(&env, &proposals).unwrap(), ["privat"]);
+        assert_eq!(import_profiles(&env, &proposals, false).unwrap().ids, ["privat"]);
         let view = load_profiles(&env).unwrap();
         assert_eq!(view.import_available, 0);
         assert_eq!(view.default_profile.as_deref(), Some("privat"));
-        apply_changes(&env, &plan_changes(&env).unwrap().changes.iter().map(|c| c.diff.clone()).collect::<Vec<_>>())
-            .unwrap();
+        assert_eq!(view.pending_changes, 0);
 
         let cleanup = cleanup_preview(&env).unwrap();
         assert_eq!(cleanup.changes.len(), 1);
@@ -646,6 +688,31 @@ mod tests {
         let diffs: Vec<String> = cleanup.changes.iter().map(|c| c.diff.clone()).collect();
         cleanup_apply(&env, &diffs).unwrap();
         assert_eq!(std::fs::read_to_string(env.ssh_config()).unwrap(), "Include ~/.ssh/config.d/keybund.conf\n");
+        assert!(cleanup_preview(&env).unwrap().is_empty());
+    }
+
+    #[test]
+    fn import_in_one_step() {
+        let (_d, env) = env();
+        std::fs::create_dir_all(env.ssh_dir()).unwrap();
+        keygen::generate(
+            &env,
+            &GenerateOptions { path: "~/.ssh/kunde_ed25519".into(), comment: "x".into(), passphrase: None },
+        )
+        .unwrap();
+        std::fs::write(
+            env.ssh_config(),
+            "Host kunde\n  HostName gitlab.kunde.de\n  IdentityFile ~/.ssh/kunde_ed25519\n",
+        )
+        .unwrap();
+        let done = import_profiles(&env, &import_proposals(&env).unwrap(), true).unwrap();
+        assert_eq!(done.ids, ["kunde"]);
+        assert!(done.report.written.contains(&"~/.ssh/config".to_string()));
+        assert_eq!(done.report.backups.len(), 1, "{:?}", done.report);
+        assert!(std::fs::read_to_string(env.ssh_keybund_conf()).unwrap().contains("Host kunde"));
+        assert_eq!(std::fs::read_to_string(env.ssh_config()).unwrap(), "Include ~/.ssh/config.d/keybund.conf\n");
+        let view = load_profiles(&env).unwrap();
+        assert_eq!((view.pending_changes, view.import_available), (0, 0));
         assert!(cleanup_preview(&env).unwrap().is_empty());
     }
 

@@ -29,7 +29,7 @@ const STEPS = [
   {
     icon: ListChecks,
     title: "Regeln statt Ausprobieren",
-    text: "Keybund schreibt kleine Regeln in die Config von Git und ssh: „Repos in ~/dev/kunde-a/ → Key A“, „Server nas → Key B“. So nimmt nie ein Projekt versehentlich den falschen Key.",
+    text: "Keybund schreibt kleine Regeln in die Config von Git und ssh: „Repos in ~/dev/kunde-a/ → Key A“, „Server nas → Key B“. So nimmt nie ein Repo versehentlich den falschen Key.",
   },
   {
     icon: TerminalSquare,

@@ -81,9 +81,7 @@ pub fn run(env: &Env) -> Report {
     let config = match store::load(env) {
         Ok(c) => {
             match store::validate(&c) {
-                Ok(()) => {
-                    checks.push(Check::new("profiles", Status::Ok, format!("{} Profile geladen", c.profiles.len())))
-                }
+                Ok(()) => checks.push(Check::new("profiles", Status::Ok, format!("{} Keys geladen", c.profiles.len()))),
                 Err(e) => checks
                     .push(Check::new("profiles", Status::Error, "profiles.toml ist ungültig").detail(e.to_string())),
             }
@@ -156,7 +154,7 @@ pub fn dolphin_check(installed: bool, libssh: Option<(u32, u32, u32)>, config: &
     }
     let Some(v) = libssh else {
         return Some(Check::new("dolphin", Status::Ok, "Dolphin gefunden, libssh-Version unbekannt").detail(
-            "Zum Prüfen sftp://<alias> in Dolphin öffnen: Es sollte ohne Passwort mit dem Profil-Key verbinden.",
+            "Zum Prüfen sftp://<alias> in Dolphin öffnen: Es sollte ohne Passwort mit dem Key aus Keybund verbinden.",
         ));
     };
     let version = format!("{}.{}.{}", v.0, v.1, v.2);
@@ -165,7 +163,7 @@ pub fn dolphin_check(installed: bool, libssh: Option<(u32, u32, u32)>, config: &
     } else {
         Check::new("dolphin", Status::Warn, format!("Dolphin sieht die Keybund-Config nicht (libssh {version})"))
             .detail(
-                "libssh vor 0.10.2 versteht ~ in Include nicht – sftp:// in Dolphin nutzt dann nicht den Profil-Key. \
+                "libssh vor 0.10.2 versteht ~ in Include nicht – sftp:// in Dolphin nutzt dann nicht den Key aus Keybund. \
                  Abhilfe: Include mit vollem Pfad schreiben.",
             )
             .fix(Fix::AbsoluteSshInclude)
@@ -268,7 +266,7 @@ fn git_env_check(env: &Env) -> Check {
         .iter()
         .map(|o| match o.name.as_str() {
             "GIT_SSH_COMMAND" => format!(
-                "GIT_SSH_COMMAND ist in {} gesetzt („{}“). Git benutzt dann in jedem Repo diesen Befehl statt des Profil-Keys.",
+                "GIT_SSH_COMMAND ist in {} gesetzt („{}“). Git benutzt dann in jedem Repo diesen Befehl statt des Keys aus Keybund.",
                 o.origin, o.value
             ),
             _ => format!(
@@ -352,7 +350,7 @@ fn ssh_config_checks(env: &Env, config: &Config) -> Vec<Check> {
                 .detail(format!("Er ist in Keybund übernommen, bietet aber weiter {} an – dadurch kann die Anmeldung mit dem falschen Key gelingen. Entfernen.", b.identity_files[0]))
                 .fix(Fix::CleanupSshConfig),
             (true, false) => Check::new(&format!("ssh-config-{host}"), Status::Warn, format!("Globaler Eintrag für {host} in ~/.ssh/config"))
-                .detail(format!("{} wird zusätzlich zum Profil-Key angeboten – die Anmeldung kann mit dem falschen Key gelingen. Mit „Bestehende SSH-Config übernehmen“ in Keybund übernehmen, dann entfernen.", b.identity_files[0])),
+                .detail(format!("{} wird zusätzlich zum Key aus Keybund angeboten – die Anmeldung kann mit dem falschen Key gelingen. Mit „Bestehende SSH-Config übernehmen“ in Keybund übernehmen, dann entfernen.", b.identity_files[0])),
             (false, true) => Check::new(&format!("ssh-config-{host}"), Status::Warn, format!("Doppelter Eintrag für {host} in ~/.ssh/config"))
                 .detail("Keybund schreibt diesen Host-Block selbst, der alte kann weg.")
                 .fix(Fix::CleanupSshConfig),
@@ -387,7 +385,7 @@ fn folder_checks(env: &Env, config: &Config) -> Vec<Check> {
     if missing.is_empty() {
         return Vec::new();
     }
-    vec![Check::new("folders", Status::Warn, "Projektordner existieren nicht").detail(missing.join(", "))]
+    vec![Check::new("folders", Status::Warn, "Git-Ordner existieren nicht").detail(missing.join(", "))]
 }
 
 /// Runs an automatic fix.

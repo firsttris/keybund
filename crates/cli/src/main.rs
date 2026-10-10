@@ -1,4 +1,4 @@
-//! `keybund` – SSH keys per project, from the terminal.
+//! `keybund` – the right SSH key, automatically, from the terminal.
 
 mod commands;
 mod system;
@@ -10,7 +10,11 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "keybund", version, about = "SSH-Keys pro Projekt – erzeugt Standard-Configs für OpenSSH und Git")]
+#[command(
+    name = "keybund",
+    version,
+    about = "Der richtige SSH-Key, automatisch – erzeugt Standard-Configs für OpenSSH und Git"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -18,20 +22,24 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Profile mit Key-Fingerprint, Ordnern und Hosts auflisten
+    /// Keys mit Fingerprint, Git-Ordnern und Hosts auflisten
     List {
-        /// Auch archivierte Profile zeigen
+        /// Auch archivierte Keys zeigen
         #[arg(long)]
         all: bool,
     },
-    /// Ein Profil im Detail zeigen
-    Show { profile: String },
-    /// Neues Projekt anlegen (interaktiv, oder komplett über Optionen)
+    /// Einen Key im Detail zeigen
+    Show {
+        #[arg(value_name = "KEY")]
+        profile: String,
+    },
+    /// Neuen Key anlegen (interaktiv, oder komplett über Optionen)
     New(Box<commands::NewArgs>),
-    /// Profil ändern: Name, Farbe, Ordner, Hosts, Git-Identität, Key
+    /// Key ändern: Name, Farbe, Git-Ordner, Hosts, Git-Identität, Key-Datei
     Edit(Box<commands::EditArgs>),
-    /// Pubkey eines Profils in die Zwischenablage kopieren
+    /// Pubkey eines Keys in die Zwischenablage kopieren
     Copy {
+        #[arg(value_name = "KEY")]
         profile: String,
         /// Pubkey nur ausgeben statt kopieren
         #[arg(long)]
@@ -42,8 +50,9 @@ enum Command {
     /// Für GitHub und GitLab meldest du dich im Browser an (Code bestätigen);
     /// selbst gehostete Instanzen brauchen ein Token (--token-stdin).
     InstallKey {
+        #[arg(value_name = "KEY")]
         profile: String,
-        /// Nur dieser Host (Alias oder Hostname/IP); ohne: alle Hosts des Profils
+        /// Nur dieser Host (Alias oder Hostname/IP); ohne: alle Hosts des Keys
         #[arg(long)]
         host: Option<String>,
         /// Persönliches Zugriffstoken von stdin lesen
@@ -53,8 +62,9 @@ enum Command {
         #[arg(long)]
         remember: bool,
     },
-    /// Host-Keys der Server eines Profils prüfen und bestätigen
+    /// Host-Keys der Server eines Keys prüfen und bestätigen
     Trust {
+        #[arg(value_name = "KEY")]
         profile: String,
         /// Nur dieser Host (Alias oder Hostname/IP)
         #[arg(long)]
@@ -65,19 +75,21 @@ enum Command {
     },
     /// Verbindung testen (Exit-Code 0 bei Erfolg)
     Test {
+        #[arg(value_name = "KEY")]
         profile: String,
-        /// Nur diesen Host (Alias oder Hostname/IP); ohne: alle Hosts des Profils
+        /// Nur diesen Host (Alias oder Hostname/IP); ohne: alle Hosts des Keys
         #[arg(long)]
         host: Option<String>,
     },
     /// Welcher Key wird hier benutzt? Ohne Argument: aktuelles Verzeichnis
     Which { target: Option<String> },
-    /// Repo ins richtige Profil klonen
+    /// Repo in den Git-Ordner des passenden Keys klonen
     Clone {
         url: String,
-        #[arg(long, short)]
+        /// Key, der benutzt werden soll (Standard: der Key für den Host)
+        #[arg(long, short, visible_alias = "key", value_name = "KEY")]
         profile: Option<String>,
-        /// Zielordner (Standard: <Profilordner>/<Reponame>)
+        /// Zielordner (Standard: <Git-Ordner>/<Reponame>)
         #[arg(long)]
         dest: Option<PathBuf>,
     },
@@ -98,7 +110,7 @@ enum Command {
     },
     /// Vorhandene Keys in ~/.ssh auflisten
     Keys,
-    /// Bestehende ~/.ssh/config übernehmen (Profile mit den vorhandenen Keys)
+    /// Bestehende ~/.ssh/config übernehmen (als Keys in Keybund)
     Import {
         /// Alle Vorschläge ohne Auswahl übernehmen
         #[arg(long)]
@@ -121,12 +133,16 @@ enum Command {
         #[arg(long, short)]
         yes: bool,
     },
-    /// Standard-Profil setzen (Key außerhalb aller Projektordner)
-    Default { profile: String },
+    /// Standard-Key setzen (für Repos außerhalb aller Git-Ordner)
+    Default {
+        #[arg(value_name = "KEY")]
+        profile: String,
+    },
     /// Einstellungen zeigen oder ändern, z. B. `keybund config projects-dir ~/work`
     Config { key: Option<String>, value: Option<String> },
-    /// Profil archivieren: Key nach ~/.ssh/archive, Configs entfernen
+    /// Key archivieren: nach ~/.ssh/archive verschieben, Configs entfernen
     Archive {
+        #[arg(value_name = "KEY")]
         profile: String,
         #[arg(long, short)]
         yes: bool,

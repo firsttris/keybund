@@ -52,19 +52,30 @@ const newRoute = createRoute({
 });
 
 const whichRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shell,
   path: "/which",
   validateSearch: (search: Record<string, unknown>): { q?: string } =>
     typeof search.q === "string" ? { q: search.q } : {},
   component: function Which() {
     const { q } = whichRoute.useSearch();
-    return <WhichPage initial={q} />;
+    // A new query from the sidebar search starts a fresh page.
+    return <WhichPage key={q} initial={q} />;
   },
 });
 
 const routeTree = rootRoute.addChildren([
-  shell.addChildren([homeRoute, profileRoute, newRoute, applyRoute, cloneRoute, doctorRoute, settingsRoute, importRoute, uninstallRoute]),
-  whichRoute,
+  shell.addChildren([
+    homeRoute,
+    profileRoute,
+    newRoute,
+    applyRoute,
+    cloneRoute,
+    doctorRoute,
+    settingsRoute,
+    importRoute,
+    uninstallRoute,
+    whichRoute,
+  ]),
 ]);
 
 export function createAppRouter(history: RouterHistory = createHashHistory()) {

@@ -36,6 +36,12 @@ test("connection test shows success and failure with the steps", async ({ app })
   await expect(failing.getByText(/Permission denied \(publickey\)/).first()).toBeVisible();
   // The sidebar reflects the failed test.
   await expect(app.getByRole("navigation", { name: "Keys" }).getByText("Test fehlgeschlagen")).toBeVisible();
+
+  // The fix is one click away: add the key to the account, then it is tested again.
+  await failing.getByRole("button", { name: "Jetzt bei GitHub eintragen" }).click();
+  await failing.getByRole("button", { name: "Bei GitHub anmelden & eintragen" }).click();
+  await expect(failing.getByTestId("connection-status")).toHaveText("Verbunden als @tristan", { timeout: 10_000 });
+  await expect(app.getByRole("navigation", { name: "Keys" }).getByText("Test fehlgeschlagen")).toHaveCount(0);
 });
 
 test("opens the provider page", async ({ app }) => {
@@ -54,19 +60,28 @@ test("shows the generated config", async ({ app }) => {
   await expect(app.getByText(/Host meinserver/)).toBeVisible();
 });
 
-test("editing a profile leads to the diff and apply", async ({ app }) => {
+test("a change is written right away", async ({ app }) => {
   await app.goto("/#/profile/sparkasse");
   await expect(app.getByText("Configs aktuell")).toBeVisible();
   await app.getByRole("switch", { name: "Commits signieren" }).click();
   await expect(app.getByRole("switch", { name: "Commits signieren" })).toHaveAttribute("aria-checked", "true");
-  await expect(app.getByText("1 Datei ist nicht aktuell")).toBeVisible();
+  await expect(app.getByText("Git und ssh benutzen es ab sofort.")).toBeVisible();
+  await expect(app.getByText("Configs aktuell")).toBeVisible();
+  await app.getByRole("tab", { name: "Generierte Config" }).click();
+  await expect(app.getByText(/gpgsign = true/).first()).toBeVisible();
+});
 
-  await app.getByRole("link", { name: "Vorschau & anwenden" }).click();
-  await expect(app.getByRole("heading", { name: "Änderungen anwenden" })).toBeVisible();
-  await expect(app.getByText("+\tgpgsign = true").first()).toBeVisible();
-  await app.getByRole("button", { name: "Anwenden" }).click();
-  await expect(app.getByText("Alle Configs sind aktuell.")).toBeVisible();
-  await expect(app.getByText(/Datei\(en\) geschrieben/)).toBeVisible();
+test("a file changed outside Keybund can be written again", async ({ app }) => {
+  await app.evaluate(() => {
+    const mock = (window as unknown as { __keybundMock: { state: { applied: Map<string, string> } } }).__keybundMock;
+    mock.state.applied.set("~/.config/keybund/git/sparkasse.gitconfig", "kaputt\n");
+  });
+  // The plan is not cached yet, so the page shows the difference right away.
+  await app.goto("/#/apply");
+  await expect(app.getByRole("heading", { name: "Configs neu schreiben" })).toBeVisible();
+  await expect(app.getByText("-kaputt")).toBeVisible();
+  await app.getByRole("button", { name: "Neu schreiben" }).click();
+  await expect(app.getByText("Alle Configs passen zu deinen Keys.")).toBeVisible();
 });
 
 test("adds and removes a folder, rejects nested folders", async ({ app }) => {
@@ -74,7 +89,7 @@ test("adds and removes a folder, rejects nested folders", async ({ app }) => {
   await usage(app).getByRole("button", { name: "Git-Ordner" }).click();
   await app.getByLabel("Ordner", { exact: true }).fill("~/dev/sparkasse/sub");
   await app.getByRole("button", { name: "Ordner speichern" }).click();
-  await expect(app.getByText(/Projektordner überschneiden sich/).first()).toBeVisible();
+  await expect(app.getByText(/Git-Ordner überschneiden sich/).first()).toBeVisible();
 
   await app.getByLabel("Ordner", { exact: true }).fill("~/work/kunde-b");
   await app.getByRole("button", { name: "Ordner speichern" }).click();
@@ -114,11 +129,13 @@ test("archives a profile and removes its configs", async ({ app }) => {
   await expect(app.getByRole("alertdialog")).toContainText("„Kunde B“ archivieren?");
   await app.getByRole("alertdialog").getByRole("button", { name: "Archivieren" }).click();
 
-  await expect(app.getByRole("heading", { name: "Änderungen anwenden" })).toBeVisible();
-  await expect(app.getByText("~/.config/keybund/git/kunde-b.gitconfig", { exact: true })).toBeVisible();
-  await expect(app.getByText("· gelöscht")).toBeVisible();
-  await app.getByRole("button", { name: "Anwenden" }).click();
-  await expect(app.getByText("Alle Configs sind aktuell.")).toBeVisible();
+  await expect(app.getByRole("heading", { name: "Übersicht" })).toBeVisible();
+  await expect(app.getByText("Configs aktuell")).toBeVisible();
+  expect(await app.evaluate(() =>
+    (window as unknown as { __keybundMock: { state: { applied: Map<string, string> } } }).__keybundMock.state.applied.has(
+      "~/.config/keybund/git/kunde-b.gitconfig",
+    ),
+  )).toBe(false);
 
   await expect(app.getByRole("navigation", { name: "Keys" }).getByText("Kunde B")).toHaveCount(0);
   await expect(app.getByRole("navigation", { name: "Archiv" }).getByText("Kunde B")).toBeVisible();
@@ -127,12 +144,14 @@ test("archives a profile and removes its configs", async ({ app }) => {
 test("sidebar search finds keys by name, folder and server", async ({ app }) => {
   await app.getByLabel("Keys durchsuchen").fill("spar");
   const nav = app.getByRole("navigation", { name: "Keys" });
-  await expect(nav.getByRole("link")).toHaveCount(1);
+  const keys = nav.getByRole("link").filter({ hasNotText: "Welcher Key" });
+  await expect(keys).toHaveCount(1);
   await app.getByLabel("Keys durchsuchen").fill("1.2.3");
-  await expect(nav.getByRole("link")).toHaveCount(1);
+  await expect(keys).toHaveCount(1);
   await expect(nav.getByRole("link", { name: /Privat/ })).toBeVisible();
   await app.getByLabel("Keys durchsuchen").fill("xyz");
-  await expect(nav.getByText("Kein Treffer")).toBeVisible();
+  await expect(nav.getByText("Kein Key passt")).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Welcher Key gilt für „xyz“?" })).toBeVisible();
 });
 
 test("unknown key shows a not-found page", async ({ app }) => {

@@ -112,7 +112,7 @@ fn which_folder(env: &Env, config: &Config, query: &str) -> Result<WhichResult> 
             result.via = Some(format!("includeIf \"gitdir:{folder}\""));
             if result.key_path.as_deref().map(|k| same_key(env, k, &p.key.path)) == Some(false) {
                 result.notes.push(format!(
-                    "Der Ordner gehört zu Profil „{}“, git verwendet aber einen anderen Key. Lokale Repo-Config prüfen.",
+                    "Der Ordner gehört zum Key „{}“, git verwendet aber einen anderen Key. Lokale Repo-Config prüfen.",
                     p.name
                 ));
             }
@@ -134,10 +134,10 @@ fn which_folder(env: &Env, config: &Config, query: &str) -> Result<WhichResult> 
         result.key_path = Some(def.key.path.clone());
         result.identities_only = Some(true);
         result.source = Some(env.contract(&env.index_gitconfig()));
-        result.via = Some("Standard-Profil".into());
-        result.notes.push("Ordner gehört zu keinem Profil, es gilt das Standard-Profil.".into());
+        result.via = Some("Standard-Key".into());
+        result.notes.push("Ordner gehört zu keinem Key, es gilt der Standard-Key.".into());
     } else {
-        result.notes.push("Ordner gehört zu keinem Profil und es gibt kein Standard-Profil.".into());
+        result.notes.push("Ordner gehört zu keinem Key und es gibt keinen Standard-Key.".into());
     }
 
     // GIT_SSH_COMMAND beats every core.sshCommand, including Keybund's.

@@ -190,7 +190,7 @@ pub async fn test_connection(state: State<'_, AppState>, id: String, host: Optio
                     .hosts
                     .iter()
                     .find(|h| h.target_name() == name || h.hostname == name)
-                    .ok_or_else(|| CmdError::other(format!("Profil „{id}“ hat keinen Host {name}")))?;
+                    .ok_or_else(|| CmdError::other(format!("Key „{id}“ hat keinen Host {name}")))?;
                 let result = probe::probe(&env, profile, h)?;
                 // The key's latest test is remembered (sidebar, start page).
                 history::record(&env, &id, &result)?;
@@ -280,7 +280,7 @@ pub async fn install_key(
             .hosts
             .iter()
             .find(|h| h.target_name() == host || h.hostname == host)
-            .ok_or_else(|| CmdError::other(format!("Profil „{id}“ hat keinen Server {host}")))?;
+            .ok_or_else(|| CmdError::other(format!("Key „{id}“ hat keinen Server {host}")))?;
         Ok(keybund_core::keyinstall::install(&env, profile, server)?)
     })
     .await
@@ -380,9 +380,10 @@ pub async fn import_proposals(state: State<'_, AppState>) -> CmdResult<Vec<keybu
 pub async fn import_profiles(
     state: State<'_, AppState>,
     chosen: Vec<keybund_core::import::ImportProposal>,
-) -> CmdResult<Vec<String>> {
+    remove_old: bool,
+) -> CmdResult<api::ImportDone> {
     let env = state.env.clone();
-    blocking(move || api::import_profiles(&env, &chosen)).await
+    blocking(move || api::import_profiles(&env, &chosen, remove_old)).await
 }
 
 #[tauri::command]

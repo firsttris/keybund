@@ -3,7 +3,7 @@ source: crates/core/src/render.rs
 expression: "profile_gitconfig(&cfg.profiles[0])"
 ---
 # Managed by Keybund – manual changes will be overwritten.
-# Profil: Privat
+# Key: Privat
 [user]
 	name = Tristan
 	email = tristan@privat.de

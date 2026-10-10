@@ -146,11 +146,16 @@ fn profile_commands_over_ipc() {
     let keys = invoke(&webview, "scan_keys", json!({})).unwrap();
     assert_eq!(keys.as_array().unwrap().len(), 2);
 
-    // Edit → plan → stale apply → apply.
+    // An edit is written right away.
     let mut profile = invoke(&webview, "load_profiles", json!({})).unwrap()["profiles"][1]["profile"].clone();
     profile["git"]["sign"] = json!(true);
     let saved = invoke(&webview, "update_profile", json!({ "profile": profile })).unwrap();
     assert_eq!(saved["profile"]["git"]["sign"], true);
+    assert!(std::fs::read_to_string(env.profile_gitconfig("b")).unwrap().contains("gpgsign = true"));
+    assert_eq!(invoke(&webview, "load_profiles", json!({})).unwrap()["pending_changes"], 0);
+
+    // A file changed outside Keybund: plan → stale apply → apply.
+    std::fs::write(env.profile_gitconfig("b"), "kaputt\n").unwrap();
     let plan = invoke(&webview, "plan_changes", json!({})).unwrap();
     let diffs: Vec<Value> = plan["changes"].as_array().unwrap().iter().map(|c| c["diff"].clone()).collect();
     assert!(!diffs.is_empty());

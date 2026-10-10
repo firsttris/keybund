@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Activity, Archive, Crosshair, Download, KeyRound, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import type { ProfileView } from "@/lib/bindings";
@@ -16,6 +16,7 @@ export function Sidebar() {
   const { data } = useProfiles();
   const doctor = useDoctor();
   const [filter, setFilter] = useState("");
+  const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const problems = doctor.data?.checks.filter((c) => c.status !== "ok").length ?? 0;
   const q = filter.trim().toLowerCase();
@@ -77,13 +78,23 @@ export function Sidebar() {
           className="pl-[34px]"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && q) navigate({ to: "/which", search: { q: filter.trim() } });
+            if (e.key === "Escape") setFilter("");
+          }}
         />
       </div>
 
       <nav aria-label="Keys" className="flex flex-col gap-0.5">
         <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">Deine Keys</span>
         {keys.map(keyLink)}
-        {nothing && <span className="px-2.5 text-xs text-muted-foreground">{filter ? "Kein Treffer" : "Noch keine Keys"}</span>}
+        {nothing && <span className="px-2.5 text-xs text-muted-foreground">{filter ? "Kein Key passt" : "Noch keine Keys"}</span>}
+        {q && (
+          <Link to="/which" search={{ q: filter.trim() }} className={cn(navItem, "text-muted-foreground")}>
+            <Crosshair aria-hidden />
+            <span className="min-w-0 flex-1 truncate">Welcher Key gilt für „{filter.trim()}“?</span>
+          </Link>
+        )}
       </nav>
 
       {archived.length > 0 && (
@@ -99,10 +110,6 @@ export function Sidebar() {
       )}
 
       <nav aria-label="Werkzeuge" className="mt-auto flex flex-col gap-0.5 border-t border-border pt-3.5">
-        <Link to="/which" className={navItem} title="Zeigt für einen Ordner oder Server, welcher Key dort benutzt wird – und warum">
-          <Crosshair aria-hidden />
-          Welcher Key?
-        </Link>
         <Link to="/clone" className={navItem} title="Klont ein Repo direkt in den Ordner des passenden Keys">
           <Download aria-hidden />
           Repo klonen

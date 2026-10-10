@@ -1,8 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, KeyRound } from "lucide-react";
-import { useState } from "react";
-import { PageFrame } from "@/components/app-shell";
+import { KeyRound } from "lucide-react";
+import { useEffect, useState } from "react";
 import { ColorDot } from "@/components/color-dot";
 import { DoctorPanel } from "@/components/doctor-panel";
 import { Button } from "@/components/ui/button";
@@ -26,16 +25,14 @@ export function WhichPage({ initial }: { initial?: string }) {
     setQuery(q);
     if (q.trim()) resolve.mutate(q.trim());
   };
+  // Coming from the search in the sidebar: answer right away.
+  const { mutate } = resolve;
+  useEffect(() => {
+    if (initial?.trim()) mutate(initial.trim());
+  }, [initial, mutate]);
 
   return (
-    <PageFrame
-      back={
-        <Link to="/" className="flex min-h-9 items-center gap-2 text-[13px] text-secondary-foreground no-underline hover:text-foreground">
-          <ArrowLeft aria-hidden className="size-[15px]" />
-          Keys
-        </Link>
-      }
-    >
+    <>
       <div className="flex w-full max-w-[1040px] flex-wrap items-start gap-6">
         <section className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
           <div className="flex flex-col gap-1.5">
@@ -55,7 +52,7 @@ export function WhichPage({ initial }: { initial?: string }) {
             <Input
               id="which-input"
               className="h-10 flex-[1_1_280px] font-mono"
-              placeholder="~/dev/projekt/repo oder meinserver"
+              placeholder="~/dev/kunde-a/repo oder meinserver"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -83,7 +80,7 @@ export function WhichPage({ initial }: { initial?: string }) {
         </section>
         <DoctorPanel className="min-w-0 flex-[1_1_340px]" />
       </div>
-    </PageFrame>
+    </>
   );
 }
 

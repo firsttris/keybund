@@ -6,19 +6,19 @@ use std::path::Path;
 pub enum Error {
     #[error("Home-Verzeichnis nicht gefunden (HOME ist nicht gesetzt)")]
     NoHome,
-    #[error("Profil „{0}“ existiert nicht")]
+    #[error("Key „{0}“ existiert nicht")]
     ProfileNotFound(String),
-    #[error("Profil-ID „{0}“ ist doppelt vergeben")]
+    #[error("Einen Key „{0}“ gibt es schon")]
     DuplicateId(String),
-    #[error("Ungültige Profil-ID „{0}“ (erlaubt sind a–z, 0–9, - und _)")]
+    #[error("Ungültige Key-ID „{0}“ (erlaubt sind a–z, 0–9, - und _)")]
     InvalidId(String),
-    #[error("Profil „{0}“ braucht einen Namen")]
+    #[error("Key „{0}“ braucht einen Namen")]
     MissingName(String),
-    #[error("Standard-Profil „{0}“ existiert nicht")]
+    #[error("Standard-Key „{0}“ existiert nicht")]
     DefaultProfileMissing(String),
-    #[error("Projektordner überschneiden sich: {0} und {1}")]
+    #[error("Git-Ordner überschneiden sich: {0} und {1}")]
     NestedFolders(String, String),
-    #[error("Host „{0}“ ist mehreren Profilen zugeordnet")]
+    #[error("Host „{0}“ gehört schon zu einem anderen Key")]
     DuplicateAlias(String),
     #[error("Key fehlt: {0}")]
     KeyMissing(String),
@@ -36,11 +36,11 @@ pub enum Error {
     InvalidUrl(String),
     #[error("Zielordner existiert bereits: {0}")]
     TargetExists(String),
-    #[error("Profil „{0}“ hat keinen Projektordner")]
+    #[error("Key „{0}“ hat keinen Git-Ordner")]
     NoFolder(String),
-    #[error("Profil „{0}“ hat keinen Host")]
+    #[error("Key „{0}“ hat keinen Host")]
     NoHost(String),
-    #[error("Profil „{0}“ ist archiviert")]
+    #[error("Key „{0}“ ist archiviert")]
     Archived(String),
     #[error("Die Konfiguration hat sich seit der Vorschau geändert: {0}")]
     StalePlan(String),

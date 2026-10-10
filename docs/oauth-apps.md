@@ -24,7 +24,7 @@ github.com bzw. gitlab.com registriert ist.
 3. **Register application**, danach auf der App-Seite **Enable Device Flow** anhaken und speichern.
 4. Die **Client ID** kopieren. Kein Client-Secret erzeugen.
 
-Keybund fragt die Scopes `write:public_key` an, bei Profilen mit Commit-Signierung zusätzlich
+Keybund fragt die Scopes `write:public_key` an, bei Keys mit Commit-Signierung zusätzlich
 `admin:ssh_signing_key`.
 
 ## GitLab (gitlab.com)

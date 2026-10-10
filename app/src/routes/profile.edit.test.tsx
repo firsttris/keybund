@@ -161,7 +161,7 @@ describe("key page", () => {
     await user.click(within(card).getByRole("button", { name: "Server" }));
     await user.type(screen.getByLabelText("Hostname oder IP"), "1.2.3.4");
     await user.click(screen.getByRole("button", { name: "Server speichern" }));
-    expect(await within(card).findByRole("alert")).toHaveTextContent("mehreren Profilen");
+    expect(await within(card).findByRole("alert")).toHaveTextContent("Host „1.2.3.4“ gehört schon zu einem anderen Key");
   });
 
   it("cancels the host form", async () => {
@@ -204,7 +204,7 @@ describe("key page", () => {
     await user.click(within(await usage()).getByRole("button", { name: "Git-Ordner" }));
     await user.type(screen.getByLabelText("Ordner"), "~/dev/privat/sub");
     await user.click(screen.getByRole("button", { name: "Ordner speichern" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Projektordner überschneiden sich");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Git-Ordner überschneiden sich");
     await user.clear(screen.getByLabelText("Ordner"));
     await user.click(screen.getByRole("button", { name: "Durchsuchen" }));
     expect(await screen.findByDisplayValue("~/dev/neues-projekt/")).toBeInTheDocument();
@@ -222,8 +222,9 @@ describe("key page", () => {
     await user.clear(name);
     await user.type(name, "T. T.");
     await user.click(screen.getByRole("button", { name: "Identität speichern" }));
-    expect(await screen.findByText("1 Datei ist nicht aktuell")).toBeInTheDocument();
+    expect(await screen.findByText("Gespeichert")).toBeInTheDocument();
     expect(backend.state.profiles.find((p) => p.id === "kunde-b")!.git!.name).toBe("T. T.");
+    expect(backend.state.applied.get("~/.config/keybund/git/kunde-b.gitconfig")).toContain("name = T. T.");
   });
 
   it("sets the standard and archives", async () => {
@@ -235,9 +236,46 @@ describe("key page", () => {
     await user.click(screen.getByRole("button", { name: "Archivieren" }));
     const dialog = await screen.findByRole("alertdialog");
     await user.click(within(dialog).getByRole("button", { name: "Archivieren" }));
-    expect(await screen.findByRole("heading", { name: "Änderungen anwenden" })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/apply");
+    expect(await screen.findByRole("heading", { name: "Übersicht" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
     expect(backend.state.profiles.find((p) => p.id === "kunde-b")!.archived).toBe(true);
+    expect(backend.state.applied.has("~/.config/keybund/git/kunde-b.gitconfig")).toBe(false);
+  });
+
+  it("offers to add the key to the account when the test fails", async () => {
+    const { user, backend } = await renderApp("/profile/kunde-b");
+    const github = await row("GitHub-Konto");
+    await user.click(within(github).getByRole("button", { name: "Testen" }));
+    expect(await within(github).findByTestId("connection-status")).toHaveTextContent("GitHub kennt diesen Key nicht");
+    await user.click(within(github).getByRole("button", { name: "Jetzt bei GitHub eintragen" }));
+    await user.click(within(github).getByRole("button", { name: "Bei GitHub anmelden & eintragen" }));
+    // Uploaded, then tested again by itself.
+    expect(await within(github).findByText("Verbunden als @tristan", {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(backend.state.uploadedKeys).toEqual(["github.com:~/.ssh/kunde-b_ed25519"]);
+    expect(within(github).queryByRole("button", { name: "Jetzt bei GitHub eintragen" })).not.toBeInTheDocument();
+  });
+
+  it("offers to install the key on a server when the test fails", async () => {
+    const { user, backend } = await renderApp("/profile/kunde-b", (b) => {
+      b.state.profiles.find((p) => p.id === "kunde-b")!.hosts.push({ provider: "generic", hostname: "10.0.0.9", alias: "build", user: "ci", port: null });
+      b.state.knownHosts.push("10.0.0.9");
+    });
+    const server = await row("Server build");
+    await user.click(within(server).getByRole("button", { name: "Testen" }));
+    expect(await within(server).findByTestId("connection-status")).toHaveTextContent("build kennt diesen Key nicht");
+    await user.click(within(server).getByRole("button", { name: "Key auf build eintragen" }));
+    expect(await within(server).findByText("Anmeldung erfolgreich")).toBeInTheDocument();
+    expect(backend.state.installedKeys).toEqual(["10.0.0.9:~/.ssh/kunde-b_ed25519"]);
+  });
+
+  it("does not offer to add the key when the server is unreachable", async () => {
+    const { user } = await renderApp("/profile/sparkasse", (b) => {
+      b.state.unreachable.push("gitlab.kunde.de");
+    });
+    const gitlab = await row("GitLab-Konto");
+    await user.click(within(gitlab).getByRole("button", { name: "Testen" }));
+    expect(await within(gitlab).findByTestId("connection-status")).toBeInTheDocument();
+    expect(within(gitlab).queryByRole("button", { name: /Jetzt bei/ })).not.toBeInTheDocument();
   });
 
   it("shows the generated config", async () => {

@@ -59,7 +59,7 @@ pub fn ssh_config(config: &Config) -> String {
             if patterns.is_empty() {
                 continue;
             }
-            let _ = writeln!(out, "\n# Profil: {}", p.name);
+            let _ = writeln!(out, "\n# Key: {}", p.name);
             let _ = writeln!(out, "Host {}", patterns.join(" "));
             let _ = writeln!(out, "    HostName {}", h.hostname);
             // `ssh -T github-kunde` must log in as git, not as the local user.
@@ -90,7 +90,7 @@ pub fn ssh_config(config: &Config) -> String {
 pub fn index_gitconfig(config: &Config, env: &Env) -> String {
     let mut out = format!("{MANAGED}\n# Included from ~/.gitconfig.\n");
     if let Some(def) = config.default_entry() {
-        let _ = writeln!(out, "\n# Standard-Profil: {}", def.name);
+        let _ = writeln!(out, "\n# Standard-Key: {}", def.name);
         let _ = writeln!(out, "[core]\n\tsshCommand = {}", ssh_command(&def.key.path));
     }
     if config.active_profiles().any(signs) {
@@ -127,7 +127,7 @@ pub fn ssh_host_blocks(settings: &Settings, profile: &Profile) -> String {
         ..Default::default()
     };
     let full = ssh_config(&single);
-    let start = full.find("\n# Profil:").map(|i| i + 1).unwrap_or(full.len());
+    let start = full.find("\n# Key:").map(|i| i + 1).unwrap_or(full.len());
     let end = full.rfind("\nHost *").unwrap_or(full.len());
     if start >= end {
         String::new()
@@ -138,7 +138,7 @@ pub fn ssh_host_blocks(settings: &Settings, profile: &Profile) -> String {
 
 /// `~/.config/keybund/git/<id>.gitconfig`.
 pub fn profile_gitconfig(profile: &Profile) -> String {
-    let mut out = format!("{MANAGED}\n# Profil: {}\n", profile.name);
+    let mut out = format!("{MANAGED}\n# Key: {}\n", profile.name);
     if let Some(git) = &profile.git {
         let _ = writeln!(out, "[user]\n\tname = {}\n\temail = {}", git_value(&git.name), git_value(&git.email));
         if git.sign {
@@ -316,7 +316,7 @@ mod tests {
             "[includeIf \"gitdir:~/dev/kunde-a/\"]\n\tpath = ~/.config/keybund/git/kunde-a.gitconfig\n"
         );
         let blocks = ssh_host_blocks(&cfg.settings, &cfg.profiles[0]);
-        assert!(blocks.starts_with("# Profil: Privat\nHost meinserver 1.2.3.4\n"));
+        assert!(blocks.starts_with("# Key: Privat\nHost meinserver 1.2.3.4\n"));
         assert!(!blocks.contains("Host *"));
         assert_eq!(ssh_host_blocks(&cfg.settings, &cfg.profiles[1]), "");
     }
