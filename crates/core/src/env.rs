@@ -17,6 +17,8 @@ pub struct Env {
     pub login_shell: Option<PathBuf>,
     /// How to reach the hosting APIs for uploading keys.
     pub api: ApiConfig,
+    /// The system-wide known_hosts (`/etc/ssh/ssh_known_hosts`); none in tests.
+    pub global_known_hosts: Option<PathBuf>,
 }
 
 /// OAuth apps and API endpoints for uploading keys to GitHub and GitLab.
@@ -56,14 +58,20 @@ impl Env {
             .filter(|p| p.is_absolute())
             .unwrap_or_else(|| home.join(".config"));
         let login_shell = std::env::var_os("SHELL").filter(|s| !s.is_empty()).map(PathBuf::from);
-        Ok(Env { home, config_dir: config_base.join("keybund"), login_shell, api: ApiConfig::from_system() })
+        Ok(Env {
+            home,
+            config_dir: config_base.join("keybund"),
+            login_shell,
+            api: ApiConfig::from_system(),
+            global_known_hosts: Some(PathBuf::from("/etc/ssh/ssh_known_hosts")),
+        })
     }
 
     /// Locations below an arbitrary home directory (used by tests).
     pub fn with_home(home: impl Into<PathBuf>) -> Self {
         let home = home.into();
         let config_dir = home.join(".config").join("keybund");
-        Env { home, config_dir, login_shell: None, api: ApiConfig::default() }
+        Env { home, config_dir, login_shell: None, api: ApiConfig::default(), global_known_hosts: None }
     }
 
     /// Expands a leading `~` to the home directory.

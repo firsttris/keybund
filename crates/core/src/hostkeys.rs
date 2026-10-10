@@ -78,7 +78,7 @@ pub fn target_file(env: &Env, settings: &Settings, profile: &Profile, host: &Hos
 
 fn files(env: &Env, settings: &Settings, profile: &Profile, host: &HostEntry) -> Vec<PathBuf> {
     let mut files = vec![target_file(env, settings, profile, host), env.known_hosts()];
-    files.push(PathBuf::from("/etc/ssh/ssh_known_hosts"));
+    files.extend(env.global_known_hosts.clone());
     files.dedup();
     files
 }
