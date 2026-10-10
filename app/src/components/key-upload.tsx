@@ -255,10 +255,10 @@ export function KeyUpload({
       ) : (
         tokenForm
       )}
-      {t.keyring && (
+      {t.keyring && (showToken || !t.device_flow) && (
         <label className="flex items-center gap-2.5 text-[13px] text-secondary-foreground">
           <Switch aria-label="Token im Schlüsselbund merken" checked={remember} onCheckedChange={setRemember} />
-          Token im Schlüsselbund merken
+          Token im Schlüsselbund merken (sonst wird es nach dem Eintragen vergessen)
         </label>
       )}
       <div aria-live="polite" className={cn("flex flex-col gap-2", !result && !error && "hidden")}>

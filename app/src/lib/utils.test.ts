@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Profile } from "./bindings";
-import { colorHex, formatAge, formatDate, formatDay, formatRelative, hostLabel, hostSummary, isValidEmail, plural, slugify } from "./utils";
+import { colorHex, formatAge, formatDate, formatDay, formatRelative, hostLabel, isValidEmail, plural, slugify } from "./utils";
 
 describe("slugify", () => {
   // Same cases as store::tests::slugs in the Rust core.
@@ -45,25 +44,6 @@ describe("formatting", () => {
 });
 
 describe("hosts and colors", () => {
-  const base: Profile = {
-    id: "p",
-    name: "P",
-    color: "blue",
-    key: { path: "~/.ssh/p", comment: null },
-    git: null,
-    folders: [],
-    archived: false,
-    hosts: [],
-  };
-
-  it("summarizes hosts", () => {
-    expect(hostSummary(base)).toBe("");
-    const gh = { alias: null, hostname: "github.com", user: null, port: null, provider: "github" as const };
-    expect(hostSummary({ ...base, hosts: [gh] })).toBe("GitHub");
-    expect(hostSummary({ ...base, hosts: [gh, gh] })).toBe("GitHub");
-    expect(hostSummary({ ...base, hosts: [gh, { ...gh, provider: "gitlab" as const }] })).toBe("2 Konten");
-    expect(hostSummary({ ...base, hosts: [{ ...gh, provider: "generic" as const }] })).toBe("");
-  });
 
   it("labels hosts", () => {
     expect(hostLabel({ alias: "srv", hostname: "1.2.3.4", user: "t", port: 2222, provider: "generic" })).toBe(

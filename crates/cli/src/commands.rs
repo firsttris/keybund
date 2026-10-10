@@ -458,16 +458,26 @@ fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCod
         } else {
             ok = false;
             ui::error(&format!("{}: {}", r.host, r.message));
-            ui::hint(&r.command);
-            for line in r.output.lines().take(5) {
-                ui::hint(line);
-            }
+            print_steps(&r.steps);
+            ui::hint(&format!("Befehl: {}", r.command));
         }
     }
     if let Some(r) = remembered {
         history::record(env, &profile.id, &r)?;
     }
     Ok(if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE })
+}
+
+/// The steps of a connection test, as a short story.
+fn print_steps(steps: &[probe::ProbeStep]) {
+    for step in steps {
+        let mark = match step.ok {
+            Some(true) => style("✓").green(),
+            Some(false) => style("✗").red(),
+            None => style("·").dim(),
+        };
+        println!("    {mark} {}", step.text);
+    }
 }
 
 /// `YYYY-MM-DD HH:MM` (UTC) of a timestamp in milliseconds.

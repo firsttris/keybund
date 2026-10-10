@@ -1,16 +1,16 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Archive, Crosshair, Download, KeyRound, Plus, Search, Server, SlidersHorizontal } from "lucide-react";
+import { Activity, Archive, Crosshair, Download, KeyRound, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import type { ProfileView } from "@/lib/bindings";
-import { groupProfiles } from "@/lib/categories";
+import { activeKeys, usageParts } from "@/lib/categories";
 import { useDoctor, useProfiles } from "@/lib/queries";
-import { cn, hostSummary } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { ColorDot } from "./color-dot";
 import { buttonVariants } from "./ui/button";
 import { Input } from "./ui/input";
 
 const navItem =
-  "flex min-h-10 items-center gap-2.5 rounded-lg px-2.5 text-[13px] text-secondary-foreground no-underline hover:bg-muted data-[status=active]:bg-muted data-[status=active]:font-medium data-[status=active]:text-foreground [&_svg]:size-[15px]";
+  "flex min-h-10 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] text-secondary-foreground no-underline hover:bg-muted data-[status=active]:bg-muted data-[status=active]:font-medium data-[status=active]:text-foreground [&_svg]:size-[15px]";
 
 export function Sidebar() {
   const { data } = useProfiles();
@@ -20,27 +20,34 @@ export function Sidebar() {
   const problems = doctor.data?.checks.filter((c) => c.status !== "ok").length ?? 0;
   const q = filter.trim().toLowerCase();
   const matches = (...texts: (string | null | undefined)[]) => !q || texts.some((t) => t?.toLowerCase().includes(q));
-  const groups = groupProfiles(data?.profiles ?? []);
-  const standard = groups.standard && matches(groups.standard.profile.name) ? groups.standard : null;
-  const projects = groups.projects.filter((v) => matches(v.profile.name));
-  const servers = groups.servers.filter((s) => matches(s.host.alias, s.host.hostname, s.profile.name));
-  const archived = groups.archived.filter((v) => matches(v.profile.name));
-  const nothing = data && !standard && projects.length === 0 && servers.length === 0;
+  const keys = activeKeys(data?.profiles ?? []).filter((v) =>
+    matches(v.profile.name, v.profile.key.path, ...v.profile.folders, ...v.profile.hosts.flatMap((h) => [h.alias, h.hostname])),
+  );
+  const archived = (data?.profiles ?? []).filter((v) => v.profile.archived && matches(v.profile.name));
+  const nothing = data && keys.length === 0;
   const current = (id: string) => (path === `/profile/${id}` ? "page" : undefined);
 
-  const profileLink = ({ profile, last_test }: ProfileView) => (
-    <Link key={profile.id} to="/profile/$id" params={{ id: profile.id }} aria-current={current(profile.id)} className={navItem}>
-      <ColorDot color={profile.color} />
-      <span className="flex-1 truncate">{profile.name}</span>
-      {last_test && !last_test.success ? (
-        <span className="text-xs text-danger" title={last_test.message}>
-          Test fehlgeschlagen
+  const keyLink = (view: ProfileView) => {
+    const { profile, last_test } = view;
+    const parts = usageParts(view);
+    return (
+      <Link key={profile.id} to="/profile/$id" params={{ id: profile.id }} aria-current={current(profile.id)} className={navItem}>
+        <ColorDot color={profile.color} />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate">{profile.name}</span>
+          {last_test && !last_test.success ? (
+            <span className="truncate text-xs font-normal text-danger" title={last_test.message}>
+              Test fehlgeschlagen
+            </span>
+          ) : (
+            <span className={cn("truncate text-xs font-normal", parts.length ? "text-muted-foreground" : "text-warning")}>
+              {parts.length ? parts.join(" · ") : "noch nicht benutzt"}
+            </span>
+          )}
         </span>
-      ) : (
-        <span className="text-xs font-normal text-muted-foreground">{hostSummary(profile)}</span>
-      )}
-    </Link>
-  );
+      </Link>
+    );
+  };
 
   return (
     <aside className="flex flex-[1_1_248px] flex-col gap-5 border-r border-border bg-card px-3 py-4 max-[808px]:border-r-0 max-[808px]:border-b min-[809px]:sticky min-[809px]:top-0 min-[809px]:h-screen min-[809px]:self-start min-[809px]:overflow-y-auto">
@@ -50,60 +57,33 @@ export function Sidebar() {
         </span>
         <span className="flex flex-col">
           <span className="text-[15px] font-semibold tracking-tight">Keybund</span>
-          <span className="text-xs text-muted-foreground">SSH-Keys pro Projekt</span>
+          <span className="text-xs text-muted-foreground">Der richtige Key, automatisch</span>
         </span>
       </Link>
 
       <Link to="/new" className={cn(buttonVariants(), "no-underline")}>
         <Plus aria-hidden />
-        Neu
+        Neuer Key
       </Link>
 
       <div className="relative">
         <label htmlFor="profile-search" className="sr-only">
-          Profile durchsuchen
+          Keys durchsuchen
         </label>
         <Search aria-hidden className="pointer-events-none absolute top-[11px] left-[11px] size-[15px] text-muted-foreground" />
         <Input
           id="profile-search"
-          placeholder="Profil oder Server suchen …"
+          placeholder="Key, Ordner oder Server …"
           className="pl-[34px]"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
       </div>
 
-      <nav aria-label="Profile" className="flex flex-col gap-4">
-        {standard && (
-          <div className="flex flex-col gap-0.5" role="group" aria-label="Standard">
-            <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">Standard</span>
-            {profileLink(standard)}
-          </div>
-        )}
-        {projects.length > 0 && (
-          <div className="flex flex-col gap-0.5" role="group" aria-label="Projekte & Konten">
-            <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">Projekte & Konten</span>
-            {projects.map(profileLink)}
-          </div>
-        )}
-        {servers.length > 0 && (
-          <div className="flex flex-col gap-0.5" role="group" aria-label="Server">
-            <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">Server</span>
-            {servers.map(({ host, profile }) => (
-              <Link
-                key={`${profile.id}-${host.alias ?? host.hostname}`}
-                to="/profile/$id"
-                params={{ id: profile.id }}
-                className={navItem}
-              >
-                <Server aria-hidden className="text-muted-foreground" />
-                <span className="flex-1 truncate font-mono text-[12.5px]">{host.alias ?? host.hostname}</span>
-                <span className="truncate text-xs font-normal text-muted-foreground">{profile.name}</span>
-              </Link>
-            ))}
-          </div>
-        )}
-        {nothing && <span className="px-2.5 text-xs text-muted-foreground">{filter ? "Kein Treffer" : "Noch keine Profile"}</span>}
+      <nav aria-label="Keys" className="flex flex-col gap-0.5">
+        <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">Deine Keys</span>
+        {keys.map(keyLink)}
+        {nothing && <span className="px-2.5 text-xs text-muted-foreground">{filter ? "Kein Treffer" : "Noch keine Keys"}</span>}
       </nav>
 
       {archived.length > 0 && (
@@ -119,15 +99,15 @@ export function Sidebar() {
       )}
 
       <nav aria-label="Werkzeuge" className="mt-auto flex flex-col gap-0.5 border-t border-border pt-3.5">
-        <Link to="/which" className={navItem}>
+        <Link to="/which" className={navItem} title="Zeigt für einen Ordner oder Server, welcher Key dort benutzt wird – und warum">
           <Crosshair aria-hidden />
           Welcher Key?
         </Link>
-        <Link to="/clone" className={navItem}>
+        <Link to="/clone" className={navItem} title="Klont ein Repo direkt in den Ordner des passenden Keys">
           <Download aria-hidden />
           Repo klonen
         </Link>
-        <Link to="/doctor" className={navItem}>
+        <Link to="/doctor" className={navItem} title="Prüft, ob ssh und Git richtig eingerichtet sind">
           <Activity aria-hidden />
           <span className="flex-1">Doctor</span>
           {problems > 0 && (

@@ -91,7 +91,7 @@ export function UninstallPage() {
               <AlertDialogContent>
                 <AlertDialogTitle>Keybund wirklich entfernen?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Danach nimmt git keine Profil-Keys mehr. Deine Keys bleiben, die Änderungen siehst du in der Vorschau.
+                  Danach wählt Git den Key nicht mehr automatisch. Deine Keys bleiben, die Änderungen siehst du in der Vorschau.
                 </AlertDialogDescription>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Abbrechen</AlertDialogCancel>

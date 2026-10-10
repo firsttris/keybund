@@ -1,3 +1,4 @@
+import { providerLabel } from "./utils";
 import type { HostEntry, Profile, ProfileView } from "./bindings";
 
 /** A server (ssh, scp, sftp) as opposed to a git hosting account. */
@@ -13,26 +14,24 @@ export function gitAccounts(profile: Profile): HostEntry[] {
   return profile.hosts.filter((h) => !isServer(h));
 }
 
-/** A profile that only exists for servers (no folders, no git accounts). */
-export function isServerOnly(profile: Profile): boolean {
-  return profile.folders.length === 0 && gitAccounts(profile).length === 0 && servers(profile).length > 0;
+/** What a key is used for, in short words: "Standard", "2 Ordner", "GitHub", "nas". */
+export function usageParts(view: ProfileView): string[] {
+  const { profile } = view;
+  const parts: string[] = [];
+  if (view.is_default) parts.push("Standard");
+  if (profile.folders.length === 1) parts.push(profile.folders[0]);
+  else if (profile.folders.length > 1) parts.push(`${profile.folders.length} Ordner`);
+  const providers = [...new Set(gitAccounts(profile).map((h) => providerLabel(h.provider)))];
+  parts.push(...providers);
+  const srv = servers(profile);
+  if (srv.length === 1) parts.push(srv[0].alias ?? srv[0].hostname);
+  else if (srv.length > 1) parts.push(`${srv.length} Server`);
+  return parts;
 }
 
-export interface ServerEntry {
-  host: HostEntry;
-  profile: Profile;
-}
 
-/**
- * The three ways a key is chosen: the default (fallback), projects and
- * accounts (by folder), servers (by host).
- */
-export function groupProfiles(views: ProfileView[]) {
+/** Active keys, the standard key first. */
+export function activeKeys(views: ProfileView[]): ProfileView[] {
   const active = views.filter((v) => !v.profile.archived);
-  return {
-    standard: active.find((v) => v.is_default) ?? null,
-    projects: active.filter((v) => !v.is_default && !isServerOnly(v.profile)),
-    servers: active.flatMap((v) => servers(v.profile).map((host) => ({ host, profile: v.profile }))) as ServerEntry[],
-    archived: views.filter((v) => v.profile.archived),
-  };
+  return [...active.filter((v) => v.is_default), ...active.filter((v) => !v.is_default)];
 }

@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { HostEntry, Profile, Provider } from "./bindings";
+import type { HostEntry, Provider } from "./bindings";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -45,13 +45,6 @@ export function defaultHostname(provider: Provider): string {
 }
 
 /** Short label for the sidebar: the git provider(s), servers are listed separately. */
-export function hostSummary(profile: Profile): string {
-  const git = profile.hosts.filter((h) => h.provider !== "generic");
-  if (git.length === 0) return "";
-  const names = [...new Set(git.map((h) => providerLabel(h.provider)))];
-  return names.length > 1 ? `${names.length} Konten` : names[0];
-}
-
 export function hostLabel(host: HostEntry): string {
   const parts = [providerLabel(host.provider)];
   if (host.alias) parts.push(host.hostname);

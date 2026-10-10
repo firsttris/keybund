@@ -191,10 +191,12 @@ pub async fn test_connection(state: State<'_, AppState>, id: String, host: Optio
                     .iter()
                     .find(|h| h.target_name() == name || h.hostname == name)
                     .ok_or_else(|| CmdError::other(format!("Profil „{id}“ hat keinen Host {name}")))?;
-                Ok(probe::probe(&env, profile, h)?)
+                let result = probe::probe(&env, profile, h)?;
+                // The key's latest test is remembered (sidebar, start page).
+                history::record(&env, &id, &result)?;
+                Ok(result)
             }
             None => {
-                // The profile's test is remembered (sidebar, start page).
                 let result = probe::probe_profile(&env, profile)?;
                 history::record(&env, &id, &result)?;
                 Ok(result)

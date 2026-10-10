@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Check, KeyRound, Server } from "lucide-react";
+import { Check, GitBranch, KeyRound, Server } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { DiffView } from "@/components/diff-view";
@@ -29,7 +29,7 @@ export function ImportPage() {
       <div className="flex flex-col gap-1.5">
         <h1 className="m-0 text-[22px] font-semibold tracking-tight">Bestehende SSH-Config übernehmen</h1>
         <p className="m-0 max-w-[720px] leading-normal text-muted-foreground">
-          Einträge mit eigenem Key aus <span className="font-mono">~/.ssh/config</span> werden zu Profilen. Deine Keys bleiben,
+          Einträge mit eigenem Key aus <span className="font-mono">~/.ssh/config</span> werden zu Keys in Keybund. Die Dateien bleiben,
           wo sie sind. Danach entfernt Keybund die alten Einträge – solange sie dort stehen, bietet ssh ihre Keys zusätzlich an
           und eine Anmeldung kann mit dem falschen Key gelingen.
         </p>
@@ -64,7 +64,7 @@ function Proposals({ proposals }: { proposals: ImportProposal[] }) {
   return (
     <section aria-labelledby="proposals-title" className="flex flex-col gap-4">
       <h2 id="proposals-title" className="m-0 text-[15px] font-semibold">
-        1. Profile anlegen
+        1. Keys übernehmen
       </h2>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
         {proposals.map((p) => {
@@ -91,13 +91,28 @@ function Proposals({ proposals }: { proposals: ImportProposal[] }) {
                 <KeyRound aria-hidden className="size-4 text-muted-foreground" />
                 <span className="font-mono">{p.profile.key.path}</span>
               </div>
-              {p.profile.hosts.map((h) => (
-                <div key={h.alias ?? h.hostname} className="flex items-center gap-2 text-[13px]">
-                  <Server aria-hidden className="size-4 text-muted-foreground" />
-                  <span className="font-mono">{h.alias ?? h.hostname}</span>
-                  <span className="text-xs text-muted-foreground">{hostLabel(h)}</span>
-                </div>
-              ))}
+              {p.profile.hosts.map((h) => {
+                const git = h.provider !== "generic";
+                return (
+                  <div key={h.alias ?? h.hostname} className="flex flex-col gap-0.5 text-[13px]">
+                    <span className="flex items-center gap-2">
+                      {git ? (
+                        <GitBranch aria-hidden className="size-4 text-muted-foreground" />
+                      ) : (
+                        <Server aria-hidden className="size-4 text-muted-foreground" />
+                      )}
+                      <span className="font-mono">{h.alias ?? h.hostname}</span>
+                      <span className="text-xs text-muted-foreground">{hostLabel(h)}</span>
+                    </span>
+                    {git && h.alias && (
+                      <span className="pl-6 text-xs text-muted-foreground">
+                        Alias: Repos mit <span className="font-mono">git@{h.alias}:…</span> nutzen diesen Key. Mit Projektordner gilt er
+                        auch für <span className="font-mono">git@{h.hostname}:…</span> in diesem Ordner.
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor={`name-${p.profile.id}`} className="text-xs font-normal text-muted-foreground">
@@ -131,11 +146,11 @@ function Proposals({ proposals }: { proposals: ImportProposal[] }) {
         disabled={chosen.length === 0 || importProfiles.isPending}
         onClick={() =>
           importProfiles.mutate(chosen, {
-            onSuccess: (ids) => toast.success(`${ids.length} Profil(e) angelegt`),
+            onSuccess: (ids) => toast.success(`${ids.length} Key(s) übernommen`),
           })
         }
       >
-        {chosen.length === 1 ? "1 Profil übernehmen" : `${chosen.length} Profile übernehmen`}
+        {chosen.length === 1 ? "1 Key übernehmen" : `${chosen.length} Keys übernehmen`}
       </Button>
     </section>
   );

@@ -37,7 +37,7 @@ export function ClonePage() {
       <div className="flex flex-col gap-1.5">
         <h1 className="m-0 text-[22px] font-semibold tracking-tight">Repo klonen</h1>
         <p className="m-0 text-muted-foreground">
-          Beim ersten Klonen greift includeIf noch nicht – Keybund klont deshalb direkt mit dem Key des Profils.
+          Beim ersten Klonen greift includeIf noch nicht – Keybund klont deshalb direkt mit dem passenden Key.
         </p>
       </div>
       <Card className="max-w-[720px]">
@@ -61,9 +61,9 @@ export function ClonePage() {
         {preview.data && (
           <>
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-              <legend className="mb-2 text-[13px] font-medium">Profil</legend>
+              <legend className="mb-2 text-[13px] font-medium">Key</legend>
               {!preview.data.matched && (
-                <FieldHint className="mb-1">Kein Profil kennt {preview.data.repo.host} – bitte eins wählen.</FieldHint>
+                <FieldHint className="mb-1">Kein Key ist für {preview.data.repo.host} eingerichtet – bitte einen wählen.</FieldHint>
               )}
               {preview.data.candidates.map((c) => {
                 const color = profiles.data?.profiles.find((p) => p.profile.id === c.profile_id)?.profile.color;

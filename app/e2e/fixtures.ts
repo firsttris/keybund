@@ -21,7 +21,7 @@ export const test = base.extend<{ app: Page }>({
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     await page.goto("/#/");
-    await expect(page.getByRole("navigation", { name: "Profile" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Keys" })).toBeVisible();
     await use(page);
     expect(errors, "uncaught errors in the page").toEqual([]);
   },

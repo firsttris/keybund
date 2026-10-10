@@ -18,6 +18,11 @@ export function CardTitle({ className, ...props }: React.ComponentProps<"h2">) {
   return <h2 className={cn("m-0 text-[15px] font-semibold", className)} {...props} />;
 }
 
+/** One or two sentences under a card title: what this is for, in plain words. */
+export function CardDescription({ className, ...props }: React.ComponentProps<"p">) {
+  return <p className={cn("m-0 -mt-2 text-[13px] leading-normal text-muted-foreground", className)} {...props} />;
+}
+
 /** A dark row inside a card, used for hosts and folders. */
 export function ItemRow({ className, ...props }: React.ComponentProps<"div">) {
   return <div className={cn("flex items-center gap-3 rounded-lg bg-muted p-3", className)} {...props} />;

@@ -9,7 +9,7 @@ test("resolves a folder and a host", async ({ app }) => {
   await expect(result).toContainText('includeIf "gitdir:~/dev/sparkasse/"');
   await expect(result).toContainText("Tristan <tristan@kunde.de>");
   await expect(result).toContainText("ja, nur dieser Key wird angeboten");
-  await expect(result.getByRole("link", { name: "Profil Sparkasse" })).toBeVisible();
+  await expect(result.getByRole("link", { name: "Key Sparkasse" })).toBeVisible();
 
   await app.getByRole("button", { name: "meinserver" }).click();
   await expect(result).toContainText("privat_ed25519");
@@ -63,7 +63,7 @@ test("changes the default profile", async ({ app }) => {
   await app.getByLabel("Key außerhalb aller Projektordner").selectOption("sparkasse");
   await app.goto("/#/");
   await expect(app.getByText("1 Datei ist nicht aktuell")).toBeVisible();
-  await expect(app.getByRole("main").getByRole("region", { name: "Standard" }).getByRole("link", { name: /Sparkasse/ })).toBeVisible();
+  await expect(app.getByRole("main").getByRole("list", { name: "Sparkasse wird benutzt für" })).toContainText("Standard für Git");
 });
 
 test("lists existing keys with their usage", async ({ app }) => {
@@ -103,12 +103,12 @@ test("takes over the existing ~/.ssh/config", async ({ app }) => {
   await app.getByRole("link", { name: "Übernehmen" }).click();
   await expect(app.getByRole("heading", { name: "Bestehende SSH-Config übernehmen" })).toBeVisible();
   await expect(app.getByRole("region", { name: "Pflegeabc Account" })).toContainText("~/.ssh/pflegeabc/id_ed25519");
-  await app.getByRole("button", { name: "2 Profile übernehmen" }).click();
+  await app.getByRole("button", { name: "2 Keys übernehmen" }).click();
   await app.getByRole("button", { name: "Configs schreiben" }).click();
   await expect(app.getByText("-Host gitlab.sfp.berlin")).toBeVisible();
   await app.getByRole("button", { name: "Alte Einträge entfernen" }).click();
   await expect(app.getByText(/Alles übernommen/)).toBeVisible();
-  await expect(app.getByRole("navigation", { name: "Profile" }).getByRole("link", { name: /Pflegeabc Account/ })).toBeVisible();
+  await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Pflegeabc Account/ })).toBeVisible();
   // The banner is gone.
   await app.goto("/#/");
   await expect(app.getByText(/mit eigenem Key, die Keybund/)).toHaveCount(0);
@@ -116,7 +116,7 @@ test("takes over the existing ~/.ssh/config", async ({ app }) => {
 
 test("doctor removes an old entry after the import", async ({ app }) => {
   await app.goto("/#/import");
-  await app.getByRole("button", { name: "2 Profile übernehmen" }).click();
+  await app.getByRole("button", { name: "2 Keys übernehmen" }).click();
   await app.getByRole("button", { name: "Configs schreiben" }).click();
   await app.goto("/#/doctor");
   await expect(app.getByText("Doppelter Eintrag für pflegeabc in ~/.ssh/config")).toBeVisible();

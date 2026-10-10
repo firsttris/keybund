@@ -79,6 +79,8 @@ mod tests {
             command: String::new(),
             used_key: None,
             other_key: false,
+            steps: Vec::new(),
+            log: String::new(),
         }
     }
 

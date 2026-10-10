@@ -32,7 +32,7 @@ export function WhichPage({ initial }: { initial?: string }) {
       back={
         <Link to="/" className="flex min-h-9 items-center gap-2 text-[13px] text-secondary-foreground no-underline hover:text-foreground">
           <ArrowLeft aria-hidden className="size-[15px]" />
-          Profile
+          Keys
         </Link>
       }
     >
@@ -123,7 +123,7 @@ function WhichCard({ result }: { result: WhichResult }) {
             className="flex min-h-7 items-center gap-2 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-secondary-foreground no-underline"
           >
             <ColorDot color={profile.color} />
-            Profil {profile.name}
+            Key {profile.name}
           </Link>
         )}
       </div>

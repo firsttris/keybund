@@ -9,7 +9,7 @@ describe("which", () => {
     const result = await screen.findByTestId("which-result");
     expect(result).toHaveTextContent("privat_ed25519");
     expect(result).toHaveTextContent("tristan@1.2.3.4:22");
-    expect(within(result).getByRole("link", { name: "Profil Privat" })).toBeInTheDocument();
+    expect(within(result).getByRole("link", { name: "Key Privat" })).toBeInTheDocument();
 
     await user.clear(screen.getByLabelText("Ordner oder Host"));
     await user.type(screen.getByLabelText("Ordner oder Host"), "~/tmp/x");
@@ -41,7 +41,7 @@ describe("clone", () => {
     const { user } = await renderApp("/clone");
     await user.type(await screen.findByLabelText("Repo-URL"), "git@codeberg.org:x/y.git");
     await user.click(screen.getByRole("button", { name: "Prüfen" }));
-    expect(await screen.findByText("Kein Profil kennt codeberg.org – bitte eins wählen.")).toBeInTheDocument();
+    expect(await screen.findByText("Kein Key ist für codeberg.org eingerichtet – bitte einen wählen.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Klonen" })).toBeDisabled();
   });
 
@@ -66,7 +66,7 @@ describe("settings", () => {
     expect(await screen.findByText("~/.ssh/id_ed25519")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "genutzt von Privat" })).toBeInTheDocument();
     const row = screen.getByText("~/.ssh/id_ed25519").closest("li")!;
-    expect(within(row).getByRole("link", { name: "Als Profil anlegen" })).toHaveAttribute("href", "/new?key=%7E%2F.ssh%2Fid_ed25519");
+    expect(within(row).getByRole("link", { name: "Als Key übernehmen" })).toHaveAttribute("href", "/new?key=%7E%2F.ssh%2Fid_ed25519");
     expect(screen.getByText("~/.config/keybund/profiles.toml")).toBeInTheDocument();
     expect(await screen.findByText(/Keybund 0\.1\.0 by Tristan Teufel/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Quellcode auf GitHub" }));
@@ -86,7 +86,7 @@ describe("settings", () => {
     await user.type(dir, "~/work/");
     await user.clear(screen.getByLabelText("Ordner für Keys"));
     await user.type(screen.getByLabelText("Ordner für Keys"), "~/.ssh/keybund");
-    await user.click(screen.getByRole("switch", { name: "known_hosts pro Profil" }));
+    await user.click(screen.getByRole("switch", { name: "Server-Fingerprints pro Key" }));
     await user.click(screen.getByRole("switch", { name: "Include mit vollem Pfad" }));
     await user.click(save);
     await waitFor(() => expect(backend.state.settings.projects_dir).toBe("~/work"));
@@ -98,19 +98,13 @@ describe("settings", () => {
     });
     expect(await screen.findByLabelText("Ordner für Projekte")).toHaveValue("~/work");
 
-    // The wizard proposes the new folders.
+    // A new key goes into the key folder, its git folder into the project folder.
     await router.navigate({ to: "/new" });
-    await user.click(await screen.findByRole("radio", { name: /^Git-Projekt/ }));
-    await user.click(screen.getByRole("button", { name: /Weiter/ }));
-    await user.type(await screen.findByLabelText("Projektname"), "Kunde W");
-    await screen.findByText("kunde-w");
-    await user.click(screen.getByRole("button", { name: /Weiter/ }));
-    await user.click(screen.getByRole("button", { name: /Weiter/ }));
-    expect(screen.getByLabelText("Ordner")).toHaveValue("~/work/kunde-w/");
-    await user.click(screen.getByRole("button", { name: /Weiter/ }));
-    await user.type(screen.getByLabelText("Name"), "T");
-    await user.type(screen.getByLabelText("E-Mail"), "t@w.de");
-    await user.click(screen.getByRole("button", { name: /Weiter/ }));
+    await user.type(await screen.findByLabelText("Name"), "Kunde W");
     expect(await screen.findByText("ed25519 · ~/.ssh/keybund/kunde-w_ed25519")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Key anlegen/ }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Kunde W" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Git-Ordner/ }));
+    expect(screen.getByLabelText("Ordner")).toHaveAttribute("placeholder", "~/work/kunde-w/");
   });
 });

@@ -12,7 +12,7 @@ import { ClonePage } from "./routes/clone";
 import { DoctorPage } from "./routes/doctor";
 import { HomePage } from "./routes/home";
 import { ImportPage } from "./routes/import";
-import { NewProjectPage } from "./routes/new-project";
+import { NewKeyPage } from "./routes/new-key";
 import { ProfilePage } from "./routes/profile";
 import { SettingsPage } from "./routes/settings";
 import { UninstallPage } from "./routes/uninstall";
@@ -41,13 +41,13 @@ const importRoute = createRoute({ getParentRoute: () => shell, path: "/import", 
 const uninstallRoute = createRoute({ getParentRoute: () => shell, path: "/uninstall", component: UninstallPage });
 
 const newRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shell,
   path: "/new",
   validateSearch: (search: Record<string, unknown>): { key?: string } =>
     typeof search.key === "string" ? { key: search.key } : {},
   component: function New() {
     const { key } = newRoute.useSearch();
-    return <NewProjectPage existingKey={key} />;
+    return <NewKeyPage existingKey={key} />;
   },
 });
 
@@ -63,8 +63,7 @@ const whichRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  shell.addChildren([homeRoute, profileRoute, applyRoute, cloneRoute, doctorRoute, settingsRoute, importRoute, uninstallRoute]),
-  newRoute,
+  shell.addChildren([homeRoute, profileRoute, newRoute, applyRoute, cloneRoute, doctorRoute, settingsRoute, importRoute, uninstallRoute]),
   whichRoute,
 ]);
 

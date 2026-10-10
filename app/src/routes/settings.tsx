@@ -32,7 +32,7 @@ export function SettingsPage() {
       <h1 className="m-0 text-[22px] font-semibold tracking-tight">Einstellungen</h1>
       <div className="grid max-w-[960px] grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
         <Card aria-labelledby="default-title">
-          <CardTitle id="default-title">Standard-Profil</CardTitle>
+          <CardTitle id="default-title">Standard-Key für Git</CardTitle>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="default-profile">Key außerhalb aller Projektordner</Label>
             <Select
@@ -47,7 +47,10 @@ export function SettingsPage() {
                 </option>
               ))}
             </Select>
-            <FieldHint>Wird nach dem Anwenden als core.sshCommand in index.gitconfig gesetzt.</FieldHint>
+            <FieldHint>
+              Für alle Git-Repos, die in keinem Projektordner liegen, z. B. ein schnell geklontes Repo in ~/Downloads. Ohne
+              Standard-Key probiert ssh einfach deine Keys durch.
+            </FieldHint>
           </div>
         </Card>
 
@@ -55,10 +58,13 @@ export function SettingsPage() {
 
         <Card aria-labelledby="paths-title">
           <CardTitle id="paths-title">Pfade</CardTitle>
+          <p className="m-0 -mt-2 text-[13px] text-muted-foreground">
+            Diese Dateien liest und schreibt Keybund. Deine eigenen (SSH, Git) bekommen nur je eine Include-Zeile.
+          </p>
           {paths.data && (
             <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13px]">
               {[
-                ["Profile", paths.data.profiles_file],
+                ["Keys (Keybund)", paths.data.profiles_file],
                 ["SSH", paths.data.ssh_config],
                 ["SSH (Keybund)", paths.data.ssh_keybund_conf],
                 ["Git", paths.data.gitconfig],
@@ -121,7 +127,7 @@ export function SettingsPage() {
                   </Link>
                 ) : (
                   <Link to="/new" search={{ key: k.key.path }} className="text-[13px] font-medium text-foreground">
-                    Als Profil anlegen
+                    Als Key übernehmen
                   </Link>
                 )}
               </li>
@@ -167,11 +173,14 @@ function SettingsForm({ saved }: { saved: Settings }) {
         </div>
         <label className="flex items-start justify-between gap-4">
           <span className="flex flex-col gap-0.5">
-            <span className="text-[13px] font-medium">known_hosts pro Profil</span>
-            <span className="text-xs text-muted-foreground">Host-Keys der Server eines Profils liegen in einer eigenen Datei und gehen beim Archivieren mit.</span>
+            <span className="text-[13px] font-medium">Server-Fingerprints pro Key (known_hosts)</span>
+            <span className="text-xs text-muted-foreground">
+              ssh merkt sich, woran es deine Server erkennt. Mit dieser Option liegt das pro Key in einer eigenen Datei und
+              verschwindet beim Archivieren mit.
+            </span>
           </span>
           <Switch
-            aria-label="known_hosts pro Profil"
+            aria-label="Server-Fingerprints pro Key"
             checked={draft.known_hosts_per_profile}
             onCheckedChange={(v) => set({ known_hosts_per_profile: v })}
           />

@@ -21,7 +21,7 @@ describe("import from ~/.ssh/config", () => {
     await user.type(within(pflege).getByLabelText("Name"), "Pflege ABC");
     const scomm = screen.getByRole("region", { name: "S-Communication" });
     await user.type(within(scomm).getByLabelText("Projektordner (optional)"), "~/dev/sparkasse-neu");
-    await user.click(screen.getByRole("button", { name: "2 Profile übernehmen" }));
+    await user.click(screen.getByRole("button", { name: "2 Keys übernehmen" }));
 
     expect(await screen.findByRole("heading", { name: "2. Keybund-Configs schreiben" })).toBeInTheDocument();
     expect(backend.state.profiles.find((p) => p.id === "pflegeabc")).toMatchObject({
@@ -45,7 +45,7 @@ describe("import from ~/.ssh/config", () => {
   it("can skip a proposal", async () => {
     const { user, backend } = await renderApp("/import");
     await user.click(await screen.findByRole("checkbox", { name: "Pflegeabc Account übernehmen" }));
-    await user.click(screen.getByRole("button", { name: "1 Profil übernehmen" }));
+    await user.click(screen.getByRole("button", { name: "1 Key übernehmen" }));
     await screen.findByRole("heading", { name: "2. Keybund-Configs schreiben" });
     expect(backend.state.profiles.some((p) => p.id === "pflegeabc")).toBe(false);
     expect(backend.state.profiles.some((p) => p.id === "s-communication")).toBe(true);
@@ -61,23 +61,32 @@ describe("import from ~/.ssh/config", () => {
 });
 
 describe("connection test with another key", () => {
-  it("explains that the profile key was not used", async () => {
+  const testAccount = async (user: Awaited<ReturnType<typeof renderApp>>["user"]) => {
+    const card = await screen.findByRole("region", { name: "Wo wird dieser Key benutzt?" });
+    const account = within(card)
+      .getAllByRole("listitem")
+      .find((li) => li.textContent?.includes("GitLab-Konto"))!;
+    await user.click(within(account).getByRole("button", { name: "Testen" }));
+    return account;
+  };
+
+  it("explains that the key was not used", async () => {
     const { user } = await renderApp("/profile/sparkasse", (b) => {
       b.state.otherKeyFor = "sparkasse";
     });
-    await user.click(await screen.findByRole("button", { name: "Verbindung testen" }));
-    expect(await screen.findByTestId("connection-status")).toHaveTextContent(
-      "Angemeldet als @firsttris, aber mit ~/.ssh/privat_ed25519 statt mit dem Key des Profils",
+    const account = await testAccount(user);
+    expect(await within(account).findByTestId("connection-status")).toHaveTextContent(
+      "Angemeldet als @firsttris, aber mit ~/.ssh/privat_ed25519 statt mit diesem Key",
     );
-    const alert = screen.getByRole("alert");
-    expect(alert).toHaveTextContent("Der Key dieses Profils wurde nicht benutzt");
+    const alert = within(account).getByRole("alert");
+    expect(alert).toHaveTextContent("Dieser Key wurde nicht benutzt");
     expect(within(alert).getByRole("link", { name: "Bestehende Config übernehmen" })).toBeInTheDocument();
   });
 
   it("names the key that was used on success", async () => {
     const { user } = await renderApp("/profile/sparkasse");
-    await user.click(await screen.findByRole("button", { name: "Verbindung testen" }));
-    expect(await screen.findByText("~/.ssh/sparkasse_ed25519", { selector: "span.font-mono" })).toBeInTheDocument();
-    expect(screen.getByText(/Angemeldet mit/)).toBeInTheDocument();
+    const account = await testAccount(user);
+    expect(await within(account).findByTestId("connection-status")).toHaveTextContent("Verbunden als @tristan");
+    expect(within(account).getByRole("list", { name: "Ablauf" })).toHaveTextContent("Server akzeptiert ~/.ssh/sparkasse_ed25519");
   });
 });

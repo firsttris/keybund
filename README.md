@@ -10,23 +10,25 @@ ohne dass Keybund läuft.
 - **Vorschau vor jedem Schreiben.** Jede Änderung wird als Diff gezeigt und erst nach Bestätigung atomar geschrieben.
 - **Ein Rust-Core, zwei Oberflächen:** CLI und GUI (Tauri). KRunner folgt.
 
-## Wofür ein Key gilt
+## Der Key steht im Mittelpunkt
 
-Ein Profil ist ein Key plus die Stellen, an denen er benutzt wird. Keybund kennt drei Arten, wie der Key gewählt wird:
+In Keybund legst du **Keys** an – „Privat“, „Kunde C“, „NAS“ – und sagst bei jedem, **wo er benutzt wird**:
 
-| Kategorie | Gilt für | gewählt über |
+| Verwendung | Bedeutet | so wählt Git/ssh den Key |
 | --- | --- | --- |
-| **Standard** | alles, wofür kein anderes Profil passt | `core.sshCommand` in `index.gitconfig` |
-| **Projekte & Konten** | Git-Repos (GitHub, GitLab, Bitbucket) in den Projektordnern des Profils | `includeIf "gitdir:…"` |
+| **Git-Ordner** | Repos in `~/dev/kunde-c/` nutzen diesen Key und Name/E-Mail für Commits | `includeIf "gitdir:…"` |
+| **Git-Konto** | GitHub, GitLab, Bitbucket – dort muss der Pubkey stehen („Key eintragen“) | Ordner oder Alias (`git@github-kunde:…`) |
 | **Server** | `ssh`, `scp`, `sftp`, `rsync` auf einen Host oder eine IP | `Host`-Block mit Alias und Hostname |
+| **Standard** | Git überall dort, wo kein anderer Key gilt | `core.sshCommand` in `index.gitconfig` |
 
-Ein Profil kann alles zugleich sein – z. B. „Privat“ als Standard, mit GitHub und deinem Heimserver. Ein Server
-bekommt im Wizard („Neu“ → „Server“) einen eigenen Key oder den Key eines bestehenden Profils; Keybund trägt ihn
-danach auf dem Server ein (wie `ssh-copy-id`: Anmeldung mit Passwort oder einem Key, der dort schon gilt).
+Ein Key kann alles zugleich sein – z. B. „Privat“ als Standard, mit GitHub und deinem Heimserver. Neuer Key: Name
+eingeben, „Key anlegen“ – wo er gilt, legst du danach auf seiner Seite fest. Bei jeder Verwendung gibt es „Testen“
+(mit einer verständlichen Schritt-für-Schritt-Erklärung, was ssh gemacht hat) und, wo es geht, „Key eintragen“.
+Intern heißt ein Key mit seinen Verwendungen „Profil“ (`profiles.toml`, CLI).
 
 ## Key bei GitHub und GitLab eintragen
 
-Keybund trägt den Pubkey per API in dein Konto ein („Key eintragen“ im Profil, im Wizard oder
+Keybund trägt den Pubkey per API in dein Konto ein („Key eintragen“ beim Git-Konto eines Keys oder
 `keybund install-key`). Auf github.com und gitlab.com meldest du dich dafür im Browser an: Keybund zeigt einen Code,
 du bestätigst ihn, fertig – kein Passwort, kein Token zum Abtippen. Selbst gehostetes GitLab und GitHub Enterprise
 nehmen ein persönliches Zugriffstoken; Keybund öffnet die Seite dafür mit den richtigen Berechtigungen.
@@ -117,7 +119,7 @@ Hast du schon Einträge wie `Host github.com` mit `IdentityFile`, übernimmt Key
 keybund list                     Profile mit Fingerprint, Ordnern, Hosts
 keybund show <profil>            Details und Pubkey
 keybund edit <profil> …          Name, Ordner, Hosts, Git-Identität, Signieren, Key ändern (siehe --help)
-keybund new                      Wizard im Terminal (oder komplett über Optionen, siehe --help)
+keybund new                      Neuen Key anlegen, Fragen im Terminal (oder alles über Optionen, siehe --help)
 keybund copy <profil> [--print]  Pubkey in die Zwischenablage (wl-copy, xclip oder xsel)
 keybund test <profil> [--host h] Verbindungstest, Exit-Code 0 bei Erfolg
 keybund install-key <profil> [--host h] [--token-stdin] [--remember]
@@ -144,11 +146,10 @@ keybund new --name "Kunde C" --provider github --folder ~/dev/kunde-c \
 
 ## GUI
 
-Profile nach Kategorie (Standard, Projekte & Konten, Server) mit Detailseite (Key, Verbindungstest, Git-Konten,
-Server mit „Key eintragen“ und Test pro Server, Ordner, Git-Identität, generierte Config), Wizard „Neu“ für
-Git-Projekte (Pubkey landet in der Zwischenablage, die Provider-Seite öffnet sich, danach Verbindungstest) und Server
-(Key eintragen, Test), „Welcher Key?“ mit Doctor, Clone-Helfer, Diff-Ansicht zum Anwenden und Einstellungen mit
-Import vorhandener Keys.
+Seitenleiste mit deinen Keys (und wofür sie gelten), Startseite mit einer kurzen Erklärung, wie Keybund funktioniert,
+„Neuer Key“ als ein einziges kurzes Formular, Key-Seite mit „Wo wird dieser Key benutzt?“ (Git-Ordner, Git-Konten,
+Server, Standard – jeweils mit Testen und Key eintragen), Git-Identität und generierter Config. Dazu „Welcher Key?“
+mit Doctor, Clone-Helfer, Diff-Ansicht zum Anwenden, Übernehmen einer bestehenden `~/.ssh/config` und Einstellungen.
 
 ## Aufbau
 

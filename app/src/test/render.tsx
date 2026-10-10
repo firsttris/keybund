@@ -16,6 +16,6 @@ export async function renderApp(path = "/", setup?: (backend: MockBackend) => vo
   const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }));
   const user = userEvent.setup();
   const utils = render(<App router={router} queryClient={createQueryClient()} />);
-  await screen.findByRole("navigation", { name: "Profile" }).catch(() => undefined);
+  await screen.findByRole("navigation", { name: "Keys" }).catch(() => undefined);
   return { ...utils, backend, router, user };
 }

@@ -814,9 +814,32 @@ export function createMockBackend(state: MockState = seedState()) {
             command: `ssh -T -o StrictHostKeyChecking=yes ${h.alias ?? h.hostname}`,
             used_key: null,
             other_key: false,
+            steps: [
+              { ok: null, text: `Verbinde mit ${h.hostname}, Port ${h.port ?? 22}` },
+              { ok: false, text: "Host-Key nicht bestätigt oder geändert – Verbindung abgebrochen" },
+            ],
+            log: "Host key verification failed.",
           } satisfies ProbeResult;
         }
         const ok = p.id !== "kunde-b" && !state.unreachable.includes(h.hostname);
+        const user = h.user ?? (h.provider === "generic" ? "tristan" : "git");
+        const steps: ProbeResult["steps"] = state.unreachable.includes(h.hostname)
+          ? [
+              { ok: null, text: `Verbinde mit ${h.hostname}, Port ${h.port ?? 22}` },
+              { ok: false, text: "Keine Verbindung: Connection timed out" },
+            ]
+          : [
+              ...(h.alias ? [{ ok: null, text: `ssh-Config ~/.ssh/config.d/keybund.conf gilt für „${h.alias}“` }] : []),
+              { ok: null, text: `Verbinde mit ${h.hostname}, Port ${h.port ?? 22}` },
+              { ok: true, text: "Verbindung steht" },
+              { ok: null, text: `Anmelden als Benutzer „${user}“` },
+              { ok: true, text: "Host-Key ist bekannt und passt – es ist der richtige Server" },
+              { ok: null, text: `Biete Key an: ${p.key.path}` },
+              ok ? { ok: true, text: `Server akzeptiert ${p.key.path}` } : { ok: false, text: "Server kennt diesen Key nicht" },
+              ok
+                ? { ok: true, text: "Angemeldet" }
+                : { ok: false, text: `Server: ${user}@${h.hostname}: Permission denied (publickey).` },
+            ];
         const result: ProbeResult = {
           success: ok,
           host: h.alias ?? h.hostname,
@@ -832,6 +855,8 @@ export function createMockBackend(state: MockState = seedState()) {
           command: `ssh -T -o PasswordAuthentication=no -o IdentitiesOnly=yes -o AddKeysToAgent=yes -i ${p.key.path} ${h.alias ?? h.hostname}`,
           used_key: ok ? p.key.path : null,
           other_key: false,
+          steps,
+          log: [`OpenSSH_9.6p1`, `debug1: Connecting to ${h.hostname} port ${h.port ?? 22}.`, ...steps.map((s) => `debug1: ${s.text}`)].join("\n"),
         };
         if (state.otherKeyFor === p.id) {
           Object.assign(result, {
@@ -839,7 +864,7 @@ export function createMockBackend(state: MockState = seedState()) {
             other_key: true,
             used_key: "~/.ssh/privat_ed25519",
             account: "@firsttris",
-            message: "Angemeldet als @firsttris, aber mit ~/.ssh/privat_ed25519 statt mit dem Key des Profils",
+            message: "Angemeldet als @firsttris, aber mit ~/.ssh/privat_ed25519 statt mit diesem Key",
           });
         }
         state.lastTests.set(p.id, { success: result.success, account: result.account, message: result.message, at: Date.now() });

@@ -311,6 +311,17 @@ export type ProbeResult = {
 	 *  e.g. one from an `IdentityFile` in `~/.ssh/config`.
 	 */
 	other_key: boolean,
+	/**  What happened, step by step, in plain words (from `ssh -v`). */
+	steps: ProbeStep[],
+	/**  The complete output of `ssh -v`, for the curious and for bug reports. */
+	log: string,
+};
+
+/**  One step of a connection, e.g. "Biete Key an: ~/.ssh/privat_ed25519". */
+export type ProbeStep = {
+	/**  `Some(true)` went well, `Some(false)` failed, `None` is information. */
+	ok: boolean | null,
+	text: string,
 };
 
 export type Profile = {
