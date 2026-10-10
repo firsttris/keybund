@@ -133,4 +133,15 @@ describe("doctor", () => {
     await user.click(await screen.findByRole("button", { name: "Include steht nicht ganz oben beheben" }));
     expect(await screen.findByText("Alles in Ordnung")).toBeInTheDocument();
   });
+
+  it("offers the full Include path for Dolphin with an old libssh", async () => {
+    const { user, backend } = await renderApp("/doctor", (b) => {
+      b.state.doctorIncludeOnTop = true;
+      b.state.dolphinLibssh = "0.9.6";
+    });
+    expect(await screen.findByText("Dolphin sieht die Keybund-Config nicht (libssh 0.9.6)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Dolphin sieht die Keybund-Config nicht.*beheben/ }));
+    expect(await screen.findByText("Dolphin (libssh 0.9.6) liest die Keybund-Config")).toBeInTheDocument();
+    expect(backend.state.settings.absolute_ssh_include).toBe(true);
+  });
 });

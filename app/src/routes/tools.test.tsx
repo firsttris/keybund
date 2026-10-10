@@ -87,13 +87,13 @@ describe("settings", () => {
     await user.clear(screen.getByLabelText("Ordner für Keys"));
     await user.type(screen.getByLabelText("Ordner für Keys"), "~/.ssh/keybund");
     await user.click(screen.getByRole("switch", { name: "known_hosts pro Profil" }));
-    await user.click(screen.getByRole("switch", { name: "Host-Blöcke direkt in ~/.ssh/config" }));
+    await user.click(screen.getByRole("switch", { name: "Include mit vollem Pfad" }));
     await user.click(save);
     await waitFor(() => expect(backend.state.settings.projects_dir).toBe("~/work"));
     expect(backend.state.settings).toEqual({
       projects_dir: "~/work",
       keys_dir: "~/.ssh/keybund",
-      inline_ssh_config: true,
+      absolute_ssh_include: true,
       known_hosts_per_profile: false,
     });
     expect(await screen.findByLabelText("Ordner für Projekte")).toHaveValue("~/work");

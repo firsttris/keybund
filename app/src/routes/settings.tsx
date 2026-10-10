@@ -178,13 +178,13 @@ function SettingsForm({ saved }: { saved: Settings }) {
         </label>
         <label className="flex items-start justify-between gap-4">
           <span className="flex flex-col gap-0.5">
-            <span className="text-[13px] font-medium">Host-Blöcke direkt in ~/.ssh/config</span>
-            <span className="text-xs text-muted-foreground">Statt einer Include-Zeile – nur für Programme, die Include nicht kennen (z. B. Dolphin mit altem libssh).</span>
+            <span className="text-[13px] font-medium">Include mit vollem Pfad</span>
+            <span className="text-xs text-muted-foreground">Statt ~ in ~/.ssh/config – nötig für Dolphin/KIO mit libssh vor 0.10.2 (der Doctor meldet das).</span>
           </span>
           <Switch
-            aria-label="Host-Blöcke direkt in ~/.ssh/config"
-            checked={draft.inline_ssh_config}
-            onCheckedChange={(v) => set({ inline_ssh_config: v })}
+            aria-label="Include mit vollem Pfad"
+            checked={draft.absolute_ssh_include}
+            onCheckedChange={(v) => set({ absolute_ssh_include: v })}
           />
         </label>
         <ErrorSlot message={update.isError && errorMessage(update.error)} />

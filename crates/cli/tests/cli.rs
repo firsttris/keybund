@@ -751,7 +751,7 @@ fn config_changes_the_defaults_for_new_profiles() {
         .code(2)
         .stderr(predicate::str::contains("Ungültiger Ordner"));
     sb.cmd()
-        .args(["config", "inline-ssh-config", "vielleicht"])
+        .args(["config", "absolute-ssh-include", "vielleicht"])
         .assert()
         .code(2)
         .stderr(predicate::str::contains("kein Ja/Nein-Wert"));

@@ -171,7 +171,11 @@ mod tests {
     #[test]
     fn removing_the_include_restores_the_original_ssh_config() {
         for original in ["Host a\n    User x\n", "", "# comment\nHost b\n", "Host a\n\nHost b\n"] {
-            assert_eq!(without_ssh_include(&ensure_ssh_include(original)), original, "{original:?}");
+            assert_eq!(
+                without_ssh_include(&ensure_ssh_include(original, crate::render::SSH_INCLUDE_LINE)),
+                original,
+                "{original:?}"
+            );
         }
     }
 

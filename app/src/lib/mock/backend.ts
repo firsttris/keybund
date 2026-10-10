@@ -136,6 +136,8 @@ export interface MockState {
   uploadedKeys: string[];
   flows: Map<string, { id: string; host: string; polls: number }>;
   settings: Settings;
+  /** libssh version of an installed Dolphin (`null`: no Dolphin). */
+  dolphinLibssh: string | null;
   /** known_hosts names (`host` or `[host]:port`) whose key is stored. */
   knownHosts: string[];
 }
@@ -230,7 +232,8 @@ export function seedState(): MockState {
     uploadedKeys: [],
     flows: new Map(),
     knownHosts: ["1.2.3.4", "gitlab.kunde.de"],
-    settings: { projects_dir: "~/dev", keys_dir: "~/.ssh", inline_ssh_config: false, known_hosts_per_profile: true },
+    dolphinLibssh: null,
+    settings: { projects_dir: "~/dev", keys_dir: "~/.ssh", absolute_ssh_include: false, known_hosts_per_profile: true },
     unreachable: [],
   };
   state.applied = renderAll(state);
@@ -566,8 +569,27 @@ function doctorReport(state: MockState): Report {
           fix: { type: "apply" },
         },
     ...sshConfigChecks(state),
+    ...dolphinChecks(state),
   ];
   return { checks };
+}
+
+function dolphinChecks(state: MockState): Check[] {
+  const v = state.dolphinLibssh;
+  if (!v) return [];
+  const [, minor, patch] = v.split(".").map(Number);
+  const ok = minor > 10 || (minor === 10 && patch >= 2) || state.settings.absolute_ssh_include;
+  return [
+    ok
+      ? { id: "dolphin", status: "ok", title: `Dolphin (libssh ${v}) liest die Keybund-Config`, detail: null, fix: null }
+      : {
+          id: "dolphin",
+          status: "warn",
+          title: `Dolphin sieht die Keybund-Config nicht (libssh ${v})`,
+          detail: "libssh vor 0.10.2 versteht ~ in Include nicht – sftp:// in Dolphin nutzt dann nicht den Profil-Key. Abhilfe: Include mit vollem Pfad schreiben.",
+          fix: { type: "absolute_ssh_include" },
+        },
+  ];
 }
 
 function which(state: MockState, query: string): WhichResult {
@@ -963,6 +985,7 @@ export function createMockBackend(state: MockState = seedState()) {
         const fix = args.fix as Fix;
         if (fix.type === "move_ssh_include") state.doctorIncludeOnTop = true;
         if (fix.type === "apply") state.applied = renderAll(state);
+        if (fix.type === "absolute_ssh_include") state.settings = { ...state.settings, absolute_ssh_include: true };
         if (fix.type === "cleanup_ssh_config") state.sshBlocks = state.sshBlocks.filter((b) => !covered(state, b));
         return doctorReport(state);
       }

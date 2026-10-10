@@ -31,6 +31,8 @@ pub enum Fix {
     Apply,
     /// Remove blocks from `~/.ssh/config` that a profile now covers.
     CleanupSshConfig,
+    /// Write the `Include` with the full path (old libssh, Dolphin) and apply.
+    AbsoluteSshInclude,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,7 +107,69 @@ pub fn run(env: &Env) -> Report {
     checks.extend(ssh_config_checks(env, &config));
     checks.extend(key_age_checks(env, &config));
     checks.extend(folder_checks(env, &config));
+    let dolphin = process::find_program("dolphin").is_some() || kio_sftp_installed();
+    checks.extend(dolphin_check(dolphin, libssh_version(), &config));
     Report { checks }
+}
+
+/// libssh before 0.10.2 does not expand `~` in `Include`.
+const LIBSSH_TILDE_INCLUDE: (u32, u32, u32) = (0, 10, 2);
+
+const LIB_DIRS: [&str; 6] = [
+    "/usr/lib/x86_64-linux-gnu",
+    "/usr/lib/aarch64-linux-gnu",
+    "/usr/lib64",
+    "/usr/lib",
+    "/lib/x86_64-linux-gnu",
+    "/lib64",
+];
+
+/// libssh's version from its file name: `libssh.so.4.M.P` is libssh `0.(M+1).P`.
+pub fn libssh_from_soname(name: &str) -> Option<(u32, u32, u32)> {
+    let rest = name.strip_prefix("libssh.so.4.")?;
+    let mut parts = rest.split('.');
+    let minor: u32 = parts.next()?.parse().ok()?;
+    let patch: u32 = parts.next()?.parse().ok()?;
+    Some((0, minor + 1, patch))
+}
+
+/// The installed libssh (used by Dolphin/KIO for sftp://), if found.
+fn libssh_version() -> Option<(u32, u32, u32)> {
+    LIB_DIRS.iter().find_map(|dir| {
+        std::fs::read_dir(dir).ok()?.flatten().find_map(|e| libssh_from_soname(&e.file_name().to_string_lossy()))
+    })
+}
+
+fn kio_sftp_installed() -> bool {
+    LIB_DIRS.iter().any(|dir| {
+        ["qt6/plugins/kf6/kio/kio_sftp.so", "qt5/plugins/kf5/kio/sftp.so", "plugins/kf5/kio/sftp.so"]
+            .iter()
+            .any(|p| std::path::Path::new(dir).join(p).exists())
+    })
+}
+
+/// Dolphin/KIO reads the ssh config with libssh. Only checked when Dolphin
+/// or the sftp plugin is installed.
+pub fn dolphin_check(installed: bool, libssh: Option<(u32, u32, u32)>, config: &Config) -> Option<Check> {
+    if !installed {
+        return None;
+    }
+    let Some(v) = libssh else {
+        return Some(Check::new("dolphin", Status::Ok, "Dolphin gefunden, libssh-Version unbekannt").detail(
+            "Zum Prüfen sftp://<alias> in Dolphin öffnen: Es sollte ohne Passwort mit dem Profil-Key verbinden.",
+        ));
+    };
+    let version = format!("{}.{}.{}", v.0, v.1, v.2);
+    Some(if v >= LIBSSH_TILDE_INCLUDE || config.settings.absolute_ssh_include {
+        Check::new("dolphin", Status::Ok, format!("Dolphin (libssh {version}) liest die Keybund-Config"))
+    } else {
+        Check::new("dolphin", Status::Warn, format!("Dolphin sieht die Keybund-Config nicht (libssh {version})"))
+            .detail(
+                "libssh vor 0.10.2 versteht ~ in Include nicht – sftp:// in Dolphin nutzt dann nicht den Profil-Key. \
+                 Abhilfe: Include mit vollem Pfad schreiben.",
+            )
+            .fix(Fix::AbsoluteSshInclude)
+    })
 }
 
 fn tool_checks(env: &Env) -> Vec<Check> {
@@ -345,13 +409,44 @@ pub fn fix(env: &Env, fix: &Fix) -> Result<()> {
         Fix::MoveSshInclude => {
             let path = env.ssh_config();
             let content = fsutil::read_optional(&path)?.unwrap_or_default();
+            let include = render::ssh_include_line(env, &store::load(env)?.settings);
             fsutil::backup_once(&path)?;
-            fsutil::atomic_write(&path, &apply::ensure_ssh_include(&content), None)
+            fsutil::atomic_write(&path, &apply::ensure_ssh_include(&content, &include), None)
         }
         Fix::Apply => {
             let config = store::load(env)?;
             apply::apply_config(env, &config).map(|_| ())
         }
         Fix::CleanupSshConfig => apply::apply(env, &import::plan_cleanup(env)?).map(|_| ()),
+        Fix::AbsoluteSshInclude => {
+            let mut config = store::load(env)?;
+            config.settings.absolute_ssh_include = true;
+            store::save(env, &config)?;
+            apply::apply_config(env, &config).map(|_| ())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dolphin_needs_libssh_0_10_2_for_the_include() {
+        assert_eq!(libssh_from_soname("libssh.so.4.9.6"), Some((0, 10, 6)));
+        assert_eq!(libssh_from_soname("libssh.so.4.8.7"), Some((0, 9, 7)));
+        assert_eq!(libssh_from_soname("libssh.so.4"), None);
+        assert_eq!(libssh_from_soname("libssh_threads.so.4.8.7"), None);
+
+        let mut config = Config::default();
+        assert!(dolphin_check(false, Some((0, 9, 6)), &config).is_none());
+        assert_eq!(dolphin_check(true, Some((0, 10, 6)), &config).unwrap().status, Status::Ok);
+        let old = dolphin_check(true, Some((0, 9, 6)), &config).unwrap();
+        assert_eq!((old.status, old.fix), (Status::Warn, Some(Fix::AbsoluteSshInclude)));
+        assert!(old.title.contains("libssh 0.9.6"));
+        assert_eq!(dolphin_check(true, Some((0, 10, 1)), &config).unwrap().status, Status::Warn);
+        config.settings.absolute_ssh_include = true;
+        assert_eq!(dolphin_check(true, Some((0, 9, 6)), &config).unwrap().status, Status::Ok);
+        assert!(dolphin_check(true, None, &config).unwrap().detail.unwrap().contains("sftp://"));
     }
 }

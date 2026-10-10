@@ -14,6 +14,20 @@ const MANAGED: &str = "# Managed by Keybund – manual changes will be overwritt
 /// The `Include` line Keybund keeps at the very top of `~/.ssh/config`.
 pub const SSH_INCLUDE_LINE: &str = "Include ~/.ssh/config.d/keybund.conf";
 
+/// The `Include` line for these settings: with `~`, or with the full path
+/// for old libssh (see [`Settings::absolute_ssh_include`]).
+pub fn ssh_include_line(env: &Env, settings: &Settings) -> String {
+    if !settings.absolute_ssh_include {
+        return SSH_INCLUDE_LINE.to_string();
+    }
+    let path = env.ssh_keybund_conf().display().to_string();
+    if path.contains(char::is_whitespace) {
+        format!("Include \"{path}\"")
+    } else {
+        format!("Include {path}")
+    }
+}
+
 /// One generated file.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RenderedFile {

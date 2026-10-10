@@ -531,3 +531,32 @@ fn uninstall_removes_only_keybund_and_can_restore_the_originals() {
     assert_eq!(fs::read_to_string(env.ssh_config()).unwrap(), ssh_before);
     assert!(!env.config_dir.exists());
 }
+
+/// Dolphin with an old libssh: the doctor's fix writes the Include with the
+/// full path, which OpenSSH follows just as well; the Host block keeps new
+/// host keys in the profile's own known_hosts file.
+#[test]
+fn absolute_include_and_known_hosts_per_profile() {
+    if !has("ssh") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    apply::apply_config(&env, &config).unwrap();
+    let ssh_config = fs::read_to_string(env.ssh_config()).unwrap();
+    assert!(ssh_config.starts_with("Include ~/.ssh/config.d/keybund.conf\n"), "{ssh_config}");
+    assert!(env.known_hosts_dir().is_dir(), "ssh needs the folder to add host keys");
+
+    doctor::fix(&env, &doctor::Fix::AbsoluteSshInclude).unwrap();
+    let ssh_config = fs::read_to_string(env.ssh_config()).unwrap();
+    let line = format!("Include {}\n", env.ssh_keybund_conf().display());
+    assert!(ssh_config.starts_with(&line), "{ssh_config}");
+    assert_eq!(ssh_config.matches("keybund.conf").count(), 1, "{ssh_config}");
+    assert!(store::load(&env).unwrap().settings.absolute_ssh_include);
+
+    let out = Command::new("ssh").arg("-G").arg("-F").arg(env.ssh_config()).arg("meinserver").output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("identityfile ~/.ssh/privat_ed25519"), "{text}");
+    assert!(text.lines().any(|l| l.starts_with("userknownhostsfile") && l.contains("known_hosts.d/privat")), "{text}");
+    // Nothing left to do after the fix.
+    assert!(apply::plan(&env, &store::load(&env).unwrap()).unwrap().changes.is_empty());
+}

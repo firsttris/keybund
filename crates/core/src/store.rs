@@ -29,7 +29,7 @@ struct TomlSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     keys_dir: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    inline_ssh_config: Option<bool>,
+    absolute_ssh_include: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     known_hosts_per_profile: Option<bool>,
 }
@@ -38,7 +38,7 @@ impl TomlSettings {
     fn is_empty(&self) -> bool {
         self.projects_dir.is_none()
             && self.keys_dir.is_none()
-            && self.inline_ssh_config.is_none()
+            && self.absolute_ssh_include.is_none()
             && self.known_hosts_per_profile.is_none()
     }
 }
@@ -49,7 +49,7 @@ impl From<TomlSettings> for Settings {
         Settings {
             projects_dir: t.projects_dir.unwrap_or(d.projects_dir),
             keys_dir: t.keys_dir.unwrap_or(d.keys_dir),
-            inline_ssh_config: t.inline_ssh_config.unwrap_or(d.inline_ssh_config),
+            absolute_ssh_include: t.absolute_ssh_include.unwrap_or(d.absolute_ssh_include),
             known_hosts_per_profile: t.known_hosts_per_profile.unwrap_or(d.known_hosts_per_profile),
         }
     }
@@ -61,7 +61,7 @@ impl From<&Settings> for TomlSettings {
         TomlSettings {
             projects_dir: (s.projects_dir != d.projects_dir).then(|| s.projects_dir.clone()),
             keys_dir: (s.keys_dir != d.keys_dir).then(|| s.keys_dir.clone()),
-            inline_ssh_config: (s.inline_ssh_config != d.inline_ssh_config).then_some(s.inline_ssh_config),
+            absolute_ssh_include: (s.absolute_ssh_include != d.absolute_ssh_include).then_some(s.absolute_ssh_include),
             known_hosts_per_profile: (s.known_hosts_per_profile != d.known_hosts_per_profile)
                 .then_some(s.known_hosts_per_profile),
         }

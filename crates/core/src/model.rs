@@ -104,9 +104,10 @@ pub struct Settings {
     pub projects_dir: String,
     /// Folder for new keys (`~/.ssh`).
     pub keys_dir: String,
-    /// Write the Host blocks into `~/.ssh/config` itself instead of an
-    /// `Include` (for SSH clients that ignore `Include`, e.g. old libssh).
-    pub inline_ssh_config: bool,
+    /// Write the `Include` in `~/.ssh/config` with the full path instead of
+    /// `~`: libssh before 0.10.2 (Dolphin/KIO on older distributions) does
+    /// not expand `~` there and would not see Keybund's Host blocks.
+    pub absolute_ssh_include: bool,
     /// Keep the host keys of each profile's servers in its own known_hosts
     /// file (removed with the profile).
     pub known_hosts_per_profile: bool,
@@ -117,7 +118,7 @@ impl Default for Settings {
         Settings {
             projects_dir: "~/dev".into(),
             keys_dir: "~/.ssh".into(),
-            inline_ssh_config: false,
+            absolute_ssh_include: false,
             known_hosts_per_profile: true,
         }
     }

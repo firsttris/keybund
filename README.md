@@ -50,6 +50,12 @@ Die Host-Keys der Server eines Profils landen in einer eigenen Datei `~/.ssh/kno
 Archivieren mit nach `~/.ssh/archive/`. Abschaltbar in den Einstellungen bzw. mit
 `keybund config known-hosts-per-profile false`.
 
+## Dolphin (sftp://)
+
+Dolphin/KIO liest die ssh-Config über libssh. libssh vor 0.10.2 (z. B. Ubuntu 22.04) versteht `~` in `Include`
+nicht und sähe Keybunds Host-Blöcke nicht. Der Doctor erkennt das an der installierten libssh und schreibt auf
+Wunsch das `Include` mit vollem Pfad (Einstellung „Include mit vollem Pfad“, `keybund config absolute-ssh-include true`).
+
 ## Wie es funktioniert
 
 `~/.config/keybund/profiles.toml` ist die einzige Quelle der Wahrheit:
@@ -117,7 +123,7 @@ keybund test <profil> [--host h] Verbindungstest, Exit-Code 0 bei Erfolg
 keybund install-key <profil> [--host h] [--token-stdin] [--remember]
                                  Pubkey eintragen: Server wie ssh-copy-id, GitHub/GitLab per API
 keybund trust <profil> [--host h] Host-Keys prüfen und bestätigen (Fingerprint)
-keybund config [key] [wert]      Einstellungen: projects-dir, keys-dir, known-hosts-per-profile, …
+keybund config [key] [wert]      Einstellungen: projects-dir, keys-dir, known-hosts-per-profile, absolute-ssh-include
 keybund which [pfad|host]        Welcher Key wird hier benutzt – und warum?
 keybund clone <url> [-p id]      Klont ins richtige Profil, mit dem richtigen Key
 keybund apply [--dry-run] [-y]   Diff zeigen bzw. schreiben

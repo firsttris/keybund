@@ -484,7 +484,7 @@ pub fn config(env: &Env, key: Option<&str>, value: Option<&str>) -> Result<ExitC
         let s = &config.settings;
         ui::row("projects-dir", &s.projects_dir);
         ui::row("keys-dir", &s.keys_dir);
-        ui::row("inline-ssh-config", &s.inline_ssh_config.to_string());
+        ui::row("absolute-ssh-include", &s.absolute_ssh_include.to_string());
         ui::row("known-hosts-per-profile", &s.known_hosts_per_profile.to_string());
         return Ok(ExitCode::SUCCESS);
     };
@@ -500,15 +500,15 @@ pub fn config(env: &Env, key: Option<&str>, value: Option<&str>) -> Result<ExitC
     match key {
         "projects-dir" => s.projects_dir = store::normalize_dir(env, value)?,
         "keys-dir" => s.keys_dir = store::normalize_dir(env, value)?,
-        "inline-ssh-config" => s.inline_ssh_config = flag(value)?,
+        "absolute-ssh-include" => s.absolute_ssh_include = flag(value)?,
         "known-hosts-per-profile" => s.known_hosts_per_profile = flag(value)?,
         _ => {
-            bail!("Unbekannte Einstellung „{key}“ (projects-dir, keys-dir, inline-ssh-config, known-hosts-per-profile)")
+            bail!("Unbekannte Einstellung „{key}“ (projects-dir, keys-dir, absolute-ssh-include, known-hosts-per-profile)")
         }
     }
     store::save(env, &config)?;
     ui::success(&format!("{key} gespeichert"));
-    if matches!(key, "inline-ssh-config" | "known-hosts-per-profile") {
+    if matches!(key, "absolute-ssh-include" | "known-hosts-per-profile") {
         ui::hint("Mit `keybund apply` übernehmen.");
     }
     Ok(ExitCode::SUCCESS)

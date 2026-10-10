@@ -157,7 +157,9 @@ export type Fix =
 /**  Write all pending config changes. */
 { type: "apply" } | 
 /**  Remove blocks from `~/.ssh/config` that a profile now covers. */
-{ type: "cleanup_ssh_config" };
+{ type: "cleanup_ssh_config" } | 
+/**  Write the `Include` with the full path (old libssh, Dolphin) and apply. */
+{ type: "absolute_ssh_include" };
 
 /**  A file (or the part of a file) Keybund generates for a profile. */
 export type GeneratedFile = {
@@ -373,10 +375,11 @@ export type Settings = {
 	/**  Folder for new keys (`~/.ssh`). */
 	keys_dir: string,
 	/**
-	 *  Write the Host blocks into `~/.ssh/config` itself instead of an
-	 *  `Include` (for SSH clients that ignore `Include`, e.g. old libssh).
+	 *  Write the `Include` in `~/.ssh/config` with the full path instead of
+	 *  `~`: libssh before 0.10.2 (Dolphin/KIO on older distributions) does
+	 *  not expand `~` there and would not see Keybund's Host blocks.
 	 */
-	inline_ssh_config: boolean,
+	absolute_ssh_include: boolean,
 	/**
 	 *  Keep the host keys of each profile's servers in its own known_hosts
 	 *  file (removed with the profile).

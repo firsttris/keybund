@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::model::Config;
-use crate::render::{self, SSH_INCLUDE_LINE};
+use crate::render;
 use crate::{fsutil, keygen, Env, Error, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,7 +109,8 @@ pub fn plan(env: &Env, config: &Config) -> Result<Plan> {
 
     // The user's own files only get one include line each.
     let ssh_config = fsutil::read_optional(&env.ssh_config())?;
-    let new_ssh = ensure_ssh_include(ssh_config.as_deref().unwrap_or(""));
+    let include = render::ssh_include_line(env, &config.settings);
+    let new_ssh = ensure_ssh_include(ssh_config.as_deref().unwrap_or(""), &include);
     push_change(env, &mut changes, &env.ssh_config(), Some(new_ssh), Some(0o600), true)?;
 
     let gitconfig = fsutil::read_optional(&env.gitconfig())?;
@@ -254,14 +255,15 @@ pub fn ssh_include_present(content: &str) -> bool {
     content.lines().any(is_keybund_include)
 }
 
-/// Makes Keybund's `Include` the first line of `~/.ssh/config`. An
-/// `Include` below a `Host` block would only apply to that host.
-pub fn ensure_ssh_include(content: &str) -> String {
-    if ssh_include_on_top(content) {
+/// Makes `include` (Keybund's `Include` line) the first directive of
+/// `~/.ssh/config`. An `Include` below a `Host` block would only apply to
+/// that host; another variant of the line (`~` or full path) is replaced.
+pub fn ensure_ssh_include(content: &str, include: &str) -> String {
+    if content.lines().find(|l| is_directive(l)).is_some_and(|l| l.trim() == include) {
         return content.to_string();
     }
     let rest: Vec<&str> = content.lines().filter(|l| !is_keybund_include(l)).collect();
-    let mut out = format!("{SSH_INCLUDE_LINE}\n");
+    let mut out = format!("{include}\n");
     if rest.iter().any(|l| !l.trim().is_empty()) {
         out.push('\n');
         let joined = rest.join("\n");
@@ -311,14 +313,15 @@ pub fn ensure_git_include(content: &str, index_path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::render::SSH_INCLUDE_LINE;
 
     #[test]
     fn ssh_include_goes_first() {
         let user = "Host github.com\n    IdentityFile ~/.ssh/id_ed25519\n";
-        let out = ensure_ssh_include(user);
+        let out = ensure_ssh_include(user, SSH_INCLUDE_LINE);
         assert!(out.starts_with(SSH_INCLUDE_LINE));
         assert!(out.ends_with(user));
-        assert_eq!(ensure_ssh_include(&out), out);
+        assert_eq!(ensure_ssh_include(&out, SSH_INCLUDE_LINE), out);
     }
 
     #[test]
@@ -326,7 +329,7 @@ mod tests {
         let user = "Host a\n    User x\nInclude ~/.ssh/config.d/keybund.conf\n";
         assert!(ssh_include_present(user));
         assert!(!ssh_include_on_top(user));
-        let out = ensure_ssh_include(user);
+        let out = ensure_ssh_include(user, SSH_INCLUDE_LINE);
         assert_eq!(out, format!("{SSH_INCLUDE_LINE}\n\nHost a\n    User x\n"));
     }
 
@@ -334,12 +337,20 @@ mod tests {
     fn leading_comments_are_fine() {
         let user = "# my config\nInclude ~/.ssh/config.d/keybund.conf\nHost a\n";
         assert!(ssh_include_on_top(user));
-        assert_eq!(ensure_ssh_include(user), user);
+        assert_eq!(ensure_ssh_include(user, SSH_INCLUDE_LINE), user);
+    }
+
+    #[test]
+    fn include_variant_is_replaced() {
+        let user = "Include ~/.ssh/config.d/keybund.conf\n\nHost a\n";
+        let out = ensure_ssh_include(user, "Include /home/t/.ssh/config.d/keybund.conf");
+        assert_eq!(out, "Include /home/t/.ssh/config.d/keybund.conf\n\nHost a\n");
+        assert_eq!(ensure_ssh_include(&out, SSH_INCLUDE_LINE), user);
     }
 
     #[test]
     fn empty_ssh_config() {
-        assert_eq!(ensure_ssh_include(""), format!("{SSH_INCLUDE_LINE}\n"));
+        assert_eq!(ensure_ssh_include("", SSH_INCLUDE_LINE), format!("{SSH_INCLUDE_LINE}\n"));
     }
 
     #[test]
