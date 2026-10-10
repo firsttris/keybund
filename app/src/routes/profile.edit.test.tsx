@@ -379,6 +379,35 @@ describe("key page", () => {
     expect(backend.state.openedUrls).toEqual([]);
   });
 
+  it("keeps both of two quick removals", async () => {
+    const { user, backend } = await renderApp("/profile/kunde-b", (b) => {
+      b.state.latency = 50;
+      b.state.profiles.find((p) => p.id === "kunde-b")!.folders = ["~/dev/kunde-b/", "~/work/b/"];
+    });
+    const first = await screen.findByRole("button", { name: "Ordner ~/dev/kunde-b/ entfernen" });
+    const second = screen.getByRole("button", { name: "Ordner ~/work/b/ entfernen" });
+    await user.click(first);
+    await user.click(second);
+    await waitFor(() => expect(backend.state.profiles.find((p) => p.id === "kunde-b")!.folders).toEqual([]));
+  });
+
+  it("does not claim the pubkey was copied when the key file is missing", async () => {
+    const { user, backend } = await renderApp("/profile/kunde-b", (b) => {
+      b.state.keys.delete("~/.ssh/kunde-b_ed25519");
+    });
+    const github = await row("GitHub-Konto");
+    await user.click(within(github).getByRole("button", { name: "Key eintragen" }));
+    expect(await screen.findByText(/Key fehlt/)).toBeInTheDocument();
+    expect(within(github).queryByText("Pubkey ist kopiert.")).not.toBeInTheDocument();
+    expect(backend.state.openedUrls).toEqual([]);
+  });
+
+  it("shows that an archived key has no generated config", async () => {
+    const { user } = await renderApp("/profile/bundesagentur");
+    await user.click(await screen.findByRole("tab", { name: "Generierte Config" }));
+    expect(await screen.findByText(/Keybund schreibt keine Regeln mehr für ihn/)).toBeInTheDocument();
+  });
+
   it("shows a not-found page", async () => {
     await renderApp("/profile/nope");
     expect(await screen.findByRole("heading", { name: "Key nicht gefunden" })).toBeInTheDocument();

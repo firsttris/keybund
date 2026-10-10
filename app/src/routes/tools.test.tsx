@@ -44,6 +44,15 @@ describe("clone", () => {
     expect(screen.getByRole("button", { name: "Klonen" })).toBeDisabled();
   });
 
+  it("needs a new check after the URL changed", async () => {
+    const { user } = await renderApp("/clone");
+    await user.type(await screen.findByLabelText("Repo-URL"), "git@github.com:team/a.git");
+    await user.click(screen.getByRole("button", { name: "Prüfen" }));
+    expect(await screen.findByRole("button", { name: "Klonen" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Repo-URL"), "x");
+    expect(screen.queryByRole("button", { name: "Klonen" })).not.toBeInTheDocument();
+  });
+
   it("shows invalid URLs", async () => {
     const { user } = await renderApp("/clone");
     await user.type(await screen.findByLabelText("Repo-URL"), "kaputt");

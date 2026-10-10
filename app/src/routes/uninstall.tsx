@@ -80,6 +80,7 @@ export function UninstallPage() {
             </label>
           </Card>
           {preview.isPending && <Spinner />}
+          {preview.isError && <FieldError>{errorMessage(preview.error)}</FieldError>}
           {preview.data && changes.length === 0 && <p className="m-0 text-muted-foreground">Nichts zu entfernen.</p>}
           {changes.length > 0 && <DiffView changes={changes} />}
           {run.isError && <FieldError>{errorMessage(run.error)}</FieldError>}

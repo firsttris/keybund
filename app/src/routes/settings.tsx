@@ -152,7 +152,8 @@ function SettingsCard() {
   const settings = useSettings();
   if (!settings.data) return <Spinner />;
   // Remounts with fresh values after saving.
-  return <FoldersForm key={JSON.stringify(settings.data)} saved={settings.data} />;
+  // Remounts only when the folders change (not when a switch under "Erweitert" is flipped).
+  return <FoldersForm key={`${settings.data.projects_dir}|${settings.data.keys_dir}`} saved={settings.data} />;
 }
 
 const mono = "font-mono text-[13px]";
@@ -170,7 +171,10 @@ function FoldersForm({ saved }: { saved: Settings }) {
         className="flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault();
-          update.mutate(draft, { onSuccess: () => toast.success("Einstellungen gespeichert") });
+          update.mutate(
+            { projects_dir: draft.projects_dir, keys_dir: draft.keys_dir },
+            { onSuccess: () => toast.success("Einstellungen gespeichert") },
+          );
         }}
       >
         <div className="flex flex-col gap-1.5">
@@ -199,7 +203,7 @@ function AdvancedCard() {
   const s = settings.data;
   if (!s) return <Spinner />;
   const toggle = (patch: Partial<Settings>) =>
-    update.mutate({ ...s, ...patch }, { onSuccess: toastSaved, onError: (e) => toast.error(errorMessage(e)) });
+    update.mutate(patch, { onSuccess: toastSaved, onError: (e) => toast.error(errorMessage(e)) });
   return (
     <Card aria-labelledby="advanced-title">
       <CardTitle id="advanced-title">Für besondere Fälle</CardTitle>

@@ -57,21 +57,38 @@ export function toastSaved() {
   toast.success("Gespeichert", { id: "saved", description: "Git und ssh benutzen es ab sofort." });
 }
 
-export function useUpdateProfile() {
+/** Writes run one after another, so a quick second click never works on outdated data. */
+const writes = { id: "keybund-writes" };
+
+/**
+ * Changes a key: `change` gets the current state from the backend, not the
+ * one shown when the button was rendered, so two quick edits (e.g. removing
+ * two folders) both survive.
+ */
+export function useUpdateProfile(id: string) {
   const invalidate = useInvalidateAll();
   return useMutation({
-    mutationFn: (profile: Profile) => api.updateProfile(profile),
-    onSuccess: () => (toastSaved(), invalidate()),
+    scope: writes,
+    mutationFn: async (change: (current: Profile) => Profile) => {
+      const current = (await api.loadProfiles()).profiles.find((v) => v.profile.id === id)?.profile;
+      if (!current) throw new Error(`Key „${id}“ existiert nicht`);
+      return api.updateProfile(change(current));
+    },
+    onSuccess: toastSaved,
     onError: (e) => toast.error(errorMessage(e)),
+    // Also after an error: the backend may have saved part of it.
+    onSettled: invalidate,
   });
 }
 
 export function useSetDefault() {
   const invalidate = useInvalidateAll();
   return useMutation({
+    scope: writes,
     mutationFn: (id: string | null) => api.setDefaultProfile(id),
-    onSuccess: () => (toastSaved(), invalidate()),
+    onSuccess: toastSaved,
     onError: (e) => toast.error(errorMessage(e)),
+    onSettled: invalidate,
   });
 }
 
@@ -98,7 +115,8 @@ export function useApplyChanges() {
   const invalidate = useInvalidateAll();
   return useMutation({
     mutationFn: (diffs: string[]) => api.applyChanges(diffs),
-    onSuccess: invalidate,
+    scope: writes,
+    onSettled: invalidate,
   });
 }
 
@@ -106,7 +124,8 @@ export function useFixDoctor() {
   const invalidate = useInvalidateAll();
   return useMutation({
     mutationFn: (fix: Fix) => api.fixDoctor(fix),
-    onSuccess: invalidate,
+    scope: writes,
+    onSettled: invalidate,
     onError: (e) => toast.error(errorMessage(e)),
   });
 }
@@ -116,7 +135,8 @@ export function useCreateProject() {
   return useMutation({
     mutationFn: ({ project, openPage }: { project: NewProject; openPage: boolean }) =>
       api.createProject(project, openPage),
-    onSuccess: invalidate,
+    scope: writes,
+    onSettled: invalidate,
   });
 }
 
@@ -124,7 +144,8 @@ export function useArchiveProfile() {
   const invalidate = useInvalidateAll();
   return useMutation({
     mutationFn: (id: string) => api.archiveProfile(id),
-    onSuccess: invalidate,
+    scope: writes,
+    onSettled: invalidate,
     onError: (e) => toast.error(errorMessage(e)),
   });
 }
@@ -141,7 +162,8 @@ export function useImportProfiles() {
   const invalidate = useInvalidateAll();
   return useMutation({
     mutationFn: ({ chosen, removeOld }: { chosen: ImportProposal[]; removeOld: boolean }) => api.importProfiles(chosen, removeOld),
-    onSuccess: invalidate,
+    scope: writes,
+    onSettled: invalidate,
   });
 }
 
@@ -149,7 +171,8 @@ export function useCleanupApply() {
   const invalidate = useInvalidateAll();
   return useMutation({
     mutationFn: (diffs: string[]) => api.cleanupApply(diffs),
-    onSuccess: invalidate,
+    scope: writes,
+    onSettled: invalidate,
   });
 }
 
@@ -166,12 +189,14 @@ export function useSettings() {
   return useQuery({ queryKey: keys.settings, queryFn: () => api.settings() });
 }
 
+/** Changes some settings on top of the current ones (a stale form never undoes another change). */
 export function useUpdateSettings() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (settings: Settings) => api.updateSettings(settings),
-    // Paths change the defaults of new profiles, the switches the generated configs.
-    onSuccess: () => client.invalidateQueries(),
+    scope: writes,
+    mutationFn: async (patch: Partial<Settings>) => api.updateSettings({ ...(await api.settings()), ...patch }),
+    // Paths change the defaults of new keys, the switches the generated configs.
+    onSettled: () => client.invalidateQueries(),
   });
 }
 

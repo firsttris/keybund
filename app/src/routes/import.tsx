@@ -34,6 +34,8 @@ export function ImportPage() {
       </div>
       {done && <Done done={done} />}
       {proposals.isPending && <Spinner />}
+      {proposals.isError && <FieldError>{errorMessage(proposals.error)}</FieldError>}
+      {cleanup.isError && <FieldError>{errorMessage(cleanup.error)}</FieldError>}
       {proposals.data && proposals.data.length > 0 && <Proposals proposals={proposals.data} onDone={setDone} />}
       {proposals.data?.length === 0 && removable.length > 0 && <Cleanup />}
       {nothingLeft && !done && (
@@ -88,12 +90,14 @@ function Done({ done }: { done: ImportDone }) {
 }
 
 function Proposals({ proposals, onDone }: { proposals: ImportProposal[]; onDone: (d: ImportDone) => void }) {
-  const [choices, setChoices] = useState<Record<string, Choice>>(() =>
-    Object.fromEntries(proposals.map((p) => [p.profile.id, { selected: p.key_exists, name: p.profile.name, folder: "" }])),
+  const [edited, setChoices] = useState<Record<string, Choice>>({});
+  // Proposals can change while the page is open (refetch): new ones get defaults.
+  const choices: Record<string, Choice> = Object.fromEntries(
+    proposals.map((p) => [p.profile.id, edited[p.profile.id] ?? { selected: p.key_exists, name: p.profile.name, folder: "" }]),
   );
   const [removeOld, setRemoveOld] = useState(true);
   const importProfiles = useImportProfiles();
-  const set = (id: string, patch: Partial<Choice>) => setChoices((c) => ({ ...c, [id]: { ...c[id], ...patch } }));
+  const set = (id: string, patch: Partial<Choice>) => setChoices((c) => ({ ...c, [id]: { ...choices[id], ...c[id], ...patch } }));
   const chosen = proposals
     .filter((p) => choices[p.profile.id]?.selected)
     .map((p) => {

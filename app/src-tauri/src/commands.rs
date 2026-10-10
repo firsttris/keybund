@@ -266,7 +266,10 @@ pub async fn run_doctor(state: State<'_, AppState>) -> CmdResult<Report> {
 pub async fn fix_doctor(state: State<'_, AppState>, fix: Fix) -> CmdResult<Report> {
     let env = state.env.clone();
     blocking(move || {
-        doctor::fix(&env, &fix)?;
+        {
+            let _write = api::writing();
+            doctor::fix(&env, &fix)?;
+        }
         Ok(doctor::run(&env))
     })
     .await

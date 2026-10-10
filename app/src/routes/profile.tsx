@@ -115,12 +115,12 @@ function KeyDetail({ view }: { view: ProfileView }) {
             <UsageCard view={view} />
             <KeyCard view={view} onCopy={onCopy} />
             {/* A stored identity stays visible (and clearable) even without folders. */}
-            {profile.folders.length > 0 || profile.git ? <GitCard profile={profile} /> : usesGit && <GlobalIdentityCard />}
+            {profile.folders.length > 0 || profile.git ? <GitCard key={JSON.stringify(profile.git)} profile={profile} /> : usesGit && <GlobalIdentityCard />}
             {!profile.archived && <DangerCard view={view} />}
           </div>
         </TabsContent>
         <TabsContent value="config">
-          <GeneratedConfig id={profile.id} />
+          <GeneratedConfig id={profile.id} archived={profile.archived} />
         </TabsContent>
       </Tabs>
 
@@ -134,15 +134,16 @@ type Adding = "folder" | "git" | "server" | null;
 /** The heart of the page: everything this key is used for, in one list. */
 function UsageCard({ view }: { view: ProfileView }) {
   const { profile } = view;
-  const update = useUpdateProfile();
+  const update = useUpdateProfile(profile.id);
   const setDefault = useSetDefault();
   const [adding, setAdding] = useState<Adding>(null);
   const accounts = gitAccounts(profile);
   const serverList = servers(profile);
   const empty = profile.folders.length === 0 && profile.hosts.length === 0 && !view.is_default;
-  const removeHost = (h: HostEntry) => update.mutate({ ...profile, hosts: profile.hosts.filter((x) => x !== h) });
+  const same = (a: HostEntry, b: HostEntry) => a.provider === b.provider && a.hostname === b.hostname && a.alias === b.alias;
+  const removeHost = (h: HostEntry) => update.mutate((p) => ({ ...p, hosts: p.hosts.filter((x) => !same(x, h)) }));
   const addHost = (host: HostEntry) =>
-    update.mutate({ ...profile, hosts: [...profile.hosts, host] }, { onSuccess: () => setAdding(null) });
+    update.mutate((p) => ({ ...p, hosts: [...p.hosts, host] }), { onSuccess: () => setAdding(null) });
 
   return (
     <Card className="col-span-full" aria-labelledby="usage-title">
@@ -182,7 +183,7 @@ function UsageCard({ view }: { view: ProfileView }) {
                     variant="ghost"
                     size="icon"
                     aria-label={`Ordner ${f} entfernen`}
-                    onClick={() => update.mutate({ ...profile, folders: profile.folders.filter((x) => x !== f) })}
+                    onClick={() => update.mutate((p) => ({ ...p, folders: p.folders.filter((x) => x !== f) }))}
                   >
                     <Trash2 aria-hidden />
                   </Button>
@@ -377,7 +378,12 @@ function AccountRow({
   const provider = providerLabel(host.provider);
   const signs = host.provider === "github" && !!profile.git?.sign;
   const addKey = async () => {
-    await copy.mutateAsync(profile.id).catch(() => undefined);
+    // Without the pubkey in the clipboard there is nothing to paste (the toast says why).
+    const copied = await copy.mutateAsync(profile.id).then(
+      () => true,
+      () => false,
+    );
+    if (!copied) return;
     if (addKeyUrl) await openExternal(addKeyUrl);
     setPasting(true);
   };
@@ -510,10 +516,11 @@ function ServerRow({ profile, host, onRemove }: { profile: Profile; host: HostEn
 
 /** Adds a git folder; asks for the git identity and the hoster if missing. */
 function FolderForm({ profile, onDone }: { profile: Profile; onDone: () => void }) {
-  const update = useUpdateProfile();
+  const update = useUpdateProfile(profile.id);
   const settings = useSettings();
   const all = useProfiles();
-  const needsIdentity = !profile.git;
+  // Asked with the first folder only; later folders share the key's identity (card below).
+  const needsIdentity = !profile.git && profile.folders.length === 0;
   const global = all.data?.global_identity;
   // Usually the same person: the name from ~/.gitconfig or another key.
   const knownName = global?.name ?? all.data?.profiles.find((p) => p.profile.git?.name)?.profile.git?.name ?? "";
@@ -529,14 +536,20 @@ function FolderForm({ profile, onDone }: { profile: Profile; onDone: () => void 
   const error = !folder.trim() || identityOk ? null : "Bitte Name und eine gültige E-Mail eingeben.";
   const save = () => {
     const value = folder.trim() || suggestion;
-    const next: Profile = { ...profile, folders: [...profile.folders, value] };
     // The same as ~/.gitconfig: nothing of its own, the key follows the global identity.
     const sameAsGlobal = gitName.trim() === (global?.name ?? "") && gitEmail.trim() === (global?.email ?? "");
-    if (needsIdentity && !sameAsGlobal) next.git = { name: gitName.trim(), email: gitEmail.trim(), sign: false };
-    if (needsAccount && provider) {
-      next.hosts = [...profile.hosts, { provider, hostname: defaultHostname(provider), alias: null, user: null, port: null }];
-    }
-    update.mutate(next, { onSuccess: onDone });
+    const identity = needsIdentity && !sameAsGlobal ? { name: gitName.trim(), email: gitEmail.trim(), sign: false } : null;
+    const account: HostEntry | null =
+      needsAccount && provider ? { provider, hostname: defaultHostname(provider), alias: null, user: null, port: null } : null;
+    update.mutate(
+      (p) => ({
+        ...p,
+        folders: [...p.folders, value],
+        git: identity ?? p.git,
+        hosts: account && gitAccounts(p).length === 0 ? [...p.hosts, account] : p.hosts,
+      }),
+      { onSuccess: onDone },
+    );
   };
   const browse = async () => {
     const picked = await pickFolder();
@@ -809,19 +822,22 @@ function GlobalIdentityCard() {
   );
 }
 
+/** Remounted (via `key`) whenever the saved identity changes, so the fields never show stale values. */
 function GitCard({ profile }: { profile: Profile }) {
-  const update = useUpdateProfile();
+  const update = useUpdateProfile(profile.id);
   const global = useGlobalIdentity();
   const git = profile.git ?? { name: "", email: "", sign: false };
   const [name, setName] = useState(git.name);
   const [email, setEmail] = useState(git.email);
   const dirty = name !== git.name || email !== git.email;
   const emailOk = email === "" || isValidEmail(email);
-  const save = (sign = git.sign) => {
-    const next = { name: name.trim(), email: email.trim(), sign };
-    // Nothing of its own: the key simply follows ~/.gitconfig.
-    update.mutate({ ...profile, git: next.name || next.email || next.sign ? next : null });
-  };
+  // Nothing of its own: the key simply follows ~/.gitconfig.
+  const orNull = (g: { name: string; email: string; sign: boolean }) => (g.name || g.email || g.sign ? g : null);
+  const save = () =>
+    update.mutate((p) => ({ ...p, git: orNull({ name: name.trim(), email: email.trim(), sign: p.git?.sign ?? false }) }));
+  // The switch changes only signing, never half-typed name or e-mail.
+  const setSign = (sign: boolean) =>
+    update.mutate((p) => ({ ...p, git: orNull({ ...(p.git ?? { name: "", email: "" }), sign }) }));
   return (
     <Card aria-labelledby="git-title">
       <CardTitle id="git-title">Git-Identität</CardTitle>
@@ -883,8 +899,8 @@ function GitCard({ profile }: { profile: Profile }) {
         <Switch
           aria-labelledby="sign-label"
           checked={git.sign}
-          disabled={profile.archived || !git.email || update.isPending}
-          onCheckedChange={(sign) => save(sign)}
+          disabled={profile.archived || update.isPending || (!git.email && !git.sign)}
+          onCheckedChange={setSign}
         />
       </div>
     </Card>
@@ -948,9 +964,16 @@ function explainFile(path: string): string {
   return "";
 }
 
-function GeneratedConfig({ id }: { id: string }) {
+function GeneratedConfig({ id, archived }: { id: string; archived: boolean }) {
   const { data, isPending } = useGeneratedConfig(id);
   if (isPending) return <Spinner />;
+  if (archived) {
+    return (
+      <p className="m-0 max-w-[760px] text-[13px] leading-normal text-muted-foreground">
+        Dieser Key ist archiviert: Keybund schreibt keine Regeln mehr für ihn, Git und ssh benutzen ihn nicht.
+      </p>
+    );
+  }
   return (
     <div className="flex flex-col gap-4">
       <p className="m-0 max-w-[760px] text-[13px] leading-normal text-muted-foreground">

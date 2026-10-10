@@ -47,7 +47,8 @@ const newRoute = createRoute({
     typeof search.key === "string" ? { key: search.key } : {},
   component: function New() {
     const { key } = newRoute.useSearch();
-    return <NewKeyPage existingKey={key} />;
+    // From "Als Key übernehmen" to "Neuer Key" starts a fresh form.
+    return <NewKeyPage key={key ?? ""} existingKey={key} />;
   },
 });
 

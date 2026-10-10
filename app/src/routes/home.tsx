@@ -7,6 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import type { ProfileView } from "@/lib/bindings";
 import { activeKeys, gitAccounts, servers, usageParts } from "@/lib/categories";
+import { errorMessage } from "@/lib/api";
 import { useDoctor, useProfiles } from "@/lib/queries";
 import { cn, formatRelative, providerLabel } from "@/lib/utils";
 
@@ -82,6 +83,18 @@ function Todo() {
         ),
       });
     }
+  }
+  if (doctor.isError) {
+    items.push({
+      id: "doctor-failed",
+      tone: "danger",
+      text: <span className="font-medium">Die Prüfung von ssh und Git ist fehlgeschlagen: {errorMessage(doctor.error)}</span>,
+      link: (
+        <Link to="/doctor" className={linkClass}>
+          Zum Doctor
+        </Link>
+      ),
+    });
   }
   for (const c of doctor.data?.checks.filter((c) => c.status !== "ok") ?? []) {
     items.push({

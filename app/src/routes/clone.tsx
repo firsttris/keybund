@@ -51,7 +51,10 @@ export function ClonePage() {
         >
           <Label htmlFor="clone-url">Repo-URL</Label>
           <div className="flex flex-wrap gap-2">
-            <Input id="clone-url" className="flex-[1_1_280px] font-mono" placeholder="git@github.com:team/repo.git" value={url} onChange={(e) => setUrl(e.target.value)} />
+            <Input id="clone-url" className="flex-[1_1_280px] font-mono" placeholder="git@github.com:team/repo.git" value={url}
+              // A changed URL needs a new check: key and folder came from the old one.
+              onChange={(e) => (setUrl(e.target.value), preview.reset(), clone.reset())}
+            />
             <Button type="submit" variant="outline" disabled={!url.trim()}>
               Prüfen
             </Button>
