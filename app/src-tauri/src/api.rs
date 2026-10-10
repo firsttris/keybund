@@ -178,6 +178,8 @@ pub struct CreatedProject {
     pub profile: ProfileView,
     pub report: ApplyReport,
     pub public_key: String,
+    /// Why the provider page could not be opened, if it was requested.
+    pub open_error: Option<String>,
 }
 
 /// Creates the key (if requested), the project folders and the profile,
@@ -201,6 +203,7 @@ pub fn create_project(env: &Env, project: &NewProject) -> CmdResult<CreatedProje
         profile: profile_view(env, &config, profile, None),
         report,
         public_key: keygen::read_public(env, &profile.key)?.line(),
+        open_error: None,
     })
 }
 

@@ -52,20 +52,7 @@ fn pipe_to(program: &str, args: &[&str], text: &str) -> Result<()> {
     Ok(())
 }
 
-/// Opens a URL in the default browser.
+/// Opens a URL in the default browser (also from a toolbox).
 pub fn open_url(url: &str) -> Result<()> {
-    let (program, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
-        ("open", vec![url])
-    } else if cfg!(windows) {
-        ("cmd", vec!["/C", "start", "", url])
-    } else {
-        ("xdg-open", vec![url])
-    };
-    Command::new(program)
-        .args(args)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .with_context(|| format!("{program} nicht gefunden"))?;
-    Ok(())
+    Ok(keybund_core::desktop::open_url(url)?)
 }

@@ -11,7 +11,7 @@ import { createAppRouter } from "@/router";
  * can change the backend's state before the first request.
  */
 export async function renderApp(path = "/", setup?: (backend: MockBackend) => void) {
-  const backend = installMockBackend({ latency: 0 });
+  const backend = installMockBackend({ latency: 0, openTabs: false });
   setup?.(backend);
   const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }));
   const user = userEvent.setup();

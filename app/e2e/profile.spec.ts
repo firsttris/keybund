@@ -1,4 +1,4 @@
-import { expect, mockState, test } from "./fixtures";
+import { expect, mockState, pagePosition, test } from "./fixtures";
 
 test("navigates to a profile and shows key, hosts and folders", async ({ app }) => {
   await app.getByRole("navigation", { name: "Profile" }).getByRole("link", { name: /Sparkasse/ }).click();
@@ -113,4 +113,24 @@ test("sidebar search filters profiles", async ({ app }) => {
 test("unknown profile shows a not-found page", async ({ app }) => {
   await app.goto("/#/profile/gibtsnicht");
   await expect(app.getByRole("heading", { name: "Profil nicht gefunden" })).toBeVisible();
+});
+
+test("the e-mail warning does not move the signing switch", async ({ app }) => {
+  await app.goto("/#/profile/sparkasse");
+  const sign = app.getByRole("switch", { name: "Commits signieren" });
+  const before = await pagePosition(sign);
+  await app.getByLabel("E-Mail").fill("kaputt");
+  await expect(app.getByRole("alert")).toHaveText("Bitte eine gültige E-Mail-Adresse eingeben.");
+  expect(await pagePosition(sign)).toEqual(before);
+  await expect(app.getByRole("button", { name: "Identität speichern" })).toBeDisabled();
+});
+
+test("a failing browser start is explained, not swallowed", async ({ app }) => {
+  await app.goto("/#/profile/sparkasse");
+  await app.evaluate(() => {
+    (window as unknown as { __keybundMock: { state: { openFails: boolean } } }).__keybundMock.state.openFails = true;
+  });
+  await app.getByRole("button", { name: "Bei GitLab hinzufügen" }).click();
+  await expect(app.getByText("Browser konnte nicht geöffnet werden")).toBeVisible();
+  await expect(app.getByRole("button", { name: "Link kopieren" })).toBeVisible();
 });

@@ -11,6 +11,7 @@
 pub mod apply;
 pub mod archive;
 pub mod clone;
+pub mod desktop;
 pub mod doctor;
 pub mod env;
 pub mod error;

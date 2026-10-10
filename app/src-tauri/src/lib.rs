@@ -18,7 +18,7 @@ macro_rules! keybund_commands {
             update_profile,
             set_default_profile,
             copy_public_key::<$r>,
-            open_url::<$r>,
+            open_url,
             test_connection,
             last_test,
             plan_changes,
@@ -61,7 +61,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
         .manage(commands::AppState::new(env))
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {

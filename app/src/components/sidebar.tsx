@@ -21,7 +21,7 @@ export function Sidebar() {
   const archived = data?.profiles.filter((p) => p.profile.archived && matches(p.profile.name)) ?? [];
 
   return (
-    <aside className="flex flex-[1_1_248px] flex-col gap-5 border-r border-border bg-card px-3 py-4 max-[808px]:border-r-0 max-[808px]:border-b">
+    <aside className="flex flex-[1_1_248px] flex-col gap-5 border-r border-border bg-card px-3 py-4 max-[808px]:border-r-0 max-[808px]:border-b min-[809px]:sticky min-[809px]:top-0 min-[809px]:h-screen min-[809px]:self-start min-[809px]:overflow-y-auto">
       <Link to="/" className="flex items-center gap-2.5 px-2 py-1 text-foreground no-underline">
         <span className="flex size-[30px] items-center justify-center rounded-lg bg-primary text-background">
           <KeyRound aria-hidden className="size-4" strokeWidth={2.2} />

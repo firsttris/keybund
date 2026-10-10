@@ -18,6 +18,7 @@ export const commands = {
 	updateProfile: (profile: Profile) => typedError<ProfileView, CmdError>(__TAURI_INVOKE("update_profile", { profile })),
 	setDefaultProfile: (id: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("set_default_profile", { id })),
 	copyPublicKey: (id: string) => typedError<string, CmdError>(__TAURI_INVOKE("copy_public_key", { id })),
+	/**  Opens an https link in the browser, also from a toolbox or an AppImage. */
 	openUrl: (url: string) => typedError<null, CmdError>(__TAURI_INVOKE("open_url", { url })),
 	testConnection: (id: string) => typedError<ProbeResult, CmdError>(__TAURI_INVOKE("test_connection", { id })),
 	lastTest: (id: string) => typedError<{
@@ -87,6 +88,8 @@ export type CreatedProject = {
 	profile: ProfileView,
 	report: ApplyReport,
 	public_key: string,
+	/**  Why the provider page could not be opened, if it was requested. */
+	open_error: string | null,
 };
 
 /**  A pending change to one file. */

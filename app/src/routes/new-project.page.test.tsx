@@ -53,6 +53,64 @@ describe("wizard", () => {
     expect(backend.state.defaultProfile).toBe("kunde-c");
   });
 
+  it("updates folder and key comment when the name changes, unless edited", async () => {
+    const { user } = await renderApp("/new");
+    const next = () => user.click(screen.getByRole("button", { name: /Weiter/ }));
+    const back = () => user.click(screen.getByRole("button", { name: "Zurück" }));
+    await user.type(await screen.findByLabelText("Projektname"), "Kunde C");
+    await screen.findByText("kunde-c");
+    await next();
+    await next();
+    expect(screen.getByLabelText("Ordner")).toHaveValue("~/dev/kunde-c/");
+
+    await back();
+    await back();
+    const name = screen.getByLabelText("Projektname");
+    await user.clear(name);
+    await user.type(name, "Kunde D");
+    await screen.findByText("kunde-d");
+    await next();
+    await next();
+    expect(screen.getByLabelText("Ordner")).toHaveValue("~/dev/kunde-d/");
+
+    // Edited by hand: a later rename keeps it.
+    await user.clear(screen.getByLabelText("Ordner"));
+    await user.type(screen.getByLabelText("Ordner"), "~/work/d/");
+    await back();
+    await back();
+    await user.type(screen.getByLabelText("Projektname"), "2");
+    await screen.findByText("kunde-d2");
+    await next();
+    await next();
+    expect(screen.getByLabelText("Ordner")).toHaveValue("~/work/d/");
+    await next();
+    await user.type(screen.getByLabelText("Name"), "T");
+    await user.type(screen.getByLabelText("E-Mail"), "t@d.de");
+    await next();
+    expect(await screen.findByLabelText("Kommentar")).toHaveValue("tristan@zentrale-kunde-d2");
+    expect(screen.getByText("ed25519 · ~/.ssh/kunde-d2_ed25519")).toBeInTheDocument();
+  });
+
+  it("tells when the provider page did not open", async () => {
+    const { user } = await renderApp("/new", (b) => {
+      b.state.openFails = true;
+    });
+    const next = () => user.click(screen.getByRole("button", { name: /Weiter/ }));
+    await user.type(await screen.findByLabelText("Projektname"), "Kunde F");
+    await screen.findByText("kunde-f");
+    await next();
+    await next();
+    await next();
+    await user.type(screen.getByLabelText("Name"), "T");
+    await user.type(screen.getByLabelText("E-Mail"), "t@f.de");
+    await next();
+    await screen.findByText("Vorschau der Änderungen");
+    await user.click(screen.getByRole("button", { name: /Anwenden & Pubkey kopieren/ }));
+    const alert = await screen.findByText("Die GitHub-Seite hat sich nicht geöffnet");
+    expect(alert.parentElement).toHaveTextContent("https://github.com/settings/ssh/new");
+    expect(alert.parentElement).toHaveTextContent("xdg-open");
+  });
+
   it("shows validation errors and a failed test", async () => {
     const { user } = await renderApp("/new");
     await user.click(await screen.findByRole("button", { name: /Weiter/ }));

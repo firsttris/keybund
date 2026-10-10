@@ -18,12 +18,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { FieldError, Label } from "@/components/ui/label";
+import { ErrorSlot, FieldError, Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { api, errorMessage } from "@/lib/api";
+import { errorMessage } from "@/lib/api";
+import { openExternal } from "@/lib/open";
 import type { HostEntry, Profile, ProfileView, Provider } from "@/lib/bindings";
 import {
   useArchiveProfile,
@@ -105,7 +106,7 @@ function ProfileDetail({ view }: { view: ProfileView }) {
               Verbindung testen
             </Button>
             {view.add_key_urls[0] && (
-              <Button variant="outline" onClick={() => api.openUrl(view.add_key_urls[0].url)}>
+              <Button variant="outline" onClick={() => openExternal(view.add_key_urls[0].url)}>
                 <ExternalLink aria-hidden />
                 Bei {providerLabel(view.add_key_urls[0].provider)} hinzufügen
               </Button>
@@ -271,7 +272,7 @@ function HostsCard({ profile, links }: { profile: Profile; links: string[] }) {
             {link && !profile.archived && (
               <button
                 className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-foreground hover:bg-background"
-                onClick={() => api.openUrl(link)}
+                onClick={() => openExternal(link)}
               >
                 Key eintragen
                 <ExternalLink aria-hidden className="size-[13px]" />
@@ -473,12 +474,12 @@ function GitCard({ profile }: { profile: Profile }) {
             <Input id="git-mail" type="email" value={email} aria-invalid={!emailOk} onChange={(e) => setEmail(e.target.value)} disabled={profile.archived} />
           </div>
         </div>
-        {!emailOk && <FieldError>Bitte eine gültige E-Mail-Adresse eingeben.</FieldError>}
-        {dirty && (
-          <Button size="sm" type="submit" className="self-end" disabled={!emailOk || update.isPending}>
+        <div className="flex items-start justify-between gap-3">
+          <ErrorSlot message={!emailOk && "Bitte eine gültige E-Mail-Adresse eingeben."} />
+          <Button size="sm" type="submit" disabled={!dirty || !emailOk || update.isPending || profile.archived}>
             Identität speichern
           </Button>
-        )}
+        </div>
       </form>
       <div className="flex items-center justify-between gap-3">
         <div className="flex flex-col gap-0.5">

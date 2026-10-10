@@ -84,6 +84,17 @@ describe("profile editing", () => {
     expect(backend.state.openedUrls).toEqual(["https://gitlab.kunde.de/-/user_settings/ssh_keys"]);
   });
 
+  it("explains when the browser cannot be opened", async () => {
+    const { user, backend } = await renderApp("/profile/sparkasse", (b) => {
+      b.state.openFails = true;
+    });
+    await user.click(await screen.findByRole("button", { name: "Bei GitLab hinzufügen" }));
+    expect(await screen.findByText("Browser konnte nicht geöffnet werden")).toBeInTheDocument();
+    expect(screen.getByText(/xdg-open.*https:\/\/gitlab\.kunde\.de\/-\/user_settings\/ssh_keys/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Link kopieren" })).toBeInTheDocument();
+    expect(backend.state.openedUrls).toEqual([]);
+  });
+
   it("shows a not-found page", async () => {
     await renderApp("/profile/nope");
     expect(await screen.findByRole("heading", { name: "Profil nicht gefunden" })).toBeInTheDocument();

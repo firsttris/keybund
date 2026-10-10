@@ -81,3 +81,20 @@ test("layout has no horizontal scrolling", async ({ app }) => {
     expect(overflow, route).toBeLessThanOrEqual(0);
   }
 });
+
+test("sidebar stays in place when switching pages", async ({ app }, testInfo) => {
+  test.skip(testInfo.project.name === "narrow", "the sidebar sits above the content on narrow screens");
+  const doctor = app.getByRole("link", { name: /^Doctor/ });
+  await app.goto("/#/profile/sparkasse");
+  await expect(app.getByRole("heading", { level: 1, name: "Sparkasse" })).toBeVisible();
+  const start = await doctor.boundingBox();
+  for (const [link, heading] of [
+    [/^Doctor/, "Doctor"],
+    [/Repo klonen/, "Repo klonen"],
+    [/Einstellungen/, "Einstellungen"],
+  ] as const) {
+    await app.getByRole("link", { name: link }).click();
+    await expect(app.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+    expect(await doctor.boundingBox(), String(link)).toEqual(start);
+  }
+});

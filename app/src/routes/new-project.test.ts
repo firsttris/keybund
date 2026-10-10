@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyDraft, stepError, toProject, type Draft } from "./new-project";
+import { emptyDraft, stepError, toProject, withDefaults, type Draft } from "./new-project";
 
 const github: Draft = {
   ...emptyDraft(),
@@ -80,5 +80,43 @@ describe("stepError", () => {
     expect(stepError(4, { ...github, keyMode: "existing", existingPath: "" })).toMatch(/vorhandenen Key/);
     expect(stepError(4, github)).toBeNull();
     expect(stepError(5, github)).toBeNull();
+  });
+});
+
+describe("withDefaults", () => {
+  const defaults = (id: string) => ({
+    id,
+    key_path: `~/.ssh/${id}_ed25519`,
+    folder: `~/dev/${id}/`,
+    key_comment: `t@host-${id}`,
+    key_exists: false,
+    id_taken: false,
+  });
+
+  it("derives folder and comment from the current name", () => {
+    const d = withDefaults({ ...emptyDraft(), name: "Kunde C" }, defaults("kunde-c"));
+    expect(d.folder).toBe("~/dev/kunde-c/");
+    expect(d.comment).toBe("t@host-kunde-c");
+  });
+
+  it("follows a renamed project", () => {
+    const renamed = { ...emptyDraft(), name: "Kunde D" };
+    // Defaults still loading for the new name: the folder already follows,
+    // the stale comment of the old name is not used.
+    const d = withDefaults(renamed, defaults("kunde-c"));
+    expect(d.folder).toBe("~/dev/kunde-d/");
+    expect(d.comment).toBe("");
+    expect(withDefaults(renamed, defaults("kunde-d")).comment).toBe("t@host-kunde-d");
+  });
+
+  it("keeps values the user edited", () => {
+    const edited = { ...emptyDraft(), name: "Kunde D", folder: "~/work/x/", folderEdited: true, comment: "mine", commentEdited: true };
+    expect(withDefaults(edited, defaults("kunde-d"))).toMatchObject({ folder: "~/work/x/", comment: "mine" });
+    // An intentionally emptied folder (servers) stays empty.
+    expect(withDefaults({ ...edited, folder: "" }, defaults("kunde-d")).folder).toBe("");
+  });
+
+  it("is empty without a name", () => {
+    expect(withDefaults(emptyDraft(), null)).toMatchObject({ folder: "", comment: "" });
   });
 });

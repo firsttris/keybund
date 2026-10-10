@@ -173,5 +173,7 @@ Die Workflows kommen aus [firsttris/workflows](https://github.com/firsttris/work
   oder ksshaskpass), danach hält der Agent den Key. Der Verbindungstest nutzt deshalb kein `BatchMode`; `doctor` prüft
   die geschriebenen Dateien.
 - Erster Kontakt blockiert im BatchMode → Test mit `StrictHostKeyChecking=accept-new`.
+- Browser aus einer Toolbox oder einem AppImage öffnen → `flatpak-spawn --host xdg-open` bzw. eine von
+  AppImage-Pfaden bereinigte Umgebung, Fallback `gio open`; klappt es nicht, zeigt die App den Link zum Kopieren.
 - Zu offene Rechte → `doctor --fix` setzt 700/600.
 - Ein globaler `Host github.com` mit `IdentityFile` mischt sich ein → `doctor` warnt.

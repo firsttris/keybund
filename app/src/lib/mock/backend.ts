@@ -93,6 +93,10 @@ export interface MockState {
   lastTests: Map<string, LastTest>;
   doctorIncludeOnTop: boolean;
   openedUrls: string[];
+  /** Simulates a missing xdg-open. */
+  openFails: boolean;
+  /** Opens real browser tabs (browser preview); off in tests. */
+  openTabs: boolean;
   clipboard: string | null;
   cloned: string[];
   /** Artificial latency for slow commands (ms). */
@@ -154,6 +158,8 @@ export function seedState(): MockState {
     ]),
     doctorIncludeOnTop: false,
     openedUrls: [],
+    openFails: false,
+    openTabs: false,
     clipboard: null,
     cloned: [],
     latency: 300,
@@ -419,6 +425,13 @@ function which(state: MockState, query: string): WhichResult {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function createMockBackend(state: MockState = seedState()) {
+  function openUrl(url: string) {
+    if (!url.startsWith("https://")) throw new MockError("tool_failed", `Nur https-Links werden geöffnet: ${url}`);
+    if (state.openFails) throw new MockError("tool_missing", "Programm „xdg-open“ nicht gefunden – ist es installiert?");
+    state.openedUrls.push(url);
+    if (state.openTabs) window.open(url, "_blank", "noopener");
+  }
+
   async function handle(cmd: string, args: Args): Promise<unknown> {
     switch (cmd) {
       case "load_profiles": {
@@ -469,11 +482,19 @@ export function createMockBackend(state: MockState = seedState()) {
         state.applied = renderAll(state);
         const v = view(state, p);
         state.clipboard = v.key.public_key;
-        if (args.openProviderPage && v.add_key_urls[0]) state.openedUrls.push(v.add_key_urls[0].url);
+        let openError: string | null = null;
+        if (args.openProviderPage && v.add_key_urls[0]) {
+          try {
+            openUrl(v.add_key_urls[0].url);
+          } catch (e) {
+            openError = (e as MockError).message;
+          }
+        }
         const created: CreatedProject = {
           profile: v,
           report: { written: plan.changes.map((c) => c.path), deleted: [], backups: [] },
           public_key: v.key.public_key ?? "",
+          open_error: openError,
         };
         return created;
       }
@@ -496,7 +517,7 @@ export function createMockBackend(state: MockState = seedState()) {
         return key;
       }
       case "open_url":
-        state.openedUrls.push(String(args.url));
+        openUrl(String(args.url));
         return null;
       case "test_connection": {
         await sleep(state.latency);

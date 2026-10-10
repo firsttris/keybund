@@ -8,7 +8,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
-use tauri_plugin_opener::OpenerExt;
 
 use keybund_core::apply::{ApplyReport, Plan};
 use keybund_core::archive::ArchiveResult;
@@ -80,11 +79,12 @@ pub async fn create_project<R: Runtime>(
     open_provider_page: bool,
 ) -> CmdResult<CreatedProject> {
     let env = state.env.clone();
-    let created = blocking(move || api::create_project(&env, &project)).await?;
+    let mut created = blocking(move || api::create_project(&env, &project)).await?;
     let _ = app.clipboard().write_text(created.public_key.clone());
     if open_provider_page {
-        if let Some(link) = created.profile.add_key_urls.first() {
-            let _ = app.opener().open_url(&link.url, None::<&str>);
+        if let Some(link) = created.profile.add_key_urls.first().map(|l| l.url.clone()) {
+            created.open_error =
+                blocking(move || Ok(keybund_core::desktop::open_url(&link).err().map(|e| e.to_string()))).await?;
         }
     }
     Ok(created)
@@ -112,13 +112,11 @@ pub fn copy_public_key<R: Runtime>(app: AppHandle<R>, state: State<'_, AppState>
     Ok(key)
 }
 
+/// Opens an https link in the browser, also from a toolbox or an AppImage.
 #[tauri::command]
 #[specta::specta]
-pub fn open_url<R: Runtime>(app: AppHandle<R>, url: String) -> CmdResult<()> {
-    if !url.starts_with("https://") {
-        return Err(CmdError::other("Nur https-Links werden geöffnet"));
-    }
-    app.opener().open_url(url, None::<&str>).map_err(|e| CmdError::other(e.to_string()))
+pub async fn open_url(url: String) -> CmdResult<()> {
+    blocking(move || Ok(keybund_core::desktop::open_url(&url)?)).await
 }
 
 #[tauri::command]

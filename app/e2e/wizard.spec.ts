@@ -1,4 +1,4 @@
-import { expect, mockState, test } from "./fixtures";
+import { expect, mockState, pagePosition, test } from "./fixtures";
 
 test("creates a GitHub project end to end", async ({ app }) => {
   await app.getByRole("link", { name: "Neues Projekt" }).click();
@@ -119,4 +119,47 @@ test("back keeps entered values", async ({ app }) => {
   await expect(app.getByLabel("Projektname")).toHaveValue("Kunde D");
   await app.getByRole("button", { name: "Weiter" }).click();
   await expect(app.getByLabel("Hostname")).toHaveValue("gitlab.kunde-d.de");
+});
+
+test("typing the project name does not move the form", async ({ app }) => {
+  await app.goto("/#/new");
+  const color = app.getByText("Farbe", { exact: true });
+  const before = await pagePosition(color);
+  await app.getByLabel("Projektname").fill("Kunde C");
+  await expect(app.getByText("Profil-ID: kunde-c")).toBeVisible();
+  expect(await pagePosition(color)).toEqual(before);
+  await app.getByLabel("Projektname").fill("");
+  expect(await pagePosition(color)).toEqual(before);
+});
+
+test("validation messages do not move the buttons", async ({ app }) => {
+  await app.goto("/#/new");
+  const next = app.getByRole("button", { name: "Weiter" });
+  const before = await pagePosition(next);
+  await next.click();
+  await expect(app.getByRole("alert")).toHaveText("Bitte einen Projektnamen eingeben.");
+  expect(await pagePosition(next)).toEqual(before);
+
+  await app.getByLabel("Projektname").fill("Kunde X");
+  await next.click();
+  await expect(app.getByRole("alert")).toHaveCount(0);
+  const onHost = await pagePosition(next);
+  await app.getByLabel("Hostname").fill("");
+  await next.click();
+  await expect(app.getByRole("alert")).toHaveText("Bitte einen Hostnamen eingeben.");
+  expect(await pagePosition(next)).toEqual(onHost);
+});
+
+test("renaming the project updates the folder", async ({ app }) => {
+  await app.goto("/#/new");
+  await app.getByLabel("Projektname").fill("Kunde C");
+  await app.getByRole("button", { name: "Weiter" }).click();
+  await app.getByRole("button", { name: "Weiter" }).click();
+  await expect(app.getByLabel("Ordner")).toHaveValue("~/dev/kunde-c/");
+  await app.getByRole("button", { name: "Zurück" }).click();
+  await app.getByRole("button", { name: "Zurück" }).click();
+  await app.getByLabel("Projektname").fill("Kunde E");
+  await app.getByRole("button", { name: "Weiter" }).click();
+  await app.getByRole("button", { name: "Weiter" }).click();
+  await expect(app.getByLabel("Ordner")).toHaveValue("~/dev/kunde-e/");
 });

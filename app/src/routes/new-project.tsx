@@ -7,11 +7,12 @@ import { ColorDot } from "@/components/color-dot";
 import { DiffView } from "@/components/diff-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FieldError, FieldHint, Label } from "@/components/ui/label";
+import { ErrorSlot, FieldError, FieldHint, Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { api, errorMessage } from "@/lib/api";
-import type { CreatedProject, NewProject, Provider } from "@/lib/bindings";
+import type { CreatedProject, NewProject, ProfileDefaults, Provider } from "@/lib/bindings";
+import { openExternal } from "@/lib/open";
 import { useCreateProject, useScanKeys, useTestConnection } from "@/lib/queries";
 import { pickFolder } from "@/lib/tauri";
 import { cn, COLOR_NAMES, defaultHostname, isValidEmail, PROFILE_COLORS, PROVIDERS, providerLabel, slugify } from "@/lib/utils";
@@ -29,12 +30,16 @@ export interface Draft {
   user: string;
   port: string;
   folder: string;
+  /** Set once the user changed the folder; until then it follows the name. */
+  folderEdited: boolean;
   gitName: string;
   gitEmail: string;
   sign: boolean;
   keyMode: "generate" | "existing";
   existingPath: string;
   comment: string;
+  /** Set once the user changed the key comment; until then it follows the name. */
+  commentEdited: boolean;
   passphrase: string;
 }
 
@@ -49,13 +54,29 @@ export function emptyDraft(existingKey?: string): Draft {
     user: "",
     port: "",
     folder: "",
+    folderEdited: false,
     gitName: "",
     gitEmail: "",
     sign: false,
     keyMode: existingKey ? "existing" : "generate",
     existingPath: existingKey ?? "",
     comment: "",
+    commentEdited: false,
     passphrase: "",
+  };
+}
+
+/**
+ * Fills the values derived from the name (folder, key comment) unless the
+ * user edited them, so renaming the project in step 1 updates them too.
+ */
+export function withDefaults(d: Draft, defaults?: ProfileDefaults | null): Draft {
+  const id = slugify(d.name);
+  const fresh = defaults && defaults.id === id ? defaults : null;
+  return {
+    ...d,
+    folder: d.folderEdited ? d.folder : id ? (fresh?.folder ?? `~/dev/${id}/`) : "",
+    comment: d.commentEdited ? d.comment : (fresh?.key_comment ?? ""),
   };
 }
 
@@ -127,16 +148,17 @@ function stepValue(step: number, d: Draft): string {
 }
 
 export function NewProjectPage({ existingKey }: { existingKey?: string }) {
-  const [draft, setDraft] = useState<Draft>(() => emptyDraft(existingKey));
+  const [rawDraft, setDraft] = useState<Draft>(() => emptyDraft(existingKey));
   const [step, setStep] = useState(0);
   const [created, setCreated] = useState<CreatedProject | null>(null);
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
 
   const defaults = useQuery({
-    queryKey: ["defaults", draft.name],
-    queryFn: () => api.profileDefaults(draft.name),
-    enabled: draft.name.trim().length > 0,
+    queryKey: ["defaults", rawDraft.name],
+    queryFn: () => api.profileDefaults(rawDraft.name),
+    enabled: rawDraft.name.trim().length > 0,
   });
+  const draft = withDefaults(rawDraft, defaults.data);
   const error = stepError(step, draft, defaults.data?.id_taken);
   const [showError, setShowError] = useState(false);
 
@@ -146,14 +168,6 @@ export function NewProjectPage({ existingKey }: { existingKey?: string }) {
       return;
     }
     setShowError(false);
-    // Fill sensible defaults for the next step.
-    if (step === 0 && defaults.data) {
-      setDraft((d) => ({
-        ...d,
-        folder: d.folder || defaults.data!.folder,
-        comment: d.comment || defaults.data!.key_comment,
-      }));
-    }
     setStep((s) => s + 1);
   };
   const back = () => {
@@ -213,23 +227,25 @@ export function NewProjectPage({ existingKey }: { existingKey?: string }) {
               }} canSubmit={!error} showError={() => setShowError(true)} />}
           {step === 5 && created && <StepTest created={created} />}
 
-          {showError && error && <FieldError>{error}</FieldError>}
-
-          {step < 4 && (
-            <div className="flex flex-wrap justify-between gap-3">
-              <Button variant="outline" size="lg" onClick={back} disabled={step === 0}>
-                Zurück
-              </Button>
-              <Button size="lg" onClick={next}>
-                Weiter
-                <ArrowRight aria-hidden />
-              </Button>
+          {step < 5 && (
+            <div className="flex flex-col gap-2">
+              <ErrorSlot message={showError && error} />
+              {step < 4 ? (
+                <div className="flex flex-wrap justify-between gap-3">
+                  <Button variant="outline" size="lg" onClick={back} disabled={step === 0}>
+                    Zurück
+                  </Button>
+                  <Button size="lg" onClick={next}>
+                    Weiter
+                    <ArrowRight aria-hidden />
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="outline" size="lg" className="self-start" onClick={back}>
+                  Zurück
+                </Button>
+              )}
             </div>
-          )}
-          {step === 4 && (
-            <Button variant="outline" size="lg" className="self-start" onClick={back}>
-              Zurück
-            </Button>
           )}
         </section>
       </div>
@@ -255,7 +271,15 @@ function StepProject({ draft, set, id }: StepProps & { id: string }) {
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="project-name">Projektname</Label>
         <Input id="project-name" autoFocus value={draft.name} placeholder="Kunde C" onChange={(e) => set({ name: e.target.value })} />
-        {id && <FieldHint>Profil-ID: <span className="font-mono">{id}</span></FieldHint>}
+        <FieldHint>
+          {id ? (
+            <>
+              Profil-ID: <span className="font-mono">{id}</span>
+            </>
+          ) : (
+            "Die Profil-ID wird aus dem Namen abgeleitet."
+          )}
+        </FieldHint>
       </div>
       <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
         <legend className="mb-2 text-[13px] font-medium">Farbe</legend>
@@ -333,7 +357,7 @@ function StepFolder({ draft, set }: StepProps) {
   const browse = async () => {
     try {
       const picked = await pickFolder();
-      if (picked) set({ folder: await api.normalizeFolder(picked) });
+      if (picked) set({ folder: await api.normalizeFolder(picked), folderEdited: true });
     } catch {
       // Dialog not available (e.g. browser preview): keep the text field.
     }
@@ -347,7 +371,7 @@ function StepFolder({ draft, set }: StepProps) {
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="folder">Ordner</Label>
         <div className="flex gap-2">
-          <Input id="folder" className={mono} value={draft.folder} placeholder="~/dev/projekt/" onChange={(e) => set({ folder: e.target.value })} />
+          <Input id="folder" className={mono} value={draft.folder} placeholder="~/dev/projekt/" onChange={(e) => set({ folder: e.target.value, folderEdited: true })} />
           <Button variant="outline" onClick={browse}>
             <FolderOpen aria-hidden />
             Durchsuchen
@@ -443,7 +467,7 @@ function StepKey({
         <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="key-comment">Kommentar</Label>
-            <Input id="key-comment" className={mono} value={draft.comment} onChange={(e) => set({ comment: e.target.value })} />
+            <Input id="key-comment" className={mono} value={draft.comment} onChange={(e) => set({ comment: e.target.value, commentEdited: true })} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="key-pass">
@@ -498,9 +522,16 @@ function StepTest({ created }: { created: CreatedProject }) {
       <div className="flex items-center gap-2 rounded-lg border border-border bg-background py-1 pr-1 pl-3.5">
         <code className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-secondary-foreground">{created.public_key}</code>
       </div>
+      {link && created.open_error && (
+        <div role="alert" className="flex flex-col gap-1 rounded-[10px] border border-amber-500/35 bg-amber-500/5 p-3.5 text-[13px]">
+          <span className="font-medium">Die {providerLabel(link.provider)}-Seite hat sich nicht geöffnet</span>
+          <span className="text-muted-foreground">{created.open_error}</span>
+          <span className="font-mono text-xs break-all text-secondary-foreground">{link.url}</span>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {link && (
-          <Button variant="outline" onClick={() => api.openUrl(link.url)}>
+          <Button variant="outline" onClick={() => openExternal(link.url)}>
             <ExternalLink aria-hidden />
             {providerLabel(link.provider)}-Seite öffnen
           </Button>
