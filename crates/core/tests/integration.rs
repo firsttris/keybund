@@ -317,7 +317,7 @@ fn doctor_reports_missing_keys_bad_permissions_and_old_folders() {
     assert_eq!(by_id("keys-missing").status, doctor::Status::Error);
     assert!(by_id("keys-missing").detail.as_deref().unwrap().contains("kunde-b_ed25519.pub"));
     assert_eq!(by_id("folders").status, doctor::Status::Warn);
-    assert_eq!(by_id("global-host-github.com").status, doctor::Status::Warn);
+    assert_eq!(by_id("ssh-config-github.com").status, doctor::Status::Warn);
     #[cfg(unix)]
     {
         assert_eq!(by_id("ssh-dir-perms").status, doctor::Status::Error);
@@ -370,4 +370,89 @@ fn configs_from_older_versions_get_add_keys_to_agent() {
     git(&env, &repo, &["init", "-q"]);
     let out = git(&env, &repo, &["config", "--get", "core.sshCommand"]);
     assert!(String::from_utf8_lossy(&out.stdout).contains("-o AddKeysToAgent=yes"));
+}
+
+/// The situation from the issue report: a hand-written ~/.ssh/config with a
+/// private account for github.com, a second GitHub account behind an alias
+/// and a company GitLab, plus a new Keybund profile on github.com.
+#[test]
+fn import_existing_ssh_config_and_clean_up() {
+    use keybund_core::import;
+    if !has("ssh-keygen") || !has("git") {
+        return;
+    }
+    let (_dir, env, _) = setup();
+    // Start without Keybund profiles, only the hand-made setup.
+    fs::remove_file(env.profiles_file()).unwrap();
+    for key in ["~/.ssh/privat2_ed25519", "~/.ssh/pflegeabc/id_ed25519", "~/.ssh/s-communication_ed25519"] {
+        keygen::generate(&env, &GenerateOptions { path: key.into(), comment: "x".into(), passphrase: None }).unwrap();
+    }
+    let user_config = "# Privater Account\nHost github.com\n    HostName github.com\n    User git\n    IdentityFile ~/.ssh/privat2_ed25519\n    IdentitiesOnly yes\n\n# Pflegeabc Account\nHost pflegeabc\n    HostName github.com\n    User git\n    IdentityFile ~/.ssh/pflegeabc/id_ed25519\n    IdentitiesOnly yes\n\n# S-Communication\nHost gitlab.sfp.berlin\n    HostName gitlab.sfp.berlin\n    User git\n    IdentityFile ~/.ssh/s-communication_ed25519\n    IdentitiesOnly yes\n\nHost *\n    ServerAliveInterval 30\n";
+    fs::write(env.ssh_config(), user_config).unwrap();
+
+    // A Keybund profile on github.com next to the old global entry: doctor
+    // warns that the old key is offered as well.
+    let test = Profile {
+        id: "test".into(),
+        name: "Test".into(),
+        key: KeyRef { path: "~/.ssh/kunde-a_ed25519".into(), comment: None },
+        folders: vec![store::normalize_folder(&env, "~/dev/kunde-a")],
+        hosts: vec![HostEntry { hostname: "github.com".into(), provider: Provider::Github, ..Default::default() }],
+        ..Default::default()
+    };
+    store::save(&env, &Config { default_profile: None, profiles: vec![test] }).unwrap();
+    apply::apply_config(&env, &store::load(&env).unwrap()).unwrap();
+    let report = doctor::run(&env);
+    let check = report.checks.iter().find(|c| c.id == "ssh-config-github.com").unwrap();
+    assert_eq!(check.title, "Globaler Eintrag für github.com in ~/.ssh/config");
+    assert!(check.fix.is_none(), "not imported yet, nothing to clean up");
+
+    // Import all three.
+    let proposals = import::proposals_for(&env).unwrap();
+    assert_eq!(
+        proposals.iter().map(|p| p.profile.id.as_str()).collect::<Vec<_>>(),
+        ["privat2", "pflegeabc", "s-communication"]
+    );
+    assert!(proposals.iter().all(|p| p.key_exists));
+    import::import(&env, &proposals).unwrap();
+    apply::apply_config(&env, &store::load(&env).unwrap()).unwrap();
+    assert!(import::proposals_for(&env).unwrap().is_empty(), "nothing left to import");
+    let config = store::load(&env).unwrap();
+    assert_eq!(config.default_profile.as_deref(), Some("privat2"));
+
+    // Keybund now writes the alias blocks itself.
+    let conf = fs::read_to_string(env.ssh_keybund_conf()).unwrap();
+    assert!(conf.contains("Host pflegeabc\n    HostName github.com\n"));
+    assert!(conf.contains("Host gitlab.sfp.berlin\n"));
+    assert!(!conf.contains("Host github.com\n"), "github.com stays a shared host without Host block");
+
+    // Doctor offers to remove the old entries; the fix removes exactly them.
+    let report = doctor::run(&env);
+    let check = report.checks.iter().find(|c| c.id == "ssh-config-github.com").unwrap();
+    assert_eq!(check.fix, Some(doctor::Fix::CleanupSshConfig));
+    assert!(report.checks.iter().any(|c| c.id == "ssh-config-pflegeabc"));
+    let plan = import::plan_cleanup(&env).unwrap();
+    assert_eq!(plan.changes.len(), 1);
+    assert!(plan.changes[0].user_file);
+    doctor::fix(&env, check.fix.as_ref().unwrap()).unwrap();
+
+    let cleaned = fs::read_to_string(env.ssh_config()).unwrap();
+    assert_eq!(cleaned, "Include ~/.ssh/config.d/keybund.conf\n\nHost *\n    ServerAliveInterval 30\n");
+    let backup = fs::read_to_string(env.home.join(".ssh/config.keybund-backup")).unwrap();
+    assert!(backup.contains("privat2_ed25519"), "the original is kept as backup");
+    let report = doctor::run(&env);
+    assert!(report.checks.iter().all(|c| !c.id.starts_with("ssh-config-")), "{:?}", report.checks);
+    assert!(import::plan_cleanup(&env).unwrap().is_empty());
+
+    // Git: the profile folder uses only its key, everything else the private one.
+    let repo = env.home.join("dev/kunde-a/repo");
+    fs::create_dir_all(&repo).unwrap();
+    git(&env, &repo, &["init", "-q"]);
+    let out = git(&env, &repo, &["config", "--get", "core.sshCommand"]);
+    assert!(String::from_utf8_lossy(&out.stdout).contains("kunde-a_ed25519"));
+    let other = env.home.join("elsewhere");
+    fs::create_dir_all(&other).unwrap();
+    git(&env, &other, &["init", "-q"]);
+    let out = git(&env, &other, &["config", "--get", "core.sshCommand"]);
+    assert!(String::from_utf8_lossy(&out.stdout).contains("privat2_ed25519"));
 }

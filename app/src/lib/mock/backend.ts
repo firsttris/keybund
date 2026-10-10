@@ -15,6 +15,7 @@ import type {
   GeneratedFile,
   HostEntry,
   ImportCandidate,
+  ImportProposal,
   KeyInfo,
   LastTest,
   NewProject,
@@ -101,6 +102,17 @@ export interface MockState {
   cloned: string[];
   /** Artificial latency for slow commands (ms). */
   latency: number;
+  /** Host blocks of the user's own ~/.ssh/config. */
+  sshBlocks: SshBlock[];
+  /** Profile whose connection test logs in with another key from ~/.ssh/config. */
+  otherKeyFor: string | null;
+}
+
+export interface SshBlock {
+  pattern: string;
+  hostname: string;
+  identity: string;
+  comment: string | null;
 }
 
 export function seedState(): MockState {
@@ -151,6 +163,8 @@ export function seedState(): MockState {
       ["~/.ssh/kunde-b_ed25519", { ageDays: 35, comment: "tristan@zentrale-kunde-b" }],
       ["~/.ssh/archive/bundesagentur_ed25519", { ageDays: 900, comment: "tristan@ba" }],
       ["~/.ssh/id_ed25519", { ageDays: 1300, comment: "tristan@laptop" }],
+      ["~/.ssh/pflegeabc/id_ed25519", { ageDays: 500, comment: "tristan@pflegeabc" }],
+      ["~/.ssh/s-communication_ed25519", { ageDays: 600, comment: "tristan@s-communication" }],
     ]),
     applied: new Map(),
     lastTests: new Map([
@@ -163,6 +177,16 @@ export function seedState(): MockState {
     clipboard: null,
     cloned: [],
     latency: 300,
+    sshBlocks: [
+      { pattern: "pflegeabc", hostname: "github.com", identity: "~/.ssh/pflegeabc/id_ed25519", comment: "Pflegeabc Account" },
+      {
+        pattern: "gitlab.sfp.berlin",
+        hostname: "gitlab.sfp.berlin",
+        identity: "~/.ssh/s-communication_ed25519",
+        comment: "S-Communication",
+      },
+    ],
+    otherKeyFor: null,
   };
   state.applied = renderAll(state);
   return state;
@@ -248,6 +272,91 @@ function planFor(state: MockState, profiles = state.profiles, def = state.defaul
     if (before !== after) changes.push(lineDiff(path, before, after));
   }
   return { changes };
+}
+
+// --- ~/.ssh/config import (mirrors crates/core/src/import.rs) ---------------
+
+function renderSshConfig(blocks: SshBlock[]): string {
+  const body = blocks
+    .map(
+      (b) =>
+        `${b.comment ? `# ${b.comment}\n` : ""}Host ${b.pattern}\n    HostName ${b.hostname}\n    User git\n    IdentityFile ${b.identity}\n    IdentitiesOnly yes\n`,
+    )
+    .join("\n");
+  return `Include ~/.ssh/config.d/keybund.conf\n${body ? `\n${body}` : ""}`;
+}
+
+function covered(state: MockState, b: SshBlock): boolean {
+  return state.profiles.some(
+    (p) =>
+      !p.archived &&
+      p.key.path === b.identity &&
+      p.hosts.some((h) => h.alias === b.pattern || (!h.alias && h.hostname === b.pattern)),
+  );
+}
+
+function detectProvider(hostname: string): Provider {
+  if (hostname.includes("github")) return "github";
+  if (hostname.includes("bitbucket")) return "bitbucket";
+  if (hostname.includes("gitlab")) return "gitlab";
+  return "generic";
+}
+
+function proposals(state: MockState): ImportProposal[] {
+  let defaultGiven = state.defaultProfile !== null;
+  const taken = new Set(state.profiles.map((p) => p.id));
+  return state.sshBlocks
+    .filter((b) => !covered(state, b))
+    .map((b) => {
+      const file = b.identity.split("/").pop()!.replace(/_(ed25519|rsa|ecdsa)$/, "");
+      let id = file === "id" || file.startsWith("id_") ? slugify(b.pattern) : slugify(file);
+      for (let n = 2; taken.has(id); n++) id = `${id.replace(/-\d+$/, "")}-${n}`;
+      taken.add(id);
+      const provider = detectProvider(b.hostname);
+      const asDefault = b.pattern === b.hostname && provider !== "generic" && !defaultGiven;
+      if (asDefault) defaultGiven = true;
+      return {
+        profile: profile({
+          id,
+          name: b.comment ?? b.pattern,
+          key: { path: b.identity, comment: null },
+          hosts: [host(b.hostname, provider, { alias: asDefault ? null : b.pattern })],
+        }),
+        make_default: asDefault,
+        blocks: [b.pattern],
+        key_exists: state.keys.has(b.identity),
+        notes: asDefault ? [`Wird Default-Profil: gilt für ${b.hostname} in allen Ordnern ohne eigenes Profil`] : [],
+      };
+    });
+}
+
+function cleanupPlan(state: MockState): Plan {
+  const remaining = state.sshBlocks.filter((b) => !covered(state, b));
+  if (remaining.length === state.sshBlocks.length) return { changes: [] };
+  const change = lineDiff("~/.ssh/config", renderSshConfig(state.sshBlocks), renderSshConfig(remaining));
+  return { changes: [{ ...change, user_file: true }] };
+}
+
+function sshConfigChecks(state: MockState): Check[] {
+  const shared = state.profiles.filter((p) => !p.archived).flatMap((p) => p.hosts.filter((h) => !h.alias).map((h) => h.hostname));
+  return state.sshBlocks.flatMap((b): Check[] => {
+    const mixes = shared.includes(b.pattern);
+    const isCovered = covered(state, b);
+    if (!mixes && !isCovered) return [];
+    return [
+      {
+        id: `ssh-config-${b.pattern}`,
+        status: "warn",
+        title: isCovered
+          ? mixes
+            ? `Alter Eintrag für ${b.pattern} in ~/.ssh/config`
+            : `Doppelter Eintrag für ${b.pattern} in ~/.ssh/config`
+          : `Globaler Eintrag für ${b.pattern} in ~/.ssh/config`,
+        detail: isCovered ? "Keybund schreibt diesen Host-Block selbst, der alte kann weg." : `${b.identity} wird zusätzlich angeboten.`,
+        fix: isCovered ? { type: "cleanup_ssh_config" } : null,
+      },
+    ];
+  });
 }
 
 // --- views -----------------------------------------------------------------
@@ -341,6 +450,7 @@ function doctorReport(state: MockState): Report {
           detail: plan.changes.map((c) => c.path).join(", "),
           fix: { type: "apply" },
         },
+    ...sshConfigChecks(state),
   ];
   return { checks };
 }
@@ -439,6 +549,7 @@ export function createMockBackend(state: MockState = seedState()) {
           default_profile: state.defaultProfile,
           profiles: state.profiles.map((p) => view(state, p)),
           pending_changes: planFor(state).changes.length,
+          import_available: proposals(state).length,
         };
         return result;
       }
@@ -536,8 +647,19 @@ export function createMockBackend(state: MockState = seedState()) {
             : `${PROVIDER_NAME[h.provider]} kennt diesen Key nicht`,
           output: ok ? "Hi tristan! You've successfully authenticated." : "git@github.com: Permission denied (publickey).",
           command: `ssh -T -o PasswordAuthentication=no -o IdentitiesOnly=yes -o AddKeysToAgent=yes -i ${p.key.path} git@${h.hostname}`,
+          used_key: ok ? p.key.path : null,
+          other_key: false,
         };
-        state.lastTests.set(p.id, { success: ok, account: result.account, message: result.message, at: Date.now() });
+        if (state.otherKeyFor === p.id) {
+          Object.assign(result, {
+            success: false,
+            other_key: true,
+            used_key: "~/.ssh/privat_ed25519",
+            account: "@firsttris",
+            message: "Angemeldet als @firsttris, aber mit ~/.ssh/privat_ed25519 statt mit dem Key des Profils",
+          });
+        }
+        state.lastTests.set(p.id, { success: result.success, account: result.account, message: result.message, at: Date.now() });
         return result;
       }
       case "last_test":
@@ -566,6 +688,7 @@ export function createMockBackend(state: MockState = seedState()) {
         const fix = args.fix as Fix;
         if (fix.type === "move_ssh_include") state.doctorIncludeOnTop = true;
         if (fix.type === "apply") state.applied = renderAll(state);
+        if (fix.type === "cleanup_ssh_config") state.sshBlocks = state.sshBlocks.filter((b) => !covered(state, b));
         return doctorReport(state);
       }
       case "scan_keys": {
@@ -643,6 +766,28 @@ export function createMockBackend(state: MockState = seedState()) {
           index_gitconfig: "~/.config/keybund/git/index.gitconfig",
         };
         return result;
+      }
+      case "import_proposals":
+        return proposals(state);
+      case "import_profiles": {
+        const chosen = args.chosen as ImportProposal[];
+        const added = chosen.map((c) => ({ ...structuredClone(c.profile), folders: c.profile.folders.map(normalizeFolder) }));
+        const profiles = [...state.profiles, ...added];
+        validate(profiles);
+        state.profiles = profiles;
+        const def = chosen.find((c) => c.make_default);
+        if (def) state.defaultProfile = def.profile.id;
+        return added.map((p) => p.id);
+      }
+      case "cleanup_preview":
+        return cleanupPlan(state);
+      case "cleanup_apply": {
+        const plan = cleanupPlan(state);
+        if (JSON.stringify(plan.changes.map((c) => c.diff)) !== JSON.stringify(args.expectedDiffs))
+          throw new MockError("stale_plan", "Die Konfiguration hat sich seit der Vorschau geändert: Bitte Vorschau neu laden");
+        state.sshBlocks = state.sshBlocks.filter((b) => !covered(state, b));
+        const report: ApplyReport = { written: ["~/.ssh/config"], deleted: [], backups: ["~/.ssh/config.keybund-backup"] };
+        return report;
       }
       case "plugin:dialog|open":
         return "~/dev/neues-projekt";

@@ -65,6 +65,18 @@ enum Command {
     },
     /// Vorhandene Keys in ~/.ssh auflisten
     Keys,
+    /// Bestehende ~/.ssh/config übernehmen (Profile mit den vorhandenen Keys)
+    Import {
+        /// Alle Vorschläge ohne Auswahl übernehmen
+        #[arg(long)]
+        all: bool,
+        /// Ohne Rückfragen schreiben, inkl. Entfernen der alten Einträge
+        #[arg(long, short)]
+        yes: bool,
+        /// Übernommene Einträge in ~/.ssh/config stehen lassen
+        #[arg(long)]
+        keep_old: bool,
+    },
     /// Default-Profil setzen (Key außerhalb aller Projektordner)
     Default { profile: String },
     /// Profil archivieren: Key nach ~/.ssh/archive, Configs entfernen
@@ -99,6 +111,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Apply { dry_run, yes } => commands::apply(&env, dry_run, yes),
         Command::Doctor { fix } => commands::doctor(&env, fix),
         Command::Keys => commands::keys(&env),
+        Command::Import { all, yes, keep_old } => commands::import(&env, all, yes, keep_old),
         Command::Default { profile } => commands::set_default(&env, &profile),
         Command::Archive { profile, yes } => commands::archive(&env, &profile, yes),
     }

@@ -52,6 +52,19 @@ Daraus schreibt Keybund:
 | `~/.config/keybund/git/<id>.gitconfig` | `user.name`, `user.email`, `core.sshCommand = ssh -i <key> -o IdentitiesOnly=yes -o AddKeysToAgent=yes`, Signing | `index.gitconfig` |
 | `~/.config/keybund/allowed_signers` | E-Mail + Pubkey je signierendem Profil | `gpg.ssh.allowedSignersFile` |
 
+## Umstieg mit bestehender `~/.ssh/config`
+
+Hast du schon Einträge wie `Host github.com` mit `IdentityFile`, übernimmt Keybund sie: in der App unter
+**Bestehende SSH-Config übernehmen** (die Startseite weist darauf hin) oder mit `keybund import`.
+
+1. Aus jedem `Host`-Block mit eigenem Key wird ein Profil mit genau diesem Key – nichts wird verschoben.
+   Ein `Host github.com` wird zum Default-Profil, Aliase wie `Host pflegeabc` bleiben Aliase.
+2. Keybund schreibt seine Configs.
+3. Die übernommenen Blöcke werden aus `~/.ssh/config` entfernt (mit Diff und Backup). Das ist wichtig: Solange dort
+   ein `IdentityFile` für github.com steht, bietet ssh diesen Key zusätzlich zum Profil-Key an, und eine Anmeldung kann
+   mit dem falschen Key gelingen. Der Verbindungstest prüft deshalb, welcher Key tatsächlich akzeptiert wurde, und der
+   Doctor meldet solche Einträge.
+
 ## CLI
 
 ```text
@@ -65,6 +78,7 @@ keybund clone <url> [-p id]      Klont ins richtige Profil, mit dem richtigen Ke
 keybund apply [--dry-run] [-y]   Diff zeigen bzw. schreiben
 keybund doctor [--fix]           Alle Checks, Exit-Code ≠ 0 bei Problemen
 keybund keys                     Vorhandene Keys in ~/.ssh
+keybund import [--all] [-y]      Bestehende ~/.ssh/config übernehmen, alte Einträge danach entfernen
 keybund default <profil>         Default-Profil setzen
 keybund archive <profil>         Key nach ~/.ssh/archive, Configs entfernen
 ```

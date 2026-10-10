@@ -60,7 +60,13 @@ export function SettingsPage() {
 
         <Card className="col-span-full" aria-labelledby="import-title">
           <CardTitle id="import-title">Vorhandene Keys</CardTitle>
-          <FieldHint>Keys in ~/.ssh. Ein ungenutzter Key kann direkt zu einem neuen Projekt werden.</FieldHint>
+          <FieldHint>
+            Keys in ~/.ssh. Ein ungenutzter Key kann direkt zu einem neuen Projekt werden – oder du{" "}
+            <Link to="/import" className="text-foreground">
+              übernimmst deine bestehende ~/.ssh/config
+            </Link>
+            .
+          </FieldHint>
           {keys.isPending && <Spinner />}
           <ul className="m-0 flex list-none flex-col p-0">
             {keys.data?.map((k) => (

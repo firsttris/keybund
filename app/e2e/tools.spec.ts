@@ -98,3 +98,28 @@ test("sidebar stays in place when switching pages", async ({ app }, testInfo) =>
     expect(await doctor.boundingBox(), String(link)).toEqual(start);
   }
 });
+
+test("takes over the existing ~/.ssh/config", async ({ app }) => {
+  await app.getByRole("link", { name: "Übernehmen" }).click();
+  await expect(app.getByRole("heading", { name: "Bestehende SSH-Config übernehmen" })).toBeVisible();
+  await expect(app.getByRole("region", { name: "Pflegeabc Account" })).toContainText("~/.ssh/pflegeabc/id_ed25519");
+  await app.getByRole("button", { name: "2 Profile übernehmen" }).click();
+  await app.getByRole("button", { name: "Configs schreiben" }).click();
+  await expect(app.getByText("-Host gitlab.sfp.berlin")).toBeVisible();
+  await app.getByRole("button", { name: "Alte Einträge entfernen" }).click();
+  await expect(app.getByText(/Alles übernommen/)).toBeVisible();
+  await expect(app.getByRole("navigation", { name: "Profile" }).getByRole("link", { name: /Pflegeabc Account/ })).toBeVisible();
+  // The banner is gone.
+  await app.goto("/#/");
+  await expect(app.getByText(/mit eigenem Key, die Keybund/)).toHaveCount(0);
+});
+
+test("doctor removes an old entry after the import", async ({ app }) => {
+  await app.goto("/#/import");
+  await app.getByRole("button", { name: "2 Profile übernehmen" }).click();
+  await app.getByRole("button", { name: "Configs schreiben" }).click();
+  await app.goto("/#/doctor");
+  await expect(app.getByText("Doppelter Eintrag für pflegeabc in ~/.ssh/config")).toBeVisible();
+  await app.getByRole("button", { name: "Doppelter Eintrag für pflegeabc in ~/.ssh/config beheben" }).click();
+  await expect(app.getByText(/Doppelter Eintrag/)).toHaveCount(0);
+});

@@ -28,6 +28,18 @@ export function HomePage() {
           </Link>
         </div>
       )}
+      {data && data.import_available > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-[10px] border border-blue-500/35 bg-blue-500/5 px-4 py-3">
+          <span className="flex-1 text-[13px]">
+            In deiner <span className="font-mono">~/.ssh/config</span> stehen{" "}
+            {data.import_available === 1 ? "ein Eintrag" : `${data.import_available} Einträge`} mit eigenem Key, die Keybund
+            übernehmen kann.
+          </span>
+          <Link to="/import" className="text-[13px] font-medium text-foreground">
+            Übernehmen
+          </Link>
+        </div>
+      )}
       <h1 className="m-0 text-[26px] font-semibold tracking-tight">Profile</h1>
       {active.length === 0 ? (
         <div className="flex max-w-[520px] flex-col gap-3 rounded-xl border border-dashed border-border p-8">
@@ -40,7 +52,7 @@ export function HomePage() {
               <Plus aria-hidden />
               Neues Projekt
             </Link>
-            <Link to="/settings" className={cn(buttonVariants({ variant: "outline" }), "no-underline")}>
+            <Link to={data && data.import_available > 0 ? "/import" : "/settings"} className={cn(buttonVariants({ variant: "outline" }), "no-underline")}>
               Vorhandene Keys importieren
             </Link>
           </div>

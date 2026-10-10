@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { NewProject, Plan, Profile, ProfilesView } from "../bindings";
+import type { ImportProposal, NewProject, Plan, Profile, ProfilesView } from "../bindings";
 import { createMockBackend, seedState } from "./backend";
 
 function backend() {
@@ -88,6 +88,32 @@ describe("mock backend contract", () => {
     });
     expect(await b.invoke("clone_preview", { url: "https://github.com/a/b" })).toMatchObject({ matched: true, repo: { name: "b" } });
     await expect(b.invoke("clone_preview", { url: "kaputt" })).rejects.toMatchObject({ kind: "invalid_url" });
+  });
+
+  it("proposes, imports and cleans up ~/.ssh/config like the core", async () => {
+    const b = backend();
+    const proposals = (await b.invoke("import_proposals")) as ImportProposal[];
+    expect(proposals.map((p) => p.profile.id)).toEqual(["pflegeabc", "s-communication"]);
+    expect(proposals.every((p) => !p.make_default)).toBe(true);
+    expect(((await b.invoke("load_profiles")) as ProfilesView).import_available).toBe(2);
+    expect(((await b.invoke("cleanup_preview")) as Plan).changes).toEqual([]);
+
+    await b.invoke("import_profiles", { chosen: proposals });
+    expect(((await b.invoke("load_profiles")) as ProfilesView).import_available).toBe(0);
+    const cleanup = (await b.invoke("cleanup_preview")) as Plan;
+    expect(cleanup.changes[0]).toMatchObject({ path: "~/.ssh/config", user_file: true });
+    await expect(b.invoke("cleanup_apply", { expectedDiffs: [] })).rejects.toMatchObject({ kind: "stale_plan" });
+    await b.invoke("cleanup_apply", { expectedDiffs: cleanup.changes.map((c) => c.diff) });
+    expect(b.state.sshBlocks).toEqual([]);
+  });
+
+  it("makes a plain git host the default when there is none", async () => {
+    const b = backend();
+    b.state.defaultProfile = null;
+    b.state.sshBlocks = [{ pattern: "github.com", hostname: "github.com", identity: "~/.ssh/id_ed25519", comment: "Privat" }];
+    const [p] = (await b.invoke("import_proposals")) as ImportProposal[];
+    expect(p.make_default).toBe(true);
+    expect(p.profile.hosts[0].alias).toBeNull();
   });
 
   it("rejects unknown commands", async () => {

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::{HostEntry, Profile, Provider};
 use crate::process::{self, shell_quote};
-use crate::{Env, Error, Result};
+use crate::{keygen, Env, Error, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -19,6 +19,11 @@ pub struct ProbeResult {
     pub output: String,
     /// The command that was run, for display.
     pub command: String,
+    /// The key the server accepted, if ssh reported it.
+    pub used_key: Option<String>,
+    /// `true` if the server accepted a different key than the profile's,
+    /// e.g. one from an `IdentityFile` in `~/.ssh/config`.
+    pub other_key: bool,
 }
 
 /// Arguments for `ssh` (without the program name).
@@ -74,6 +79,8 @@ pub fn probe(env: &Env, profile: &Profile, host: &HostEntry) -> Result<ProbeResu
     let key_idx = args.iter().position(|a| a == "-i").map(|i| i + 1).unwrap_or(0);
     let display_args: Vec<String> = args.iter().map(|a| shell_quote(a)).collect();
     args[key_idx] = env.expand(&profile.key.path).display().to_string();
+    // -v makes ssh report which key the server accepted.
+    args.insert(0, "-v".into());
 
     let mut cmd = env.command("ssh");
     cmd.args(&args);
@@ -81,8 +88,56 @@ pub fn probe(env: &Env, profile: &Profile, host: &HostEntry) -> Result<ProbeResu
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     let output = format!("{stdout}{stderr}").trim().to_string();
-    let code = out.status.code();
-    Ok(interpret(host, &output, code, format!("ssh {}", display_args.join(" "))))
+    let expected = keygen::read_public(env, &profile.key).ok().map(|k| k.fingerprint());
+    Ok(evaluate(env, host, &output, out.status.code(), format!("ssh {}", display_args.join(" ")), expected.as_deref()))
+}
+
+/// Interprets the output of `ssh -v` and checks that the server accepted
+/// the profile's key (`expected` fingerprint). ssh also offers keys from
+/// `IdentityFile` lines in `~/.ssh/config`; a login with one of those must
+/// not count as success.
+pub fn evaluate(
+    env: &Env,
+    host: &HostEntry,
+    output: &str,
+    code: Option<i32>,
+    command: String,
+    expected: Option<&str>,
+) -> ProbeResult {
+    let accepted = accepted_key(output);
+    let mut result = interpret(host, &strip_debug(output), code, command);
+    if let Some((path, fingerprint)) = &accepted {
+        result.used_key = Some(env.contract(std::path::Path::new(path)));
+        if result.success && expected.is_some_and(|e| e != fingerprint) {
+            result.success = false;
+            result.other_key = true;
+            let who = result.account.as_deref().map(|a| format!(" als {a}")).unwrap_or_default();
+            result.message = format!(
+                "Angemeldet{who}, aber mit {} statt mit dem Key des Profils",
+                result.used_key.as_deref().unwrap_or(path)
+            );
+        }
+    }
+    result
+}
+
+/// `(path, fingerprint)` from ssh's "Server accepts key" debug line.
+pub fn accepted_key(output: &str) -> Option<(String, String)> {
+    let line = output.lines().rev().find(|l| l.contains("Server accepts key: "))?;
+    let rest = &line[line.find("Server accepts key: ")? + "Server accepts key: ".len()..];
+    let mut parts = rest.split_whitespace();
+    let path = parts.next()?.to_string();
+    let fingerprint = parts.find(|p| p.starts_with("SHA256:"))?.to_string();
+    Some((path, fingerprint))
+}
+
+/// Removes ssh's debug lines from the output shown to the user.
+fn strip_debug(output: &str) -> String {
+    output
+        .lines()
+        .filter(|l| !l.starts_with("debug") && !l.starts_with("OpenSSH_") && !l.starts_with("Authenticated to "))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Runs the test against the first host of a profile.
@@ -121,7 +176,16 @@ pub fn interpret(host: &HostEntry, output: &str, code: Option<i32>, command: Str
     } else {
         (false, "Verbindung fehlgeschlagen".to_string())
     };
-    ProbeResult { success, host: host.target_name().to_string(), account, message, output: output.to_string(), command }
+    ProbeResult {
+        success,
+        host: host.target_name().to_string(),
+        account,
+        message,
+        output: output.to_string(),
+        command,
+        used_key: None,
+        other_key: false,
+    }
 }
 
 /// Extracts the account name from a provider greeting.
@@ -194,6 +258,43 @@ mod tests {
         );
         assert!(!r.success);
         assert_eq!(r.message, "GitHub kennt diesen Key nicht");
+    }
+
+    const VERBOSE_OK: &str = "OpenSSH_9.6p1 Ubuntu-3ubuntu13\n\
+        debug1: Offering public key: /home/t/.ssh/test_ed25519 ED25519 SHA256:aaaa explicit\n\
+        debug1: Offering public key: /home/t/.ssh/privat_ed25519 ED25519 SHA256:bbbb explicit\n\
+        debug1: Server accepts key: /home/t/.ssh/privat_ed25519 ED25519 SHA256:bbbb explicit\n\
+        Authenticated to github.com ([140.82.121.4]:22) using \"publickey\".\n\
+        Hi firsttris! You've successfully authenticated, but GitHub does not provide shell access.";
+
+    #[test]
+    fn reads_the_accepted_key() {
+        assert_eq!(
+            accepted_key(VERBOSE_OK),
+            Some(("/home/t/.ssh/privat_ed25519".to_string(), "SHA256:bbbb".to_string()))
+        );
+        assert_eq!(accepted_key("Hi x!"), None);
+    }
+
+    #[test]
+    fn login_with_another_key_is_not_a_success() {
+        let env = Env::with_home("/home/t");
+        let gh = host(Provider::Github, "github.com");
+        let r = evaluate(&env, &gh, VERBOSE_OK, Some(1), String::new(), Some("SHA256:aaaa"));
+        assert!(!r.success);
+        assert!(r.other_key);
+        assert_eq!(r.account.as_deref(), Some("@firsttris"));
+        assert_eq!(r.used_key.as_deref(), Some("~/.ssh/privat_ed25519"));
+        assert_eq!(
+            r.message,
+            "Angemeldet als @firsttris, aber mit ~/.ssh/privat_ed25519 statt mit dem Key des Profils"
+        );
+        assert!(!r.output.contains("debug1"), "debug lines are hidden");
+        assert!(r.output.contains("Hi firsttris!"));
+
+        let r = evaluate(&env, &gh, VERBOSE_OK, Some(1), String::new(), Some("SHA256:bbbb"));
+        assert!(r.success && !r.other_key);
+        assert_eq!(r.message, "Verbunden als @firsttris");
     }
 
     #[test]

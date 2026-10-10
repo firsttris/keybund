@@ -59,7 +59,7 @@ test("creates a GitHub project end to end", async ({ app }) => {
 
 test("creates a server with an existing key from settings", async ({ app }) => {
   await app.getByRole("link", { name: "Einstellungen" }).click();
-  await app.getByRole("link", { name: "Als Projekt anlegen" }).click();
+  await app.getByRole("listitem").filter({ hasText: /^~\/\.ssh\/id_ed25519/ }).getByRole("link", { name: "Als Projekt anlegen" }).click();
 
   await app.getByLabel("Projektname").fill("Backup Server");
   await app.getByRole("button", { name: "Weiter" }).click();

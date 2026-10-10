@@ -11,6 +11,7 @@ import { ApplyPage } from "./routes/apply";
 import { ClonePage } from "./routes/clone";
 import { DoctorPage } from "./routes/doctor";
 import { HomePage } from "./routes/home";
+import { ImportPage } from "./routes/import";
 import { NewProjectPage } from "./routes/new-project";
 import { ProfilePage } from "./routes/profile";
 import { SettingsPage } from "./routes/settings";
@@ -35,6 +36,7 @@ const applyRoute = createRoute({ getParentRoute: () => shell, path: "/apply", co
 const cloneRoute = createRoute({ getParentRoute: () => shell, path: "/clone", component: ClonePage });
 const doctorRoute = createRoute({ getParentRoute: () => shell, path: "/doctor", component: DoctorPage });
 const settingsRoute = createRoute({ getParentRoute: () => shell, path: "/settings", component: SettingsPage });
+const importRoute = createRoute({ getParentRoute: () => shell, path: "/import", component: ImportPage });
 
 const newRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -59,7 +61,7 @@ const whichRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  shell.addChildren([homeRoute, profileRoute, applyRoute, cloneRoute, doctorRoute, settingsRoute]),
+  shell.addChildren([homeRoute, profileRoute, applyRoute, cloneRoute, doctorRoute, settingsRoute, importRoute]),
   newRoute,
   whichRoute,
 ]);

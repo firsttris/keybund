@@ -360,3 +360,46 @@ fn invalid_id_and_existing_key_errors() {
         .code(2)
         .stderr(predicate::str::contains("Key existiert bereits"));
 }
+
+#[test]
+fn import_takes_over_an_existing_ssh_config() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    std::fs::create_dir_all(sb.path(".ssh/pflegeabc")).unwrap();
+    for key in [".ssh/privat_ed25519", ".ssh/pflegeabc/id_ed25519"] {
+        std::process::Command::new("ssh-keygen")
+            .args(["-q", "-t", "ed25519", "-N", "", "-f"])
+            .arg(sb.path(key))
+            .status()
+            .unwrap();
+    }
+    std::fs::write(
+        sb.path(".ssh/config"),
+        "# Privater Account\nHost github.com\n    User git\n    IdentityFile ~/.ssh/privat_ed25519\n\n# Pflegeabc Account\nHost pflegeabc\n    HostName github.com\n    IdentityFile ~/.ssh/pflegeabc/id_ed25519\n",
+    )
+    .unwrap();
+
+    // Without --all it only lists.
+    sb.cmd().arg("import").assert().success().stdout(
+        predicate::str::contains("Privater Account (privat) Default")
+            .and(predicate::str::contains("pflegeabc → github.com"))
+            .and(predicate::str::contains("keybund import --all")),
+    );
+    assert!(!sb.path(".config/keybund/profiles.toml").exists());
+
+    sb.cmd().args(["import", "--all", "--yes"]).assert().success().stdout(
+        predicate::str::contains("2 Profil(e) angelegt: privat, pflegeabc")
+            .and(predicate::str::contains("Übernommene Einträge aus ~/.ssh/config entfernen"))
+            .and(
+                predicate::str::contains("-IdentityFile ~/.ssh/privat_ed25519")
+                    .or(predicate::str::contains("-    IdentityFile ~/.ssh/privat_ed25519")),
+            ),
+    );
+    assert_eq!(sb.read(".ssh/config"), "Include ~/.ssh/config.d/keybund.conf\n");
+    assert!(sb.read(".ssh/config.keybund-backup").contains("Privater Account"));
+    assert!(sb.read(".ssh/config.d/keybund.conf").contains("Host pflegeabc"));
+    sb.cmd().arg("list").assert().success().stdout(predicate::str::contains("Privater Account (privat) default"));
+    sb.cmd().arg("import").assert().success().stdout(predicate::str::contains("Nichts zu übernehmen"));
+}

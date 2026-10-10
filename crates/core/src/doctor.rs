@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::Config;
-use crate::{apply, fsutil, keygen, process, render, store, which, Env, Result};
+use crate::{apply, fsutil, import, keygen, process, render, store, which, Env, Result};
 
 /// Keys older than this get a rotation hint.
 pub const OLD_KEY_DAYS: u32 = 2 * 365;
@@ -29,6 +29,8 @@ pub enum Fix {
     MoveSshInclude,
     /// Write all pending config changes.
     Apply,
+    /// Remove blocks from `~/.ssh/config` that a profile now covers.
+    CleanupSshConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,7 +101,7 @@ pub fn run(env: &Env) -> Report {
     checks.push(up_to_date_check(env, &config));
     checks.push(agent_check(env));
     checks.extend(add_keys_check(env, &config));
-    checks.extend(global_host_checks(env, &config));
+    checks.extend(ssh_config_checks(env, &config));
     checks.extend(key_age_checks(env, &config));
     checks.extend(folder_checks(env, &config));
     Report { checks }
@@ -238,41 +240,38 @@ fn add_keys_check(env: &Env, config: &Config) -> Option<Check> {
     })
 }
 
-/// A `Host github.com` with an `IdentityFile` in the user's own config
-/// mixes its key with the profile key.
-fn global_host_checks(env: &Env, config: &Config) -> Vec<Check> {
+/// `Host` blocks in the user's own `~/.ssh/config` that get in the way:
+/// an `IdentityFile` for a host that profiles use via `core.sshCommand`
+/// (github.com) is offered as well and can log in with the wrong key; a
+/// block a profile already covers is a leftover from before the import.
+fn ssh_config_checks(env: &Env, config: &Config) -> Vec<Check> {
     let ssh = fsutil::read_optional(&env.ssh_config()).ok().flatten().unwrap_or_default();
-    let mut hostnames: Vec<String> = config
+    let blocks = import::parse_ssh_config(&ssh);
+    let migrated: Vec<&str> =
+        import::migrated_blocks(env, config, &blocks).iter().map(|b| b.pattern.as_str()).collect();
+    let shared: Vec<String> = config
         .active_profiles()
         .flat_map(|p| p.hosts.iter().filter(|h| h.alias.is_none()).map(|h| h.hostname.to_lowercase()))
         .collect();
-    hostnames.sort();
-    hostnames.dedup();
-    let mut current: Vec<String> = Vec::new();
-    let mut found = Vec::new();
-    for line in ssh.lines() {
-        let t = line.trim();
-        let mut words = t.split_whitespace();
-        match words.next().map(str::to_lowercase).as_deref() {
-            Some("host") => current = words.map(str::to_lowercase).collect(),
-            Some("match") => current.clear(),
-            Some("identityfile") => {
-                for h in &current {
-                    if hostnames.contains(h) && !found.contains(h) {
-                        found.push(h.clone());
-                    }
-                }
-            }
-            _ => {}
-        }
+    let mut checks = Vec::new();
+    for b in blocks.iter().filter(|b| !b.identity_files.is_empty()) {
+        let host = &b.pattern;
+        let mixes = shared.contains(&host.to_lowercase());
+        let covered = migrated.contains(&host.as_str());
+        let check = match (mixes, covered) {
+            (true, true) => Check::new(&format!("ssh-config-{host}"), Status::Warn, format!("Alter Eintrag für {host} in ~/.ssh/config"))
+                .detail(format!("Er ist in Keybund übernommen, bietet aber weiter {} an – dadurch kann die Anmeldung mit dem falschen Key gelingen. Entfernen.", b.identity_files[0]))
+                .fix(Fix::CleanupSshConfig),
+            (true, false) => Check::new(&format!("ssh-config-{host}"), Status::Warn, format!("Globaler Eintrag für {host} in ~/.ssh/config"))
+                .detail(format!("{} wird zusätzlich zum Profil-Key angeboten – die Anmeldung kann mit dem falschen Key gelingen. Mit „Bestehende SSH-Config übernehmen“ in Keybund übernehmen, dann entfernen.", b.identity_files[0])),
+            (false, true) => Check::new(&format!("ssh-config-{host}"), Status::Warn, format!("Doppelter Eintrag für {host} in ~/.ssh/config"))
+                .detail("Keybund schreibt diesen Host-Block selbst, der alte kann weg.")
+                .fix(Fix::CleanupSshConfig),
+            (false, false) => continue,
+        };
+        checks.push(check);
     }
-    found
-        .into_iter()
-        .map(|h| {
-            Check::new(&format!("global-host-{h}"), Status::Warn, format!("Globaler Eintrag für {h} in ~/.ssh/config"))
-                .detail("Ein IdentityFile dort mischt sich mit dem Profil-Key. Den Eintrag ins Default-Profil überführen und aus ~/.ssh/config entfernen.")
-        })
-        .collect()
+    checks
 }
 
 fn key_age_checks(env: &Env, config: &Config) -> Vec<Check> {
@@ -328,5 +327,6 @@ pub fn fix(env: &Env, fix: &Fix) -> Result<()> {
             let config = store::load(env)?;
             apply::apply_config(env, &config).map(|_| ())
         }
+        Fix::CleanupSshConfig => apply::apply(env, &import::plan_cleanup(env)?).map(|_| ()),
     }
 }

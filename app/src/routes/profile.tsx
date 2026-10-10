@@ -213,7 +213,30 @@ function ConnectionCard({ view, test }: { view: ProfileView; test: ReturnType<ty
           <span className="text-[13px] text-muted-foreground">Noch nicht getestet.</span>
         )}
       </div>
-      {result && !result.success && (
+      {result?.used_key && !result.other_key && (
+        <span className="text-xs text-muted-foreground">
+          Angemeldet mit <span className="font-mono">{result.used_key}</span>
+        </span>
+      )}
+      {result?.other_key && (
+        <div role="alert" className="flex flex-col gap-1.5 rounded-[10px] border border-amber-500/35 bg-amber-500/5 p-3.5 text-[13px]">
+          <span className="font-medium">Der Key dieses Profils wurde nicht benutzt</span>
+          <span className="text-muted-foreground">
+            ssh hat zusätzlich <span className="font-mono">{result.used_key}</span> angeboten (aus deiner ~/.ssh/config), und
+            damit hat die Anmeldung geklappt. Trage den Key dieses Profils beim Provider ein und übernimm bzw. entferne den alten
+            Eintrag.
+          </span>
+          <span className="flex gap-3">
+            <Link to="/import" className="font-medium text-foreground">
+              Bestehende Config übernehmen
+            </Link>
+            <Link to="/doctor" className="text-foreground">
+              Zum Doctor
+            </Link>
+          </span>
+        </div>
+      )}
+      {result && !result.success && !result.other_key && (
         <pre className="m-0 overflow-x-auto rounded-lg bg-background p-3 font-mono text-xs text-muted-foreground">{result.output}</pre>
       )}
       <p className="m-0 text-[13px] leading-normal text-muted-foreground">

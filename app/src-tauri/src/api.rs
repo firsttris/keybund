@@ -7,6 +7,7 @@ use specta::Type;
 
 use keybund_core::apply::{self, ApplyReport, Plan};
 use keybund_core::clone::{self, RepoUrl};
+use keybund_core::import::{self, ImportProposal};
 use keybund_core::keygen::{self, GenerateOptions, ImportCandidate, KeyInfo};
 use keybund_core::model::{Config, KeyRef, Profile, Provider};
 use keybund_core::{archive, provider, store, Env, Error};
@@ -64,6 +65,8 @@ pub struct ProfilesView {
     pub profiles: Vec<ProfileView>,
     /// Number of config files that differ from what Keybund would write.
     pub pending_changes: u32,
+    /// Profiles that could be taken over from `~/.ssh/config`.
+    pub import_available: u32,
 }
 
 pub fn profile_view(env: &Env, config: &Config, p: &Profile, last_test: Option<LastTest>) -> ProfileView {
@@ -89,10 +92,12 @@ pub fn profile_view(env: &Env, config: &Config, p: &Profile, last_test: Option<L
 pub fn load_profiles(env: &Env, last_test: impl Fn(&str) -> Option<LastTest>) -> CmdResult<ProfilesView> {
     let config = store::load(env)?;
     let pending_changes = apply::plan(env, &config).map(|p| p.changes.len() as u32).unwrap_or(0);
+    let import_available = import::proposals_for(env).map(|p| p.len() as u32).unwrap_or(0);
     Ok(ProfilesView {
         default_profile: config.default_profile.clone(),
         profiles: config.profiles.iter().map(|p| profile_view(env, &config, p, last_test(&p.id))).collect(),
         pending_changes,
+        import_available,
     })
 }
 
@@ -293,6 +298,29 @@ pub fn archive_profile(env: &Env, id: &str) -> CmdResult<archive::ArchiveResult>
     Ok(archive::archive(env, &mut config, id)?)
 }
 
+pub fn import_proposals(env: &Env) -> CmdResult<Vec<ImportProposal>> {
+    Ok(import::proposals_for(env)?)
+}
+
+/// Saves the chosen proposals as profiles (configs are written by the next apply).
+pub fn import_profiles(env: &Env, chosen: &[ImportProposal]) -> CmdResult<Vec<String>> {
+    Ok(import::import(env, chosen)?)
+}
+
+/// Removing the blocks from `~/.ssh/config` that profiles now cover.
+pub fn cleanup_preview(env: &Env) -> CmdResult<Plan> {
+    Ok(import::plan_cleanup(env)?)
+}
+
+pub fn cleanup_apply(env: &Env, expected_diffs: &[String]) -> CmdResult<ApplyReport> {
+    let plan = import::plan_cleanup(env)?;
+    let current: Vec<&str> = plan.changes.iter().map(|c| c.diff.as_str()).collect();
+    if current != expected_diffs.iter().map(String::as_str).collect::<Vec<_>>() {
+        return Err(Error::StalePlan("Bitte Vorschau neu laden".into()).into());
+    }
+    Ok(apply::apply(env, &plan)?)
+}
+
 /// A file (or the part of a file) Keybund generates for a profile.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct GeneratedFile {
@@ -462,6 +490,35 @@ mod tests {
         assert!(files[0].content.contains("sshCommand = ssh -i ~/.ssh/a_ed25519 -o IdentitiesOnly=yes"));
         assert!(files[1].excerpt && files[1].content.contains("gitdir:~/dev/a/"));
         assert_eq!(files.len(), 2, "no ssh block without alias");
+    }
+
+    #[test]
+    fn import_then_cleanup() {
+        let (_d, env) = env();
+        std::fs::create_dir_all(env.ssh_dir()).unwrap();
+        keygen::generate(
+            &env,
+            &GenerateOptions { path: "~/.ssh/privat_ed25519".into(), comment: "x".into(), passphrase: None },
+        )
+        .unwrap();
+        std::fs::write(env.ssh_config(), "# Privat\nHost github.com\n  IdentityFile ~/.ssh/privat_ed25519\n").unwrap();
+        assert_eq!(load_profiles(&env, |_| None).unwrap().import_available, 1);
+
+        let proposals = import_proposals(&env).unwrap();
+        assert_eq!(import_profiles(&env, &proposals).unwrap(), ["privat"]);
+        let view = load_profiles(&env, |_| None).unwrap();
+        assert_eq!(view.import_available, 0);
+        assert_eq!(view.default_profile.as_deref(), Some("privat"));
+        apply_changes(&env, &plan_changes(&env).unwrap().changes.iter().map(|c| c.diff.clone()).collect::<Vec<_>>())
+            .unwrap();
+
+        let cleanup = cleanup_preview(&env).unwrap();
+        assert_eq!(cleanup.changes.len(), 1);
+        assert_eq!(cleanup_apply(&env, &[]).unwrap_err().kind, "stale_plan");
+        let diffs: Vec<String> = cleanup.changes.iter().map(|c| c.diff.clone()).collect();
+        cleanup_apply(&env, &diffs).unwrap();
+        assert_eq!(std::fs::read_to_string(env.ssh_config()).unwrap(), "Include ~/.ssh/config.d/keybund.conf\n");
+        assert!(cleanup_preview(&env).unwrap().is_empty());
     }
 
     #[test]

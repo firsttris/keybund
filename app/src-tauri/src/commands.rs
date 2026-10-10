@@ -223,6 +223,37 @@ pub async fn archive_profile(state: State<'_, AppState>, id: String) -> CmdResul
 
 #[tauri::command]
 #[specta::specta]
+pub async fn import_proposals(state: State<'_, AppState>) -> CmdResult<Vec<keybund_core::import::ImportProposal>> {
+    let env = state.env.clone();
+    blocking(move || api::import_proposals(&env)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn import_profiles(
+    state: State<'_, AppState>,
+    chosen: Vec<keybund_core::import::ImportProposal>,
+) -> CmdResult<Vec<String>> {
+    let env = state.env.clone();
+    blocking(move || api::import_profiles(&env, &chosen)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn cleanup_preview(state: State<'_, AppState>) -> CmdResult<Plan> {
+    let env = state.env.clone();
+    blocking(move || api::cleanup_preview(&env)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn cleanup_apply(state: State<'_, AppState>, expected_diffs: Vec<String>) -> CmdResult<ApplyReport> {
+    let env = state.env.clone();
+    blocking(move || api::cleanup_apply(&env, &expected_diffs)).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn generated_config(state: State<'_, AppState>, id: String) -> CmdResult<Vec<GeneratedFile>> {
     let env = state.env.clone();
     blocking(move || api::generated_config(&env, &id)).await

@@ -220,3 +220,78 @@ fn git_with_generated_ssh_command_keeps_the_key_in_the_agent() {
     let out = isolated(ls_remote(), &sock, &askpass(&dir, None));
     assert!(out.status.success(), "second git call asked again: {}", String::from_utf8_lossy(&out.stderr));
 }
+
+/// The user's own `~/.ssh/config` has an `IdentityFile` for the host. ssh
+/// offers it after the profile key; if the server only knows that one, the
+/// login succeeds with the wrong key. The test must say so.
+#[test]
+fn connection_test_detects_a_login_with_another_key() {
+    let Some(sshd) = sshd_path() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let dir = dir.path().canonicalize().unwrap();
+    let env = Env::with_home(dir.join("home"));
+    let gen = |name: &str| {
+        keygen::generate(
+            &env,
+            &GenerateOptions { path: format!("~/.ssh/{name}_ed25519"), comment: name.into(), passphrase: None },
+        )
+        .unwrap()
+    };
+    let profile_key = gen("test");
+    let old_key = gen("privat");
+    // The server only knows the old key.
+    let (_sshd, port) = start_sshd(&sshd, &dir, old_key.public_key.as_deref().unwrap());
+    let user_config = dir.join("user_config");
+    fs::write(
+        &user_config,
+        format!(
+            "Host 127.0.0.1\n    IdentityFile {}\n    IdentitiesOnly yes\n",
+            env.expand("~/.ssh/privat_ed25519").display()
+        ),
+    )
+    .unwrap();
+
+    let host = HostEntry {
+        alias: None,
+        hostname: "127.0.0.1".into(),
+        user: Some(user()),
+        port: Some(port),
+        provider: Provider::Generic,
+    };
+    let profile = Profile {
+        id: "test".into(),
+        name: "Test".into(),
+        key: KeyRef { path: "~/.ssh/test_ed25519".into(), comment: None },
+        hosts: vec![host.clone()],
+        ..Default::default()
+    };
+    let run = |authorized: &str| {
+        fs::write(dir.join("authorized_keys"), authorized).unwrap();
+        let mut cmd = Command::new("ssh");
+        cmd.arg("-v").args(["-F"]).arg(&user_config);
+        cmd.args(["-o", &format!("UserKnownHostsFile={}", dir.join("known_hosts").display())]);
+        cmd.args(probe::ssh_args(&profile, &host).into_iter().map(|a| {
+            if a.starts_with("~/") {
+                env.expand(&a).display().to_string()
+            } else {
+                a
+            }
+        }));
+        let (_agent, sock) = start_agent(&dir, &format!("a{}.sock", authorized.len()));
+        let out = isolated(cmd, &sock, &askpass(&dir, None));
+        let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+        probe::evaluate(&env, &host, &text, out.status.code(), String::new(), profile_key.fingerprint.as_deref())
+    };
+
+    // Before: plain exit code 0 would have said "erfolgreich".
+    let r = run(old_key.public_key.as_deref().unwrap());
+    assert!(!r.success, "{}", r.output);
+    assert!(r.other_key);
+    assert_eq!(r.used_key.as_deref(), Some("~/.ssh/privat_ed25519"));
+
+    // Once the server knows the profile key, it is used first and succeeds.
+    let r = run(&format!("{}\n{}\n", old_key.public_key.unwrap(), profile_key.public_key.unwrap()));
+    assert!(r.success, "{}", r.output);
+    assert!(!r.other_key);
+    assert_eq!(r.used_key.as_deref(), Some("~/.ssh/test_ed25519"));
+}

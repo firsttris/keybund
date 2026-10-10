@@ -5,12 +5,14 @@ use std::process::ExitCode;
 use anyhow::{bail, Context, Result};
 use clap::{Args, ValueEnum};
 use console::style;
-use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
+use dialoguer::{theme::ColorfulTheme, Confirm, Input, MultiSelect, Password, Select};
 use keybund_core::apply::{self, ChangeKind, Plan};
 use keybund_core::doctor::{self, Status};
 use keybund_core::keygen::{self, GenerateOptions};
 use keybund_core::model::{Config, GitIdentity, HostEntry, KeyRef, Profile, Provider};
-use keybund_core::{archive as archive_mod, clone as clone_mod, probe, provider, store, which as which_mod, Env};
+use keybund_core::{
+    archive as archive_mod, clone as clone_mod, import as import_mod, probe, provider, store, which as which_mod, Env,
+};
 
 use crate::{system, ui};
 
@@ -606,6 +608,74 @@ pub fn archive(env: &Env, id: &str, yes: bool) -> Result<ExitCode> {
     confirm_and_apply(env, &plan, true)?;
     for url in &result.remove_key_urls {
         ui::hint(&format!("Key beim Provider entfernen: {url}"));
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+pub fn import(env: &Env, all: bool, yes: bool, keep_old: bool) -> Result<ExitCode> {
+    let tty = interactive() && !yes;
+    let proposals = import_mod::proposals_for(env)?;
+    if proposals.is_empty() {
+        ui::success("Nichts zu übernehmen – ~/.ssh/config enthält keine Einträge mit eigenem Key, die Keybund noch nicht kennt.");
+    } else {
+        ui::heading("Aus ~/.ssh/config übernehmbar:");
+        for (i, p) in proposals.iter().enumerate() {
+            let hosts: Vec<String> = p.profile.hosts.iter().map(host_label).collect();
+            println!(
+                "  {}. {} {}{}",
+                i + 1,
+                style(&p.profile.name).bold(),
+                style(format!("({})", p.profile.id)).dim(),
+                if p.make_default { format!(" {}", style("Default").cyan()) } else { String::new() }
+            );
+            ui::row("Key", &p.profile.key.path);
+            ui::row("Hosts", &hosts.join(", "));
+            for note in &p.notes {
+                ui::hint(note);
+            }
+        }
+        let chosen: Vec<_> = if all || !tty {
+            if !all && !yes {
+                println!();
+                ui::hint("Mit `keybund import --all` übernehmen.");
+                return Ok(ExitCode::SUCCESS);
+            }
+            proposals.clone()
+        } else {
+            let labels: Vec<String> =
+                proposals.iter().map(|p| format!("{} ({})", p.profile.name, p.profile.key.path)).collect();
+            let picked = MultiSelect::with_theme(&theme())
+                .with_prompt("Welche übernehmen? (Leertaste wählt, Enter bestätigt)")
+                .items(&labels)
+                .defaults(&vec![true; labels.len()])
+                .interact()?;
+            picked.into_iter().map(|i| proposals[i].clone()).collect()
+        };
+        if chosen.is_empty() {
+            return Ok(ExitCode::SUCCESS);
+        }
+        let ids = import_mod::import(env, &chosen)?;
+        ui::success(&format!("{} Profil(e) angelegt: {}", ids.len(), ids.join(", ")));
+        let config = store::load(env)?;
+        if !confirm_and_apply(env, &apply::plan(env, &config)?, !tty)? {
+            ui::warn("Configs nicht geschrieben – später mit `keybund apply`.");
+            return Ok(ExitCode::SUCCESS);
+        }
+    }
+
+    if keep_old {
+        return Ok(ExitCode::SUCCESS);
+    }
+    let cleanup = import_mod::plan_cleanup(env)?;
+    if cleanup.is_empty() {
+        return Ok(ExitCode::SUCCESS);
+    }
+    println!();
+    ui::heading("Übernommene Einträge aus ~/.ssh/config entfernen");
+    ui::hint("Solange sie dort stehen, bietet ssh ihre Keys zusätzlich an – die Anmeldung kann mit dem falschen Key gelingen.");
+    println!();
+    if !confirm_and_apply(env, &cleanup, !tty)? {
+        ui::warn("Alte Einträge bleiben – `keybund doctor --fix` entfernt sie später.");
     }
     Ok(ExitCode::SUCCESS)
 }

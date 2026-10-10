@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, errorMessage } from "./api";
-import type { Fix, NewProject, Profile } from "./bindings";
+import type { Fix, ImportProposal, NewProject, Profile } from "./bindings";
 
 export const keys = {
   profiles: ["profiles"] as const,
@@ -11,6 +11,8 @@ export const keys = {
   which: (q: string) => ["which", q] as const,
   keys: ["keys"] as const,
   paths: ["paths"] as const,
+  importProposals: ["import-proposals"] as const,
+  cleanup: ["cleanup"] as const,
 };
 
 export function useProfiles() {
@@ -114,5 +116,29 @@ export function useArchiveProfile() {
     mutationFn: (id: string) => api.archiveProfile(id),
     onSuccess: invalidate,
     onError: (e) => toast.error(errorMessage(e)),
+  });
+}
+
+export function useImportProposals() {
+  return useQuery({ queryKey: keys.importProposals, queryFn: () => api.importProposals() });
+}
+
+export function useCleanupPreview() {
+  return useQuery({ queryKey: keys.cleanup, queryFn: () => api.cleanupPreview() });
+}
+
+export function useImportProfiles() {
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (chosen: ImportProposal[]) => api.importProfiles(chosen),
+    onSuccess: invalidate,
+  });
+}
+
+export function useCleanupApply() {
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (diffs: string[]) => api.cleanupApply(diffs),
+    onSuccess: invalidate,
   });
 }

@@ -31,6 +31,10 @@ macro_rules! keybund_commands {
             clone_repo,
             archive_profile,
             generated_config,
+            import_proposals,
+            import_profiles,
+            cleanup_preview,
+            cleanup_apply,
             paths,
         ]
     };

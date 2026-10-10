@@ -15,6 +15,7 @@ pub mod desktop;
 pub mod doctor;
 pub mod env;
 pub mod error;
+pub mod import;
 pub mod keygen;
 pub mod model;
 pub mod probe;

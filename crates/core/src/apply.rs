@@ -169,6 +169,14 @@ fn diff(name: &str, old: &str, new: &str) -> (String, u32, u32) {
     (text, added, removed)
 }
 
+/// A plan that replaces the content of one of the user's own files (with a
+/// one-time backup), e.g. to remove migrated blocks from `~/.ssh/config`.
+pub fn plan_user_file(env: &Env, path: &Path, new_content: String) -> Result<Plan> {
+    let mut changes = Vec::new();
+    push_change(env, &mut changes, path, Some(new_content), None, true)?;
+    Ok(Plan { changes })
+}
+
 /// Writes a plan. Each file is checked against the content the plan was
 /// computed from, so a concurrent edit is never overwritten silently.
 pub fn apply(env: &Env, plan: &Plan) -> Result<ApplyReport> {

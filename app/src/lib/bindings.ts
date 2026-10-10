@@ -38,6 +38,10 @@ export const commands = {
 	cloneRepo: (url: string, profileId: string, target: string | null) => typedError<string, CmdError>(__TAURI_INVOKE("clone_repo", { url, profileId, target })),
 	archiveProfile: (id: string) => typedError<ArchiveResult, CmdError>(__TAURI_INVOKE("archive_profile", { id })),
 	generatedConfig: (id: string) => typedError<GeneratedFile[], CmdError>(__TAURI_INVOKE("generated_config", { id })),
+	importProposals: () => typedError<ImportProposal[], CmdError>(__TAURI_INVOKE("import_proposals")),
+	importProfiles: (chosen: ImportProposal[]) => typedError<string[], CmdError>(__TAURI_INVOKE("import_profiles", { chosen })),
+	cleanupPreview: () => typedError<Plan, CmdError>(__TAURI_INVOKE("cleanup_preview")),
+	cleanupApply: (expectedDiffs: string[]) => typedError<ApplyReport, CmdError>(__TAURI_INVOKE("cleanup_apply", { expectedDiffs })),
 	paths: () => __TAURI_INVOKE<Paths>("paths"),
 };
 
@@ -115,7 +119,9 @@ export type Fix =
 /**  Move the Include line to the top of `~/.ssh/config`. */
 { type: "move_ssh_include" } | 
 /**  Write all pending config changes. */
-{ type: "apply" };
+{ type: "apply" } | 
+/**  Remove blocks from `~/.ssh/config` that a profile now covers. */
+{ type: "cleanup_ssh_config" };
 
 /**  A file (or the part of a file) Keybund generates for a profile. */
 export type GeneratedFile = {
@@ -155,6 +161,19 @@ export type ImportCandidate = {
 	key: KeyInfo,
 	/**  Profile that already uses this key. */
 	used_by: string | null,
+};
+
+/**  A profile Keybund proposes to create from existing ssh config. */
+export type ImportProposal = {
+	/**  Prefilled profile; name, id, color and folders can be changed. */
+	profile: Profile,
+	/**  Use as default profile (the key for the host outside of all folders). */
+	make_default: boolean,
+	/**  The `Host` patterns this proposal replaces. */
+	blocks: string[],
+	key_exists: boolean,
+	/**  Hints for the user, e.g. that a folder is needed. */
+	notes: string[],
 };
 
 /**  How the key of a new project is obtained. */
@@ -225,6 +244,13 @@ export type ProbeResult = {
 	output: string,
 	/**  The command that was run, for display. */
 	command: string,
+	/**  The key the server accepted, if ssh reported it. */
+	used_key: string | null,
+	/**
+	 *  `true` if the server accepted a different key than the profile's,
+	 *  e.g. one from an `IdentityFile` in `~/.ssh/config`.
+	 */
+	other_key: boolean,
 };
 
 export type Profile = {
@@ -264,6 +290,8 @@ export type ProfilesView = {
 	profiles: ProfileView[],
 	/**  Number of config files that differ from what Keybund would write. */
 	pending_changes: number,
+	/**  Profiles that could be taken over from `~/.ssh/config`. */
+	import_available: number,
 };
 
 export type Provider = "github" | "gitlab" | "bitbucket" | "generic";
