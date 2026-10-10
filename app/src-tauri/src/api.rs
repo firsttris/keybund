@@ -9,7 +9,7 @@ use keybund_core::apply::{self, ApplyReport, Plan};
 use keybund_core::clone::{self, RepoUrl};
 use keybund_core::import::{self, ImportProposal};
 use keybund_core::keygen::{self, GenerateOptions, ImportCandidate, KeyInfo};
-use keybund_core::model::{Config, KeyRef, Profile, Provider};
+use keybund_core::model::{Config, HostEntry, KeyRef, Profile, Provider};
 use keybund_core::uninstall::{self, UninstallOptions, UninstallPreview};
 use keybund_core::{archive, provider, store, Env, Error};
 
@@ -221,6 +221,30 @@ pub fn update_profile(env: &Env, profile: Profile) -> CmdResult<ProfileView> {
     *slot = profile.clone();
     store::save(env, &config)?;
     Ok(profile_view(env, &config, &profile, None))
+}
+
+fn with_host(env: &Env, id: &str, host: HostEntry) -> CmdResult<Config> {
+    let mut config = store::load(env)?;
+    let profile = config.profile_mut(id)?;
+    let host = normalized(env, Profile { hosts: vec![host], ..Default::default() }).hosts.remove(0);
+    profile.hosts.push(host);
+    store::validate(&config)?;
+    Ok(config)
+}
+
+/// The config changes from adding a server to an existing profile (e.g.
+/// "this server with my private key"), without writing anything.
+pub fn preview_add_host(env: &Env, id: &str, host: HostEntry) -> CmdResult<Plan> {
+    Ok(apply::plan(env, &with_host(env, id, host)?)?)
+}
+
+/// Adds the server to the profile and writes the configs.
+pub fn add_host(env: &Env, id: &str, host: HostEntry) -> CmdResult<ProfileView> {
+    let config = with_host(env, id, host)?;
+    store::save(env, &config)?;
+    apply::apply_config(env, &config)?;
+    let profile = config.profile(id)?;
+    Ok(profile_view(env, &config, profile, None))
 }
 
 pub fn set_default_profile(env: &Env, id: Option<String>) -> CmdResult<()> {
@@ -534,6 +558,28 @@ mod tests {
         cleanup_apply(&env, &diffs).unwrap();
         assert_eq!(std::fs::read_to_string(env.ssh_config()).unwrap(), "Include ~/.ssh/config.d/keybund.conf\n");
         assert!(cleanup_preview(&env).unwrap().is_empty());
+    }
+
+    #[test]
+    fn add_a_server_to_an_existing_profile() {
+        let (_d, env) = env();
+        create_project(&env, &project("privat")).unwrap();
+        let nas = HostEntry {
+            alias: Some(" nas ".into()),
+            hostname: "192.168.1.5".into(),
+            user: Some("".into()),
+            ..Default::default()
+        };
+        let plan = preview_add_host(&env, "privat", nas.clone()).unwrap();
+        assert!(plan.changes.iter().any(|c| c.diff.contains("+Host nas 192.168.1.5")));
+        let view = add_host(&env, "privat", nas.clone()).unwrap();
+        assert_eq!(view.profile.hosts[1].alias.as_deref(), Some("nas"));
+        assert_eq!(view.profile.hosts[1].user, None);
+        assert!(std::fs::read_to_string(env.ssh_keybund_conf()).unwrap().contains("Host nas 192.168.1.5"));
+        assert!(plan_changes(&env).unwrap().is_empty());
+        // The same server cannot go to a second profile.
+        create_project(&env, &project("other")).unwrap();
+        assert_eq!(add_host(&env, "other", nas).unwrap_err().kind, "duplicate_alias");
     }
 
     #[test]

@@ -34,6 +34,7 @@ export function colorHex(color: string | null | undefined): string {
 }
 
 export const PROVIDERS: Provider[] = ["github", "gitlab", "bitbucket", "generic"];
+export const GIT_PROVIDERS: Provider[] = ["github", "gitlab", "bitbucket"];
 
 export function providerLabel(provider: Provider): string {
   return { github: "GitHub", gitlab: "GitLab", bitbucket: "Bitbucket", generic: "Server" }[provider];
@@ -43,11 +44,12 @@ export function defaultHostname(provider: Provider): string {
   return { github: "github.com", gitlab: "gitlab.com", bitbucket: "bitbucket.org", generic: "" }[provider];
 }
 
-/** Short label for the sidebar: the provider, or the number of hosts. */
+/** Short label for the sidebar: the git provider(s), servers are listed separately. */
 export function hostSummary(profile: Profile): string {
-  if (profile.hosts.length === 0) return "";
-  if (profile.hosts.length > 1) return `${profile.hosts.length} Hosts`;
-  return providerLabel(profile.hosts[0].provider);
+  const git = profile.hosts.filter((h) => h.provider !== "generic");
+  if (git.length === 0) return "";
+  const names = [...new Set(git.map((h) => providerLabel(h.provider)))];
+  return names.length > 1 ? `${names.length} Konten` : names[0];
 }
 
 export function hostLabel(host: HostEntry): string {

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, errorMessage } from "./api";
-import type { Fix, ImportProposal, NewProject, Profile } from "./bindings";
+import type { Fix, HostEntry, ImportProposal, NewProject, Profile } from "./bindings";
 
 export const keys = {
   profiles: ["profiles"] as const,
@@ -79,7 +79,7 @@ export function useCopyPublicKey() {
 export function useTestConnection() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.testConnection(id),
+    mutationFn: ({ id, host }: { id: string; host?: string | null }) => api.testConnection(id, host ?? null),
     onSettled: () => client.invalidateQueries({ queryKey: keys.profiles }),
   });
 }
@@ -140,5 +140,19 @@ export function useCleanupApply() {
   return useMutation({
     mutationFn: (diffs: string[]) => api.cleanupApply(diffs),
     onSuccess: invalidate,
+  });
+}
+
+export function useInstallKey() {
+  return useMutation({
+    mutationFn: ({ id, host }: { id: string; host: string }) => api.installKey(id, host),
+  });
+}
+
+export function useAddHost() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, host }: { id: string; host: HostEntry }) => api.addHost(id, host),
+    onSuccess: () => client.invalidateQueries(),
   });
 }

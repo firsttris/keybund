@@ -63,7 +63,7 @@ test("changes the default profile", async ({ app }) => {
   await app.getByLabel("Key außerhalb aller Projektordner").selectOption("sparkasse");
   await app.goto("/#/");
   await expect(app.getByText("1 Datei ist nicht aktuell")).toBeVisible();
-  await expect(app.getByRole("link", { name: /Sparkasse.*Default/ })).toBeVisible();
+  await expect(app.getByRole("main").getByRole("region", { name: "Standard" }).getByRole("link", { name: /Sparkasse/ })).toBeVisible();
 });
 
 test("lists existing keys with their usage", async ({ app }) => {

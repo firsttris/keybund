@@ -10,6 +10,20 @@ ohne dass Keybund läuft.
 - **Vorschau vor jedem Schreiben.** Jede Änderung wird als Diff gezeigt und erst nach Bestätigung atomar geschrieben.
 - **Ein Rust-Core, zwei Oberflächen:** CLI und GUI (Tauri). KRunner folgt.
 
+## Wofür ein Key gilt
+
+Ein Profil ist ein Key plus die Stellen, an denen er benutzt wird. Keybund kennt drei Arten, wie der Key gewählt wird:
+
+| Kategorie | Gilt für | gewählt über |
+| --- | --- | --- |
+| **Standard** | alles, wofür kein anderes Profil passt | `core.sshCommand` in `index.gitconfig` |
+| **Projekte & Konten** | Git-Repos (GitHub, GitLab, Bitbucket) in den Projektordnern des Profils | `includeIf "gitdir:…"` |
+| **Server** | `ssh`, `scp`, `sftp`, `rsync` auf einen Host oder eine IP | `Host`-Block mit Alias und Hostname |
+
+Ein Profil kann alles zugleich sein – z. B. „Privat“ als Standard, mit GitHub und deinem Heimserver. Ein Server
+bekommt im Wizard („Neu“ → „Server“) einen eigenen Key oder den Key eines bestehenden Profils; Keybund trägt ihn
+danach auf dem Server ein (wie `ssh-copy-id`: Anmeldung mit Passwort oder einem Key, der dort schon gilt).
+
 ## Wie es funktioniert
 
 `~/.config/keybund/profiles.toml` ist die einzige Quelle der Wahrheit:
@@ -48,7 +62,7 @@ Daraus schreibt Keybund:
 | Datei | Inhalt | eingebunden über |
 | --- | --- | --- |
 | `~/.ssh/config.d/keybund.conf` | `Host`-Blöcke für Server mit Alias, je `IdentityFile` + `IdentitiesOnly yes` | `Include` ganz oben in `~/.ssh/config` |
-| `~/.config/keybund/git/index.gitconfig` | `core.sshCommand` des Default-Profils, ein `includeIf "gitdir:…/"` pro Ordner | `[include]` in `~/.gitconfig` |
+| `~/.config/keybund/git/index.gitconfig` | `core.sshCommand` des Standard-Profils, ein `includeIf "gitdir:…/"` pro Ordner | `[include]` in `~/.gitconfig` |
 | `~/.config/keybund/git/<id>.gitconfig` | `user.name`, `user.email`, `core.sshCommand = ssh -i <key> -o IdentitiesOnly=yes -o AddKeysToAgent=yes`, Signing | `index.gitconfig` |
 | `~/.config/keybund/allowed_signers` | E-Mail + Pubkey je signierendem Profil | `gpg.ssh.allowedSignersFile` |
 
@@ -58,7 +72,7 @@ Hast du schon Einträge wie `Host github.com` mit `IdentityFile`, übernimmt Key
 **Bestehende SSH-Config übernehmen** (die Startseite weist darauf hin) oder mit `keybund import`.
 
 1. Aus jedem `Host`-Block mit eigenem Key wird ein Profil mit genau diesem Key – nichts wird verschoben.
-   Ein `Host github.com` wird zum Default-Profil, Aliase wie `Host pflegeabc` bleiben Aliase.
+   Ein `Host github.com` wird zum Standard-Profil, Aliase wie `Host pflegeabc` bleiben Aliase.
 2. Keybund schreibt seine Configs.
 3. Die übernommenen Blöcke werden aus `~/.ssh/config` entfernt (mit Diff und Backup). Das ist wichtig: Solange dort
    ein `IdentityFile` für github.com steht, bietet ssh diesen Key zusätzlich zum Profil-Key an, und eine Anmeldung kann
@@ -73,7 +87,8 @@ keybund show <profil>            Details und Pubkey
 keybund edit <profil> …          Name, Ordner, Hosts, Git-Identität, Signieren, Key ändern (siehe --help)
 keybund new                      Wizard im Terminal (oder komplett über Optionen, siehe --help)
 keybund copy <profil> [--print]  Pubkey in die Zwischenablage (wl-copy, xclip oder xsel)
-keybund test <profil>            Verbindungstest, Exit-Code 0 bei Erfolg
+keybund test <profil> [--host h] Verbindungstest, Exit-Code 0 bei Erfolg
+keybund install-key <profil> [--host h]   Pubkey auf einem Server eintragen (wie ssh-copy-id)
 keybund which [pfad|host]        Welcher Key wird hier benutzt – und warum?
 keybund clone <url> [-p id]      Klont ins richtige Profil, mit dem richtigen Key
 keybund apply [--dry-run] [-y]   Diff zeigen bzw. schreiben
@@ -81,7 +96,7 @@ keybund doctor [--fix]           Alle Checks, Exit-Code ≠ 0 bei Problemen
 keybund keys                     Vorhandene Keys in ~/.ssh
 keybund import [--all] [-y]      Bestehende ~/.ssh/config übernehmen, alte Einträge danach entfernen
 keybund uninstall [--restore-backups] [--purge]   Alles entfernen, was Keybund geschrieben hat (Keys bleiben)
-keybund default <profil>         Default-Profil setzen
+keybund default <profil>         Standard-Profil setzen
 keybund archive <profil>         Key nach ~/.ssh/archive, Configs entfernen
 ```
 
@@ -94,9 +109,11 @@ keybund new --name "Kunde C" --provider github --folder ~/dev/kunde-c \
 
 ## GUI
 
-Profilliste mit Detailseite (Key, Verbindungstest, Hosts, Ordner, Git-Identität, generierte Config), Wizard „Neues
-Projekt“ (Pubkey landet in der Zwischenablage, die Provider-Seite öffnet sich, danach Verbindungstest), „Welcher Key?“
-mit Doctor, Clone-Helfer, Diff-Ansicht zum Anwenden und Einstellungen mit Import vorhandener Keys.
+Profile nach Kategorie (Standard, Projekte & Konten, Server) mit Detailseite (Key, Verbindungstest, Git-Konten,
+Server mit „Key eintragen“ und Test pro Server, Ordner, Git-Identität, generierte Config), Wizard „Neu“ für
+Git-Projekte (Pubkey landet in der Zwischenablage, die Provider-Seite öffnet sich, danach Verbindungstest) und Server
+(Key eintragen, Test), „Welcher Key?“ mit Doctor, Clone-Helfer, Diff-Ansicht zum Anwenden und Einstellungen mit
+Import vorhandener Keys.
 
 ## Aufbau
 
@@ -132,7 +149,7 @@ Jede Schicht hat eigene Tests, alle laufen in der CI (`.github/workflows/ci.yml`
 | Unit (Rust) | Parsing, Validierung, Diff, Include-Logik, Provider-Ausgaben, URL-Parsing | `crates/*/src/**` |
 | Snapshot | `render` ist rein funktional, jede Profil-Kombination hat eine Golden-File (insta) | `crates/core/src/snapshots/` |
 | Integration (Rust) | `apply` gegen ein temporäres HOME, Auflösung mit echtem `git` und `ssh -G`, Doctor, Archiv | `crates/core/tests/` |
-| Integration (sshd) | Echter `sshd` auf localhost: Passphrase einmal, danach hält der Agent den Key (Test und `git`) | `crates/core/tests/sshd.rs` |
+| Integration (sshd) | Echter `sshd` auf localhost: Passphrase einmal, danach hält der Agent den Key (Test und `git`), falscher Key erkannt, Key auf Server eintragen | `crates/core/tests/sshd.rs` |
 | Integration (CLI) | Jeder Befehl gegen ein temporäres HOME, Fake-`ssh` für Provider-Antworten | `crates/cli/tests/cli.rs` |
 | E2E (CLI) | Kompletter Lebenszyklus: zwei Kunden auf github.com, Server, Clone, Doctor, Archiv | `crates/cli/tests/e2e.rs` |
 | IPC (Tauri) | Commands über die Tauri-IPC mit Mock-Runtime und echten Capabilities | `app/src-tauri/tests/ipc.rs` |

@@ -99,6 +99,28 @@ pub async fn update_profile(state: State<'_, AppState>, profile: Profile) -> Cmd
 
 #[tauri::command]
 #[specta::specta]
+pub async fn preview_add_host(
+    state: State<'_, AppState>,
+    id: String,
+    host: keybund_core::model::HostEntry,
+) -> CmdResult<Plan> {
+    let env = state.env.clone();
+    blocking(move || api::preview_add_host(&env, &id, host)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn add_host(
+    state: State<'_, AppState>,
+    id: String,
+    host: keybund_core::model::HostEntry,
+) -> CmdResult<ProfileView> {
+    let env = state.env.clone();
+    blocking(move || api::add_host(&env, &id, host)).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn set_default_profile(state: State<'_, AppState>, id: Option<String>) -> CmdResult<()> {
     let env = state.env.clone();
     blocking(move || api::set_default_profile(&env, id)).await
@@ -119,14 +141,26 @@ pub async fn open_url(url: String) -> CmdResult<()> {
     blocking(move || Ok(keybund_core::desktop::open_url(&url)?)).await
 }
 
+/// Tests the connection to `host` (alias or hostname) or the profile's first host.
 #[tauri::command]
 #[specta::specta]
-pub async fn test_connection(state: State<'_, AppState>, id: String) -> CmdResult<ProbeResult> {
+pub async fn test_connection(state: State<'_, AppState>, id: String, host: Option<String>) -> CmdResult<ProbeResult> {
     let env = state.env.clone();
     let pid = id.clone();
     let result = blocking(move || {
         let config = store::load(&env)?;
-        Ok(probe::probe_profile(&env, config.profile(&pid)?)?)
+        let profile = config.profile(&pid)?;
+        match host {
+            Some(name) => {
+                let h = profile
+                    .hosts
+                    .iter()
+                    .find(|h| h.target_name() == name || h.hostname == name)
+                    .ok_or_else(|| CmdError::other(format!("Profil „{pid}“ hat keinen Host {name}")))?;
+                Ok(probe::probe(&env, profile, h)?)
+            }
+            None => Ok(probe::probe_profile(&env, profile)?),
+        }
     })
     .await?;
     let at = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0);
@@ -137,6 +171,28 @@ pub async fn test_connection(state: State<'_, AppState>, id: String) -> CmdResul
         );
     }
     Ok(result)
+}
+
+/// Puts the profile's key on a server (`host` = alias or hostname).
+#[tauri::command]
+#[specta::specta]
+pub async fn install_key(
+    state: State<'_, AppState>,
+    id: String,
+    host: String,
+) -> CmdResult<keybund_core::keyinstall::InstallResult> {
+    let env = state.env.clone();
+    blocking(move || {
+        let config = store::load(&env)?;
+        let profile = config.profile(&id)?;
+        let server = profile
+            .hosts
+            .iter()
+            .find(|h| h.target_name() == host || h.hostname == host)
+            .ok_or_else(|| CmdError::other(format!("Profil „{id}“ hat keinen Server {host}")))?;
+        Ok(keybund_core::keyinstall::install(&env, profile, server)?)
+    })
+    .await
 }
 
 #[tauri::command]

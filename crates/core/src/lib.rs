@@ -18,6 +18,7 @@ pub mod error;
 pub mod gitenv;
 pub mod import;
 pub mod keygen;
+pub mod keyinstall;
 pub mod model;
 pub mod probe;
 pub mod provider;

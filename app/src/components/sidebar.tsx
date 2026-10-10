@@ -1,6 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Archive, Crosshair, Download, KeyRound, Plus, Search, SlidersHorizontal } from "lucide-react";
+import { Activity, Archive, Crosshair, Download, KeyRound, Plus, Search, Server, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
+import type { ProfileView } from "@/lib/bindings";
+import { groupProfiles } from "@/lib/categories";
 import { useDoctor, useProfiles } from "@/lib/queries";
 import { cn, hostSummary } from "@/lib/utils";
 import { ColorDot } from "./color-dot";
@@ -16,9 +18,29 @@ export function Sidebar() {
   const [filter, setFilter] = useState("");
   const path = useRouterState({ select: (s) => s.location.pathname });
   const problems = doctor.data?.checks.filter((c) => c.status !== "ok").length ?? 0;
-  const matches = (name: string) => name.toLowerCase().includes(filter.trim().toLowerCase());
-  const active = data?.profiles.filter((p) => !p.profile.archived && matches(p.profile.name)) ?? [];
-  const archived = data?.profiles.filter((p) => p.profile.archived && matches(p.profile.name)) ?? [];
+  const q = filter.trim().toLowerCase();
+  const matches = (...texts: (string | null | undefined)[]) => !q || texts.some((t) => t?.toLowerCase().includes(q));
+  const groups = groupProfiles(data?.profiles ?? []);
+  const standard = groups.standard && matches(groups.standard.profile.name) ? groups.standard : null;
+  const projects = groups.projects.filter((v) => matches(v.profile.name));
+  const servers = groups.servers.filter((s) => matches(s.host.alias, s.host.hostname, s.profile.name));
+  const archived = groups.archived.filter((v) => matches(v.profile.name));
+  const nothing = data && !standard && projects.length === 0 && servers.length === 0;
+  const current = (id: string) => (path === `/profile/${id}` ? "page" : undefined);
+
+  const profileLink = ({ profile, last_test }: ProfileView) => (
+    <Link key={profile.id} to="/profile/$id" params={{ id: profile.id }} aria-current={current(profile.id)} className={navItem}>
+      <ColorDot color={profile.color} />
+      <span className="flex-1 truncate">{profile.name}</span>
+      {last_test && !last_test.success ? (
+        <span className="text-xs text-danger" title={last_test.message}>
+          Test fehlgeschlagen
+        </span>
+      ) : (
+        <span className="text-xs font-normal text-muted-foreground">{hostSummary(profile)}</span>
+      )}
+    </Link>
+  );
 
   return (
     <aside className="flex flex-[1_1_248px] flex-col gap-5 border-r border-border bg-card px-3 py-4 max-[808px]:border-r-0 max-[808px]:border-b min-[809px]:sticky min-[809px]:top-0 min-[809px]:h-screen min-[809px]:self-start min-[809px]:overflow-y-auto">
@@ -34,7 +56,7 @@ export function Sidebar() {
 
       <Link to="/new" className={cn(buttonVariants(), "no-underline")}>
         <Plus aria-hidden />
-        Neues Projekt
+        Neu
       </Link>
 
       <div className="relative">
@@ -44,40 +66,44 @@ export function Sidebar() {
         <Search aria-hidden className="pointer-events-none absolute top-[11px] left-[11px] size-[15px] text-muted-foreground" />
         <Input
           id="profile-search"
-          placeholder="Profil suchen …"
+          placeholder="Profil oder Server suchen …"
           className="pl-[34px]"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
       </div>
 
-      <nav aria-label="Profile" className="flex flex-col gap-0.5">
-        <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">Profile</span>
-        {active.map(({ profile, last_test }) => {
-          const current = path === `/profile/${profile.id}`;
-          return (
-            <Link
-              key={profile.id}
-              to="/profile/$id"
-              params={{ id: profile.id }}
-              aria-current={current ? "page" : undefined}
-              className={navItem}
-            >
-              <ColorDot color={profile.color} />
-              <span className="flex-1 truncate">{profile.name}</span>
-              {last_test && !last_test.success ? (
-                <span className="text-xs text-danger" title={last_test.message}>
-                  Test fehlgeschlagen
-                </span>
-              ) : (
-                <span className="text-xs font-normal text-muted-foreground">{hostSummary(profile)}</span>
-              )}
-            </Link>
-          );
-        })}
-        {data && active.length === 0 && (
-          <span className="px-2.5 text-xs text-muted-foreground">{filter ? "Kein Treffer" : "Noch keine Profile"}</span>
+      <nav aria-label="Profile" className="flex flex-col gap-4">
+        {standard && (
+          <div className="flex flex-col gap-0.5" role="group" aria-label="Standard">
+            <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">Standard</span>
+            {profileLink(standard)}
+          </div>
         )}
+        {projects.length > 0 && (
+          <div className="flex flex-col gap-0.5" role="group" aria-label="Projekte & Konten">
+            <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">Projekte & Konten</span>
+            {projects.map(profileLink)}
+          </div>
+        )}
+        {servers.length > 0 && (
+          <div className="flex flex-col gap-0.5" role="group" aria-label="Server">
+            <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">Server</span>
+            {servers.map(({ host, profile }) => (
+              <Link
+                key={`${profile.id}-${host.alias ?? host.hostname}`}
+                to="/profile/$id"
+                params={{ id: profile.id }}
+                className={navItem}
+              >
+                <Server aria-hidden className="text-muted-foreground" />
+                <span className="flex-1 truncate font-mono text-[12.5px]">{host.alias ?? host.hostname}</span>
+                <span className="truncate text-xs font-normal text-muted-foreground">{profile.name}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+        {nothing && <span className="px-2.5 text-xs text-muted-foreground">{filter ? "Kein Treffer" : "Noch keine Profile"}</span>}
       </nav>
 
       {archived.length > 0 && (

@@ -1,8 +1,21 @@
+import type { Page } from "@playwright/test";
 import { expect, mockState, pagePosition, test } from "./fixtures";
 
+/** Opens the wizard and picks the Git flow. */
+async function gitWizard(app: Page) {
+  await app.goto("/#/new");
+  await app.getByRole("radio", { name: /^Git-Projekt/ }).click();
+  await app.getByRole("button", { name: "Weiter" }).click();
+}
+
 test("creates a GitHub project end to end", async ({ app }) => {
-  await app.getByRole("link", { name: "Neues Projekt" }).click();
-  await expect(app.getByText("Schritt 1 von 6")).toBeVisible();
+  await app.getByRole("link", { name: "Neu", exact: true }).click();
+  await expect(app.getByRole("heading", { name: "Wofür ist der Key?" })).toBeVisible();
+  await app.getByRole("button", { name: "Weiter" }).click();
+  await expect(app.getByRole("alert")).toHaveText("Bitte wählen, wofür der Key ist.");
+  await app.getByRole("radio", { name: /^Git-Projekt/ }).click();
+  await app.getByRole("button", { name: "Weiter" }).click();
+  await expect(app.getByText("Schritt 2 von 7")).toBeVisible();
 
   // Validation: name is required.
   await app.getByRole("button", { name: "Weiter" }).click();
@@ -28,7 +41,7 @@ test("creates a GitHub project end to end", async ({ app }) => {
   await app.getByLabel("E-Mail").fill("tristan@kunde-c.de");
   await app.getByRole("button", { name: "Weiter" }).click();
 
-  // Step 5: key and preview of the diff.
+  // Key and preview of the diff.
   await expect(app.getByRole("heading", { name: "SSH-Key für Kunde C" })).toBeVisible();
   await expect(app.getByText("ed25519 · ~/.ssh/kunde-c_ed25519")).toBeVisible();
   await expect(app.getByLabel("Kommentar")).toHaveValue("tristan@zentrale-kunde-c");
@@ -44,7 +57,7 @@ test("creates a GitHub project end to end", async ({ app }) => {
 
   await app.getByRole("button", { name: "Anwenden & Pubkey kopieren" }).click();
 
-  // Step 6: clipboard, provider page, connection test.
+  // Clipboard, provider page, connection test.
   await expect(app.getByRole("heading", { name: "Key eintragen & testen" })).toBeVisible();
   expect(await mockState<string[]>(app, "openedUrls")).toEqual(["https://github.com/settings/ssh/new"]);
   expect(await mockState<string>(app, "clipboard")).toMatch(/^ssh-ed25519 .* tristan@zentrale-kunde-c$/);
@@ -59,34 +72,61 @@ test("creates a GitHub project end to end", async ({ app }) => {
 
 test("creates a server with an existing key from settings", async ({ app }) => {
   await app.getByRole("link", { name: "Einstellungen" }).click();
-  await app.getByRole("listitem").filter({ hasText: /^~\/\.ssh\/id_ed25519/ }).getByRole("link", { name: "Als Projekt anlegen" }).click();
+  await app.getByRole("listitem").filter({ hasText: /^~\/\.ssh\/id_ed25519/ }).getByRole("link", { name: "Als Profil anlegen" }).click();
 
-  await app.getByLabel("Projektname").fill("Backup Server");
+  await app.getByRole("radio", { name: /^Server/ }).click();
   await app.getByRole("button", { name: "Weiter" }).click();
-  await app.getByRole("radio", { name: "Server" }).click();
-  await app.getByLabel("Hostname").fill("192.168.1.20");
-  await app.getByLabel("SSH-Alias").fill("backup");
+  await expect(app.getByText("Schritt 2 von 4")).toBeVisible();
+  await app.getByLabel("Hostname oder IP").fill("192.168.1.20");
+  await app.getByLabel(/SSH-Alias/).fill("backup");
   await app.getByLabel("Benutzer").fill("root");
   await app.getByRole("button", { name: "Weiter" }).click();
-  // Folder and Git identity are optional for servers.
-  await app.getByLabel("Ordner").fill("");
-  await app.getByRole("button", { name: "Weiter" }).click();
-  await app.getByRole("button", { name: "Weiter" }).click();
 
+  await expect(app.getByRole("heading", { name: "SSH-Key für backup" })).toBeVisible();
   await expect(app.getByRole("radio", { name: /Vorhandenen Key verwenden/ })).toHaveAttribute("aria-checked", "true");
   await expect(app.getByRole("radio", { name: /^~\/.ssh\/id_ed25519 SHA256/ })).toBeChecked();
   await expect(app.getByText("+Host backup 192.168.1.20")).toBeVisible();
   await expect(app.getByText("+    IdentityFile ~/.ssh/id_ed25519")).toBeVisible();
-  await app.getByRole("button", { name: "Anwenden & Pubkey kopieren" }).click();
+  await app.getByRole("button", { name: "Anwenden", exact: true }).click();
 
-  await expect(app.getByText(/ssh-copy-id/)).toBeVisible();
-  await app.getByRole("button", { name: "Ich hab ihn eingetragen" }).click();
+  await expect(app.getByRole("heading", { name: "Key auf dem Server eintragen" })).toBeVisible();
+  await app.getByRole("button", { name: "Key auf backup eintragen" }).click();
+  await expect(app.getByText("Key auf backup eingetragen")).toBeVisible();
+  await app.getByRole("button", { name: "Verbindung testen" }).click();
   await expect(app.getByText("Anmeldung erfolgreich")).toBeVisible();
   expect(await mockState<string[]>(app, "openedUrls")).toEqual([]);
+
+  // The server shows up in its own sidebar group, not as a project.
+  await app.getByRole("link", { name: "Zum Profil" }).click();
+  await expect(app.getByRole("heading", { level: 1, name: "backup" })).toBeVisible();
+  await expect(app.getByRole("region", { name: "Git-Identität" })).toHaveCount(0);
+  const sidebarServers = app.getByRole("navigation", { name: "Profile" }).getByRole("group", { name: "Server" });
+  await expect(sidebarServers.getByRole("link", { name: /backup/ })).toBeVisible();
+  await expect(app.getByRole("group", { name: "Projekte & Konten" }).getByText("backup")).toHaveCount(0);
+});
+
+test("adds a server to the private profile", async ({ app }) => {
+  await app.goto("/#/new");
+  await app.getByRole("radio", { name: /^Server/ }).click();
+  await app.getByRole("button", { name: "Weiter" }).click();
+  await app.getByLabel("Hostname oder IP").fill("10.9.9.9");
+  await app.getByLabel(/SSH-Alias/).fill("pi");
+  await app.getByRole("button", { name: "Weiter" }).click();
+  await app.getByRole("radio", { name: /Key eines Profils verwenden/ }).click();
+  await app.getByLabel("Profil", { exact: true }).selectOption("privat");
+  await expect(app.getByText("+Host pi 10.9.9.9")).toBeVisible();
+  await app.getByRole("button", { name: "Anwenden", exact: true }).click();
+  await app.getByRole("button", { name: "Key auf pi eintragen" }).click();
+  await expect(app.getByText("Key auf pi eingetragen")).toBeVisible();
+  await app.getByRole("link", { name: "Zum Profil" }).click();
+
+  await expect(app.getByRole("heading", { level: 1, name: "Privat" })).toBeVisible();
+  await expect(app.getByRole("region", { name: "Server" }).getByText("pi", { exact: true })).toBeVisible();
+  await expect(app.getByText(/Gilt für/)).toContainText("Server meinserver, pi");
 });
 
 test("rejects a project name that already exists", async ({ app }) => {
-  await app.goto("/#/new");
+  await gitWizard(app);
   await app.getByLabel("Projektname").fill("Sparkasse");
   await expect(app.getByText("Profil-ID: sparkasse")).toBeVisible();
   await app.getByRole("button", { name: "Weiter" }).click();
@@ -94,7 +134,7 @@ test("rejects a project name that already exists", async ({ app }) => {
 });
 
 test("shows an error when folders overlap", async ({ app }) => {
-  await app.goto("/#/new");
+  await gitWizard(app);
   await app.getByLabel("Projektname").fill("Unterprojekt");
   await app.getByRole("button", { name: "Weiter" }).click();
   await app.getByRole("button", { name: "Weiter" }).click();
@@ -108,7 +148,7 @@ test("shows an error when folders overlap", async ({ app }) => {
 });
 
 test("back keeps entered values", async ({ app }) => {
-  await app.goto("/#/new");
+  await gitWizard(app);
   await app.getByLabel("Projektname").fill("Kunde D");
   await app.getByRole("button", { name: "Weiter" }).click();
   await app.getByRole("radio", { name: "GitLab" }).click();
@@ -120,7 +160,7 @@ test("back keeps entered values", async ({ app }) => {
 });
 
 test("typing the project name does not move the form", async ({ app }) => {
-  await app.goto("/#/new");
+  await gitWizard(app);
   const color = app.getByText("Farbe", { exact: true });
   const before = await pagePosition(color);
   await app.getByLabel("Projektname").fill("Kunde C");
@@ -131,7 +171,7 @@ test("typing the project name does not move the form", async ({ app }) => {
 });
 
 test("validation messages do not move the buttons", async ({ app }) => {
-  await app.goto("/#/new");
+  await gitWizard(app);
   const next = app.getByRole("button", { name: "Weiter" });
   const before = await pagePosition(next);
   await next.click();
@@ -149,7 +189,7 @@ test("validation messages do not move the buttons", async ({ app }) => {
 });
 
 test("renaming the project updates the folder", async ({ app }) => {
-  await app.goto("/#/new");
+  await gitWizard(app);
   await app.getByLabel("Projektname").fill("Kunde C");
   await app.getByRole("button", { name: "Weiter" }).click();
   await app.getByRole("button", { name: "Weiter" }).click();

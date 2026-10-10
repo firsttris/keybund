@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyDraft, stepError, toProject, withDefaults, type Draft } from "./new-project";
+import { emptyDraft, profileName, stepError, stepsFor, toHost, toProject, withDefaults, type Draft } from "./new-project";
 
 const github: Draft = {
   ...emptyDraft(),
@@ -8,7 +8,26 @@ const github: Draft = {
   gitName: "Tristan",
   gitEmail: "t@kunde-c.de",
   comment: "t@zentrale-kunde-c",
+  kind: "git",
 };
+
+const server: Draft = {
+  ...emptyDraft(),
+  kind: "server",
+  hostname: "1.2.3.4",
+  alias: "srv",
+  user: "root",
+  port: "2222",
+  comment: "t@srv",
+};
+
+describe("stepsFor", () => {
+  it("has a short flow for servers", () => {
+    expect(stepsFor("server")).toEqual(["kind", "server", "key", "test"]);
+    expect(stepsFor("git")).toEqual(["kind", "project", "account", "folder", "git", "key", "test"]);
+    expect(stepsFor(null)).toEqual(stepsFor("git"));
+  });
+});
 
 describe("toProject", () => {
   it("builds a GitHub project with a new key", () => {
@@ -21,26 +40,26 @@ describe("toProject", () => {
   });
 
   it("builds a server with an existing key and no git identity", () => {
-    const p = toProject({
-      ...emptyDraft("~/.ssh/id_ed25519"),
-      name: "Server",
-      provider: "generic",
-      hostname: "1.2.3.4",
-      alias: "srv",
-      user: "root",
-      port: "2222",
-    });
+    const p = toProject({ ...server, keyMode: "existing", existingPath: "~/.ssh/id_ed25519", gitEmail: "x@y.de" });
     expect(p.profile.key.path).toBe("~/.ssh/id_ed25519");
     expect(p.key).toEqual({ type: "existing", path: "~/.ssh/id_ed25519" });
     expect(p.profile.git).toBeNull();
     expect(p.profile.folders).toEqual([]);
     expect(p.profile.hosts[0]).toEqual({ provider: "generic", hostname: "1.2.3.4", alias: "srv", user: "root", port: 2222 });
+    expect(p.make_default).toBe(false);
   });
 
-  it("drops alias and user for git providers", () => {
-    const p = toProject({ ...github, alias: "x", user: "y" });
-    expect(p.profile.hosts[0].alias).toBeNull();
-    expect(p.profile.hosts[0].user).toBeNull();
+  it("names a server after its alias or hostname", () => {
+    expect(profileName(server)).toBe("srv");
+    expect(profileName({ ...server, alias: "" })).toBe("1.2.3.4");
+    expect(profileName({ ...server, name: "Prod" })).toBe("Prod");
+    expect(toProject({ ...server, name: "Prod" }).profile.id).toBe("prod");
+  });
+
+  it("drops the user for git providers but keeps an alias", () => {
+    const h = toHost({ ...github, alias: "x", user: "y" });
+    expect(h.alias).toBe("x");
+    expect(h.user).toBeNull();
   });
 
   it("passes an empty passphrase as null", () => {
@@ -49,37 +68,53 @@ describe("toProject", () => {
 });
 
 describe("stepError", () => {
+  it("requires a kind", () => {
+    expect(stepError("kind", { ...github, kind: null })).toMatch(/wofür/);
+    expect(stepError("kind", github)).toBeNull();
+  });
+
   it("validates the project step", () => {
-    expect(stepError(0, { ...github, name: "" })).toMatch(/Projektnamen/);
-    expect(stepError(0, { ...github, name: "!!!" })).toMatch(/mindestens/);
-    expect(stepError(0, github, true)).toBe("Ein Profil „kunde-c“ gibt es schon.");
-    expect(stepError(0, github)).toBeNull();
+    expect(stepError("project", { ...github, name: "" })).toMatch(/Projektnamen/);
+    expect(stepError("project", { ...github, name: "!!!" })).toMatch(/mindestens/);
+    expect(stepError("project", github, true)).toBe("Ein Profil „kunde-c“ gibt es schon.");
+    expect(stepError("project", github)).toBeNull();
   });
 
-  it("validates hosts", () => {
-    expect(stepError(1, { ...github, hostname: " " })).toMatch(/Hostnamen/);
-    expect(stepError(1, { ...github, provider: "generic", hostname: "1.2.3.4" })).toBeNull();
-    expect(stepError(1, { ...github, port: "abc" })).toMatch(/Zahl/);
-    expect(stepError(1, github)).toBeNull();
+  it("validates the git account", () => {
+    expect(stepError("account", { ...github, hostname: " " })).toMatch(/Hostnamen/);
+    expect(stepError("account", { ...github, port: "abc" })).toMatch(/Zahl/);
+    expect(stepError("account", github)).toBeNull();
   });
 
-  it("requires a folder only for git hosts", () => {
-    expect(stepError(2, { ...github, folder: "" })).toMatch(/Projektordner/);
-    expect(stepError(2, { ...github, folder: "", provider: "generic" })).toBeNull();
+  it("validates the server", () => {
+    expect(stepError("server", { ...server, hostname: "" })).toMatch(/Hostname oder IP/);
+    expect(stepError("server", { ...server, port: "22a" })).toMatch(/Zahl/);
+    expect(stepError("server", { ...server, alias: "", hostname: "..." })).toMatch(/mindestens/);
+    expect(stepError("server", server)).toBeNull();
   });
 
-  it("validates the git identity, optional for servers", () => {
-    expect(stepError(3, { ...github, gitName: "" })).toMatch(/Git-Namen/);
-    expect(stepError(3, { ...github, gitEmail: "nope" })).toMatch(/E-Mail/);
-    expect(stepError(3, { ...github, provider: "generic", gitName: "", gitEmail: "" })).toBeNull();
-    expect(stepError(3, github)).toBeNull();
+  it("requires a folder", () => {
+    expect(stepError("folder", { ...github, folder: "" })).toMatch(/Projektordner/);
+    expect(stepError("folder", github)).toBeNull();
+  });
+
+  it("validates the git identity", () => {
+    expect(stepError("git", { ...github, gitName: "" })).toMatch(/Git-Namen/);
+    expect(stepError("git", { ...github, gitEmail: "nope" })).toMatch(/E-Mail/);
+    expect(stepError("git", github)).toBeNull();
   });
 
   it("validates the key step", () => {
-    expect(stepError(4, { ...github, comment: "" })).toMatch(/Kommentar/);
-    expect(stepError(4, { ...github, keyMode: "existing", existingPath: "" })).toMatch(/vorhandenen Key/);
-    expect(stepError(4, github)).toBeNull();
-    expect(stepError(5, github)).toBeNull();
+    expect(stepError("key", { ...github, comment: "" })).toMatch(/Kommentar/);
+    expect(stepError("key", { ...github, keyMode: "existing", existingPath: "" })).toMatch(/vorhandenen Key/);
+    expect(stepError("key", github)).toBeNull();
+    expect(stepError("test", github)).toBeNull();
+  });
+
+  it("lets a server reuse the key of a profile", () => {
+    expect(stepError("key", { ...server, keyMode: "profile" })).toMatch(/Profil wählen/);
+    expect(stepError("key", { ...server, keyMode: "profile", profileId: "privat" }, true)).toBeNull();
+    expect(stepError("key", { ...server, comment: "c" }, true)).toMatch(/dessen Key verwenden/);
   });
 });
 
@@ -112,8 +147,9 @@ describe("withDefaults", () => {
   it("keeps values the user edited", () => {
     const edited = { ...emptyDraft(), name: "Kunde D", folder: "~/work/x/", folderEdited: true, comment: "mine", commentEdited: true };
     expect(withDefaults(edited, defaults("kunde-d"))).toMatchObject({ folder: "~/work/x/", comment: "mine" });
-    // An intentionally emptied folder (servers) stays empty.
+    // An intentionally emptied folder stays empty; servers have none.
     expect(withDefaults({ ...edited, folder: "" }, defaults("kunde-d")).folder).toBe("");
+    expect(withDefaults({ ...edited, kind: "server" }, defaults("kunde-d")).folder).toBe("");
   });
 
   it("is empty without a name", () => {

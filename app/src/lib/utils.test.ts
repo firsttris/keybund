@@ -60,7 +60,9 @@ describe("hosts and colors", () => {
     expect(hostSummary(base)).toBe("");
     const gh = { alias: null, hostname: "github.com", user: null, port: null, provider: "github" as const };
     expect(hostSummary({ ...base, hosts: [gh] })).toBe("GitHub");
-    expect(hostSummary({ ...base, hosts: [gh, gh] })).toBe("2 Hosts");
+    expect(hostSummary({ ...base, hosts: [gh, gh] })).toBe("GitHub");
+    expect(hostSummary({ ...base, hosts: [gh, { ...gh, provider: "gitlab" as const }] })).toBe("2 Konten");
+    expect(hostSummary({ ...base, hosts: [{ ...gh, provider: "generic" as const }] })).toBe("");
   });
 
   it("labels hosts", () => {

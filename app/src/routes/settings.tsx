@@ -112,7 +112,7 @@ export function SettingsPage() {
                   </Link>
                 ) : (
                   <Link to="/new" search={{ key: k.key.path }} className="text-[13px] font-medium text-foreground">
-                    Als Projekt anlegen
+                    Als Profil anlegen
                   </Link>
                 )}
               </li>

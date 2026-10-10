@@ -74,16 +74,30 @@ test("adds and removes a folder, rejects nested folders", async ({ app }) => {
   await expect(app.getByText("~/work/kunde-b/", { exact: true })).toHaveCount(0);
 });
 
-test("adds a server host", async ({ app }) => {
+test("adds a server and installs the key", async ({ app }) => {
   await app.goto("/#/profile/kunde-b");
-  await app.getByRole("button", { name: "+ Host" }).click();
-  const form = app.getByRole("form", { name: "Host hinzufügen" });
-  await form.getByLabel("Provider").selectOption("generic");
-  await form.getByLabel("Hostname").fill("10.0.0.7");
-  await form.getByLabel("Alias").fill("kundenserver");
-  await form.getByRole("button", { name: "Host speichern" }).click();
-  await expect(app.getByText("kundenserver", { exact: true })).toBeVisible();
-  await expect(app.getByRole("navigation", { name: "Profile" }).getByText("2 Hosts")).toHaveCount(2);
+  const card = app.getByRole("region", { name: "Server" });
+  await card.getByRole("button", { name: "+ Server" }).click();
+  const form = app.getByRole("form", { name: "Server hinzufügen" });
+  await form.getByLabel("Hostname oder IP").fill("10.0.0.7");
+  await form.getByLabel(/Alias/).fill("kundenserver");
+  await form.getByRole("button", { name: "Server speichern" }).click();
+  await expect(card.getByText("kundenserver", { exact: true })).toBeVisible();
+  await card.getByRole("button", { name: "Key eintragen" }).click();
+  await expect(card.getByText("Key auf kundenserver eingetragen")).toBeVisible();
+  const sidebarServers = app.getByRole("navigation", { name: "Profile" }).getByRole("group", { name: "Server" });
+  await expect(sidebarServers.getByRole("link")).toHaveCount(2);
+  await expect(sidebarServers.getByRole("link", { name: /kundenserver.*Kunde B/ })).toBeVisible();
+});
+
+test("adds a git account", async ({ app }) => {
+  await app.goto("/#/profile/kunde-b");
+  const card = app.getByRole("region", { name: "Git-Konten" });
+  await card.getByRole("button", { name: "+ Konto" }).click();
+  await card.getByLabel("Anbieter").selectOption("gitlab");
+  await card.getByRole("button", { name: "Konto speichern" }).click();
+  await expect(card.getByText("gitlab.com", { exact: true })).toBeVisible();
+  await expect(app.getByRole("navigation", { name: "Profile" }).getByRole("link", { name: /Kunde B.*2 Konten/ })).toBeVisible();
 });
 
 test("archives a profile and removes its configs", async ({ app }) => {
@@ -105,6 +119,9 @@ test("archives a profile and removes its configs", async ({ app }) => {
 test("sidebar search filters profiles", async ({ app }) => {
   await app.getByLabel("Profile durchsuchen").fill("spar");
   const nav = app.getByRole("navigation", { name: "Profile" });
+  await expect(nav.getByRole("link")).toHaveCount(1);
+  await app.getByLabel("Profile durchsuchen").fill("1.2.3");
+  await expect(nav.getByRole("group", { name: "Server" }).getByRole("link", { name: /meinserver/ })).toBeVisible();
   await expect(nav.getByRole("link")).toHaveCount(1);
   await app.getByLabel("Profile durchsuchen").fill("xyz");
   await expect(nav.getByText("Kein Treffer")).toBeVisible();

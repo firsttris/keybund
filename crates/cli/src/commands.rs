@@ -11,7 +11,7 @@ use keybund_core::doctor::{self, Status};
 use keybund_core::keygen::{self, GenerateOptions};
 use keybund_core::model::{Config, GitIdentity, HostEntry, KeyRef, Profile, Provider};
 use keybund_core::{
-    archive as archive_mod, clone as clone_mod, import as import_mod, probe, provider, store,
+    archive as archive_mod, clone as clone_mod, import as import_mod, keyinstall, probe, provider, store,
     uninstall as uninstall_mod, which as which_mod, Env,
 };
 
@@ -343,7 +343,7 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
             .default(true)
             .interact()?
     {
-        return run_probe(env, &profile);
+        return run_probe(env, &profile, None);
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -418,17 +418,29 @@ pub fn copy(env: &Env, id: &str, print: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-pub fn test(env: &Env, id: &str) -> Result<ExitCode> {
+pub fn test(env: &Env, id: &str, host: Option<&str>) -> Result<ExitCode> {
     let config = store::load(env)?;
-    run_probe(env, config.profile(id)?)
+    run_probe(env, config.profile(id)?, host)
 }
 
-fn run_probe(env: &Env, profile: &Profile) -> Result<ExitCode> {
+fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCode> {
     if profile.hosts.is_empty() {
         bail!("Profil „{}“ hat keinen Host", profile.id);
     }
+    let hosts: Vec<&HostEntry> = profile
+        .hosts
+        .iter()
+        .filter(|h| {
+            only.map_or(true, |name| {
+                h.target_name().eq_ignore_ascii_case(name) || h.hostname.eq_ignore_ascii_case(name)
+            })
+        })
+        .collect();
+    if let (true, Some(name)) = (hosts.is_empty(), only) {
+        bail!("Profil „{}“ hat keinen Host {name}", profile.id);
+    }
     let mut ok = true;
-    for host in &profile.hosts {
+    for host in hosts {
         let r = probe::probe(env, profile, host)?;
         if r.success {
             ui::success(&format!("{}: {}", r.host, r.message));
@@ -875,4 +887,36 @@ pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
         ui::warn("Configs nicht geschrieben – später mit `keybund apply`.");
     }
     Ok(ExitCode::SUCCESS)
+}
+
+pub fn install_key(env: &Env, id: &str, host: Option<&str>) -> Result<ExitCode> {
+    let config = store::load(env)?;
+    let p = config.profile(id)?;
+    let servers: Vec<&HostEntry> = p
+        .hosts
+        .iter()
+        .filter(|h| !h.provider.is_git_host())
+        .filter(|h| host.map_or(true, |name| h.ssh_patterns().iter().any(|s| s.eq_ignore_ascii_case(name))))
+        .collect();
+    if servers.is_empty() {
+        match host {
+            Some(name) => bail!("Profil „{id}“ hat keinen Server {name}"),
+            None => bail!("Profil „{id}“ hat keinen Server – Git-Hosts bekommen den Key über ihre Webseite"),
+        }
+    }
+    let mut ok = true;
+    for server in servers {
+        ui::hint(&format!("Melde mich an {} an (Passwort oder ein bereits eingetragener Key) …", server.target_name()));
+        let r = keyinstall::install(env, p, server)?;
+        if r.success {
+            ui::success(&r.message);
+        } else {
+            ok = false;
+            ui::error(&r.message);
+            for line in r.output.lines().take(5) {
+                ui::hint(line);
+            }
+        }
+    }
+    Ok(if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE })
 }

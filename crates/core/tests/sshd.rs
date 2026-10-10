@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use keybund_core::keygen::{self, GenerateOptions};
 use keybund_core::model::{HostEntry, KeyRef, Profile, Provider};
-use keybund_core::{probe, render, Env};
+use keybund_core::{keyinstall, probe, render, Env};
 
 const PASSPHRASE: &str = "geheim";
 
@@ -58,8 +58,10 @@ fn start_sshd(sshd: &Path, dir: &Path, authorized: &str) -> (Killed, u16) {
         format!(
             "Port {port}\nListenAddress 127.0.0.1\nHostKey {}\nAuthorizedKeysFile {}\nPidFile none\n\
              PasswordAuthentication no\nKbdInteractiveAuthentication no\nPubkeyAuthentication yes\n\
-             UsePAM no\nStrictModes no\nPermitRootLogin prohibit-password\n",
+             UsePAM no\nStrictModes no\nPermitRootLogin prohibit-password\n\
+             SetEnv KEYBUND_AUTHORIZED_KEYS={}\n",
             host_key.display(),
+            dir.join("authorized_keys").display(),
             dir.join("authorized_keys").display()
         ),
     )
@@ -294,4 +296,79 @@ fn connection_test_detects_a_login_with_another_key() {
     assert!(r.success, "{}", r.output);
     assert!(!r.other_key);
     assert_eq!(r.used_key.as_deref(), Some("~/.ssh/test_ed25519"));
+}
+
+/// "Key auf Server eintragen": the server only knows the user's existing
+/// key; Keybund logs in with it and appends the new profile key once.
+#[test]
+fn installs_the_profile_key_on_a_server() {
+    let Some(sshd) = sshd_path() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let dir = dir.path().canonicalize().unwrap();
+    let env = Env::with_home(dir.join("home"));
+    let gen = |name: &str| {
+        keygen::generate(
+            &env,
+            &GenerateOptions { path: format!("~/.ssh/{name}_ed25519"), comment: name.into(), passphrase: None },
+        )
+        .unwrap()
+    };
+    let existing = gen("privat");
+    let new_key = gen("nas");
+    // authorized_keys without a trailing newline: the new key must start on its own line.
+    let (_sshd, port) = start_sshd(&sshd, &dir, existing.public_key.as_deref().unwrap());
+    let user_config = dir.join("user_config");
+    fs::write(
+        &user_config,
+        format!("Host 127.0.0.1\n    IdentityFile {}\n", env.expand("~/.ssh/privat_ed25519").display()),
+    )
+    .unwrap();
+    let extra: Vec<String> = vec![
+        "-F".into(),
+        user_config.display().to_string(),
+        "-o".into(),
+        format!("UserKnownHostsFile={}", dir.join("known_hosts").display()),
+    ];
+    let host = HostEntry {
+        alias: Some("nas".into()),
+        hostname: "127.0.0.1".into(),
+        user: Some(user()),
+        port: Some(port),
+        provider: Provider::Generic,
+    };
+    let profile = Profile {
+        id: "nas".into(),
+        name: "NAS".into(),
+        key: KeyRef { path: "~/.ssh/nas_ed25519".into(), comment: None },
+        hosts: vec![host.clone()],
+        ..Default::default()
+    };
+
+    let r = keyinstall::install_with(&env, &profile, &host, &extra).unwrap();
+    assert!(r.success && !r.already_present, "{} / {}", r.message, r.output);
+    let authorized = fs::read_to_string(dir.join("authorized_keys")).unwrap();
+    assert_eq!(authorized.lines().count(), 2, "{authorized}");
+    assert!(authorized.lines().any(|l| l == new_key.public_key.as_deref().unwrap()));
+
+    // Twice is fine and changes nothing.
+    let r = keyinstall::install_with(&env, &profile, &host, &extra).unwrap();
+    assert!(r.success && r.already_present);
+    assert_eq!(fs::read_to_string(dir.join("authorized_keys")).unwrap(), authorized);
+
+    // Now the profile key alone gets in.
+    let mut cmd = Command::new("ssh");
+    cmd.arg("-v").args(["-F", "/dev/null", "-o", &format!("UserKnownHostsFile={}", dir.join("known_hosts").display())]);
+    cmd.args(probe::ssh_args(&profile, &HostEntry { alias: None, ..host.clone() }).into_iter().map(|a| {
+        if a.starts_with("~/") {
+            env.expand(&a).display().to_string()
+        } else {
+            a
+        }
+    }));
+    let (_agent, sock) = start_agent(&dir, "agent.sock");
+    let out = isolated(cmd, &sock, &askpass(&dir, None));
+    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    let r = probe::evaluate(&env, &host, &text, out.status.code(), String::new(), new_key.fingerprint.as_deref());
+    assert!(r.success, "{}", r.output);
+    assert_eq!(r.used_key.as_deref(), Some("~/.ssh/nas_ed25519"));
 }

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Archive, Check, Copy, ExternalLink, Folder, KeyRound, Server, Star, Trash2, X, Zap } from "lucide-react";
+import { Archive, Check, Copy, ExternalLink, Folder, GitBranch, KeyRound, Server, Star, Trash2, X, Zap } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ColorDot } from "@/components/color-dot";
@@ -25,17 +25,19 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { errorMessage } from "@/lib/api";
 import { openExternal } from "@/lib/open";
-import type { HostEntry, Profile, ProfileView, Provider } from "@/lib/bindings";
+import type { HostEntry, HostLink, Profile, ProfileView, Provider } from "@/lib/bindings";
+import { gitAccounts, isServerOnly, servers } from "@/lib/categories";
 import {
   useArchiveProfile,
   useCopyPublicKey,
   useGeneratedConfig,
+  useInstallKey,
   useProfile,
   useSetDefault,
   useTestConnection,
   useUpdateProfile,
 } from "@/lib/queries";
-import { defaultHostname, formatAge, formatDate, formatRelative, hostLabel, isValidEmail, PROVIDERS, providerLabel } from "@/lib/utils";
+import { defaultHostname, formatAge, formatDate, formatRelative, GIT_PROVIDERS, hostLabel, isValidEmail, providerLabel } from "@/lib/utils";
 
 const mono = "font-mono text-[13px]";
 
@@ -60,7 +62,22 @@ function ProfileDetail({ view }: { view: ProfileView }) {
   const [copied, setCopied] = useState(false);
   const test = useTestConnection();
   const primary = profile.hosts[0];
-  const folder = profile.folders[0];
+  const serverOnly = isServerOnly(profile);
+  const account = gitAccounts(profile)[0];
+  const serverNames = servers(profile).map((h) => h.alias ?? h.hostname);
+  const scope = [
+    profile.folders.length > 0 && (
+      <span key="f">
+        alles unter <span className="font-mono text-secondary-foreground">{profile.folders.join(", ")}</span>
+      </span>
+    ),
+    view.is_default && <span key="d">Git außerhalb aller Projektordner</span>,
+    serverNames.length > 0 && (
+      <span key="s">
+        Server <span className="font-mono text-secondary-foreground">{serverNames.join(", ")}</span>
+      </span>
+    ),
+  ].filter(Boolean);
 
   const onCopy = () =>
     copy.mutate(profile.id, {
@@ -85,23 +102,29 @@ function ProfileDetail({ view }: { view: ProfileView }) {
           <div className="flex flex-wrap items-center gap-3">
             <ColorDot color={profile.color} className="size-3" />
             <h1 className="m-0 text-[26px] font-semibold tracking-tight">{profile.name}</h1>
-            {primary && <Badge>{providerLabel(primary.provider)}</Badge>}
+            {account ? <Badge>{providerLabel(account.provider)}</Badge> : serverOnly && <Badge>Server</Badge>}
             {profile.archived ? <Badge variant="muted">Archiviert</Badge> : <Badge variant="success">Aktiv</Badge>}
-            {view.is_default && <Badge variant="outline">Default</Badge>}
+            {view.is_default && <Badge variant="outline">Standard</Badge>}
           </div>
           <p className="m-0 text-muted-foreground">
-            {folder ? (
+            {scope.length > 0 ? (
               <>
-                alles unter <span className="font-mono text-secondary-foreground">{folder}</span> nutzt diesen Key
+                Gilt für{" "}
+                {scope.map((part, i) => (
+                  <span key={i}>
+                    {i > 0 && " · "}
+                    {part}
+                  </span>
+                ))}
               </>
             ) : (
-              "kein Projektordner – gilt nur für die Hosts"
+              "Noch nirgends zugeordnet – Ordner, Git-Konto oder Server hinzufügen"
             )}
           </p>
         </div>
         {!profile.archived && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => test.mutate(profile.id)} disabled={test.isPending || !primary}>
+            <Button variant="outline" onClick={() => test.mutate({ id: profile.id })} disabled={test.isPending || !primary}>
               <Zap aria-hidden />
               Verbindung testen
             </Button>
@@ -128,9 +151,10 @@ function ProfileDetail({ view }: { view: ProfileView }) {
           <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4 max-[640px]:grid-cols-1">
             <KeyCard view={view} onCopy={onCopy} />
             <ConnectionCard view={view} test={test} />
-            <HostsCard profile={profile} links={view.add_key_urls.map((l) => l.url)} />
-            <FoldersCard profile={profile} />
-            <GitCard profile={profile} />
+            {!serverOnly && <FoldersCard profile={profile} />}
+            {!serverOnly && <GitAccountsCard profile={profile} links={view.add_key_urls} />}
+            <ServersCard profile={profile} />
+            {!serverOnly && <GitCard profile={profile} />}
             {!profile.archived && <DangerCard view={view} />}
           </div>
         </TabsContent>
@@ -269,69 +293,164 @@ function StatusLine({ ok, title, detail }: { ok: boolean; title: string; detail:
   );
 }
 
-function HostsCard({ profile, links }: { profile: Profile; links: string[] }) {
+function GitAccountsCard({ profile, links }: { profile: Profile; links: HostLink[] }) {
   const update = useUpdateProfile();
   const [adding, setAdding] = useState(false);
-  const removeHost = (index: number) => update.mutate({ ...profile, hosts: profile.hosts.filter((_, i) => i !== index) });
+  const accounts = gitAccounts(profile);
+  const remove = (h: HostEntry) => update.mutate({ ...profile, hosts: profile.hosts.filter((x) => x !== h) });
   return (
-    <Card aria-labelledby="hosts-title">
+    <Card aria-labelledby="accounts-title">
       <CardHeader>
-        <CardTitle id="hosts-title">Hosts</CardTitle>
+        <CardTitle id="accounts-title">Git-Konten</CardTitle>
         {!profile.archived && !adding && (
           <Button variant="ghost" size="sm" onClick={() => setAdding(true)}>
-            + Host
+            + Konto
           </Button>
         )}
       </CardHeader>
-      {profile.hosts.map((h, i) => {
-        const link = links.find((l) => l.includes(h.hostname));
+      {accounts.map((h) => {
+        const link = links.find((l) => l.host === h.hostname);
+        const name = h.alias ?? h.hostname;
         return (
-          <ItemRow key={`${h.alias}-${h.hostname}-${i}`}>
-            <Server aria-hidden className="size-4 text-muted-foreground" />
+          <ItemRow key={name}>
+            <GitBranch aria-hidden className="size-4 text-muted-foreground" />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className={mono}>{h.alias ?? h.hostname}</span>
+              <span className={mono}>{name}</span>
               <span className="text-xs text-muted-foreground">{hostLabel(h)}</span>
             </div>
             {link && !profile.archived && (
               <button
                 className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-foreground hover:bg-background"
-                onClick={() => openExternal(link)}
+                onClick={() => openExternal(link.url)}
               >
                 Key eintragen
                 <ExternalLink aria-hidden className="size-[13px]" />
               </button>
             )}
             {!profile.archived && profile.hosts.length > 1 && (
-              <Button variant="ghost" size="icon" aria-label={`Host ${h.alias ?? h.hostname} entfernen`} onClick={() => removeHost(i)}>
+              <Button variant="ghost" size="icon" aria-label={`Konto ${name} entfernen`} onClick={() => remove(h)}>
                 <Trash2 aria-hidden />
               </Button>
             )}
           </ItemRow>
         );
       })}
-      {profile.hosts.length === 0 && <p className="m-0 text-[13px] text-muted-foreground">Kein Host eingetragen.</p>}
+      {accounts.length === 0 && !adding && (
+        <p className="m-0 text-[13px] text-muted-foreground">Kein Git-Konto – z. B. GitHub oder ein GitLab der Firma.</p>
+      )}
       {adding && (
         <HostForm
+          kind="git"
           onCancel={() => setAdding(false)}
-          onSave={(host) =>
-            update.mutate({ ...profile, hosts: [...profile.hosts, host] }, { onSuccess: () => setAdding(false) })
-          }
+          onSave={(host) => update.mutate({ ...profile, hosts: [...profile.hosts, host] }, { onSuccess: () => setAdding(false) })}
         />
       )}
+      {update.isError && <FieldError>{errorMessage(update.error)}</FieldError>}
     </Card>
   );
 }
 
-export function HostForm({ onSave, onCancel }: { onSave: (h: HostEntry) => void; onCancel: () => void }) {
-  const [provider, setProvider] = useState<Provider>("github");
-  const [hostname, setHostname] = useState(defaultHostname("github"));
+function ServersCard({ profile }: { profile: Profile }) {
+  const update = useUpdateProfile();
+  const [adding, setAdding] = useState(false);
+  const list = servers(profile);
+  return (
+    <Card aria-labelledby="servers-title">
+      <CardHeader>
+        <CardTitle id="servers-title">Server</CardTitle>
+        {!profile.archived && !adding && (
+          <Button variant="ghost" size="sm" onClick={() => setAdding(true)}>
+            + Server
+          </Button>
+        )}
+      </CardHeader>
+      {list.map((h) => (
+        <ServerRow key={h.alias ?? h.hostname} profile={profile} host={h} />
+      ))}
+      {list.length === 0 && !adding && (
+        <p className="m-0 text-[13px] text-muted-foreground">
+          Kein Server. ssh, scp und sftp nehmen für eingetragene Server automatisch diesen Key.
+        </p>
+      )}
+      {adding && (
+        <HostForm
+          kind="server"
+          onCancel={() => setAdding(false)}
+          onSave={(host) => update.mutate({ ...profile, hosts: [...profile.hosts, host] }, { onSuccess: () => setAdding(false) })}
+        />
+      )}
+      {update.isError && <FieldError>{errorMessage(update.error)}</FieldError>}
+    </Card>
+  );
+}
+
+function ServerRow({ profile, host }: { profile: Profile; host: HostEntry }) {
+  const update = useUpdateProfile();
+  const install = useInstallKey();
+  const test = useTestConnection();
+  const name = host.alias ?? host.hostname;
+  const result = install.data ?? null;
+  const tested = test.data ?? null;
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-muted p-3">
+      <div className="flex items-center gap-3">
+        <Server aria-hidden className="size-4 text-muted-foreground" />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className={mono}>{name}</span>
+          <span className="text-xs text-muted-foreground">{hostLabel(host)}</span>
+        </div>
+        {!profile.archived && (
+          <>
+            <Button variant="ghost" size="sm" disabled={install.isPending} onClick={() => install.mutate({ id: profile.id, host: name })}>
+              {install.isPending && <Spinner className="size-3" />}
+              Key eintragen
+            </Button>
+            <Button variant="ghost" size="sm" disabled={test.isPending} onClick={() => test.mutate({ id: profile.id, host: name })}>
+              {test.isPending && <Spinner className="size-3" />}
+              Testen
+            </Button>
+            {profile.hosts.length > 1 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Server ${name} entfernen`}
+                onClick={() => update.mutate({ ...profile, hosts: profile.hosts.filter((x) => x !== host) })}
+              >
+                <Trash2 aria-hidden />
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+      <div aria-live="polite" className="flex flex-col gap-1 text-xs">
+        {install.isPending && <span className="text-muted-foreground">Anmeldung an {name} – ggf. Passwort eingeben …</span>}
+        {result && <span className={result.success ? "text-success" : "text-danger"}>{result.message}</span>}
+        {install.isError && <span className="text-danger">{errorMessage(install.error)}</span>}
+        {tested && <span className={tested.success ? "text-success" : "text-danger"}>Test: {tested.message}</span>}
+        {test.isError && <span className="text-danger">{errorMessage(test.error)}</span>}
+      </div>
+    </div>
+  );
+}
+
+export function HostForm({
+  kind,
+  onSave,
+  onCancel,
+}: {
+  kind: "git" | "server";
+  onSave: (h: HostEntry) => void;
+  onCancel: () => void;
+}) {
+  const server = kind === "server";
+  const [provider, setProvider] = useState<Provider>(server ? "generic" : "github");
+  const [hostname, setHostname] = useState(server ? "" : defaultHostname("github"));
   const [alias, setAlias] = useState("");
   const [user, setUser] = useState("");
   const [port, setPort] = useState("");
-  const generic = provider === "generic";
   return (
     <form
-      aria-label="Host hinzufügen"
+      aria-label={server ? "Server hinzufügen" : "Git-Konto hinzufügen"}
       className="flex flex-col gap-3 rounded-lg border border-border p-3"
       onSubmit={(e) => {
         e.preventDefault();
@@ -339,46 +458,61 @@ export function HostForm({ onSave, onCancel }: { onSave: (h: HostEntry) => void;
         onSave({
           provider,
           hostname: hostname.trim(),
-          alias: generic && alias.trim() ? alias.trim() : null,
-          user: generic && user.trim() ? user.trim() : null,
+          alias: alias.trim() || null,
+          user: server && user.trim() ? user.trim() : null,
           port: port ? Number(port) : null,
         });
       }}
     >
       <div className="grid grid-cols-2 gap-3">
+        {!server && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="host-provider">Anbieter</Label>
+            <Select
+              id="host-provider"
+              value={provider}
+              onChange={(e) => {
+                const p = e.target.value as Provider;
+                setProvider(p);
+                setHostname(defaultHostname(p));
+              }}
+            >
+              {GIT_PROVIDERS.map((p) => (
+                <option key={p} value={p}>
+                  {providerLabel(p)}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="host-provider">Provider</Label>
-          <Select
-            id="host-provider"
-            value={provider}
-            onChange={(e) => {
-              const p = e.target.value as Provider;
-              setProvider(p);
-              setHostname(defaultHostname(p));
-            }}
-          >
-            {PROVIDERS.map((p) => (
-              <option key={p} value={p}>
-                {providerLabel(p)}
-              </option>
-            ))}
-          </Select>
+          <Label htmlFor="host-name">{server ? "Hostname oder IP" : "Hostname"}</Label>
+          <Input
+            id="host-name"
+            className={mono}
+            value={hostname}
+            placeholder={server ? "192.168.1.5" : undefined}
+            onChange={(e) => setHostname(e.target.value)}
+            required
+          />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="host-name">Hostname</Label>
-          <Input id="host-name" className={mono} value={hostname} onChange={(e) => setHostname(e.target.value)} required />
+          <Label htmlFor="host-alias">
+            Alias <span className="font-normal text-muted-foreground">(optional)</span>
+          </Label>
+          <Input
+            id="host-alias"
+            className={mono}
+            value={alias}
+            onChange={(e) => setAlias(e.target.value)}
+            placeholder={server ? "nas" : "github-kunde"}
+          />
         </div>
-        {generic && (
-          <>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="host-alias">Alias</Label>
-              <Input id="host-alias" className={mono} value={alias} onChange={(e) => setAlias(e.target.value)} placeholder="meinserver" />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="host-user">Benutzer</Label>
-              <Input id="host-user" className={mono} value={user} onChange={(e) => setUser(e.target.value)} />
-            </div>
-          </>
+        {server && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="host-user">Benutzer</Label>
+            <Input id="host-user" className={mono} value={user} onChange={(e) => setUser(e.target.value)} />
+          </div>
         )}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="host-port">Port</Label>
@@ -390,7 +524,7 @@ export function HostForm({ onSave, onCancel }: { onSave: (h: HostEntry) => void;
           Abbrechen
         </Button>
         <Button size="sm" type="submit">
-          Host speichern
+          {server ? "Server speichern" : "Konto speichern"}
         </Button>
       </div>
     </form>
@@ -442,7 +576,7 @@ function FoldersCard({ profile }: { profile: Profile }) {
           )}
         </ItemRow>
       ))}
-      {profile.folders.length === 0 && <p className="m-0 text-[13px] text-muted-foreground">Kein Ordner – Git nutzt den Key nur per Default.</p>}
+      {profile.folders.length === 0 && <p className="m-0 text-[13px] text-muted-foreground">Kein Ordner – Git nutzt den Key nur, wenn das Profil Standard ist.</p>}
       {adding && (
         <form
           className="flex flex-wrap gap-2"
@@ -532,9 +666,9 @@ function DangerCard({ view }: { view: ProfileView }) {
       <CardTitle id="manage-title">Verwalten</CardTitle>
       <div className="flex flex-wrap gap-2">
         {!view.is_default && (
-          <Button variant="outline" onClick={() => setDefault.mutate(profile.id, { onSuccess: () => toast.success(`${profile.name} ist jetzt Default`) })}>
+          <Button variant="outline" onClick={() => setDefault.mutate(profile.id, { onSuccess: () => toast.success(`${profile.name} ist jetzt Standard`) })}>
             <Star aria-hidden />
-            Als Default setzen
+            Als Standard setzen
           </Button>
         )}
         <AlertDialog>

@@ -66,7 +66,7 @@ describe("settings", () => {
     expect(await screen.findByText("~/.ssh/id_ed25519")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "genutzt von Privat" })).toBeInTheDocument();
     const row = screen.getByText("~/.ssh/id_ed25519").closest("li")!;
-    expect(within(row).getByRole("link", { name: "Als Projekt anlegen" })).toHaveAttribute("href", "/new?key=%7E%2F.ssh%2Fid_ed25519");
+    expect(within(row).getByRole("link", { name: "Als Profil anlegen" })).toHaveAttribute("href", "/new?key=%7E%2F.ssh%2Fid_ed25519");
     expect(screen.getByText("~/.config/keybund/profiles.toml")).toBeInTheDocument();
     expect(await screen.findByText(/Keybund 0\.1\.0 by Tristan Teufel/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Quellcode auf GitHub" }));

@@ -16,6 +16,7 @@ import type {
   HostEntry,
   ImportCandidate,
   ImportProposal,
+  InstallResult,
   KeyInfo,
   LastTest,
   NewProject,
@@ -110,6 +111,10 @@ export interface MockState {
   otherKeyFor: string | null;
   /** Keybund's include lines are in the user's files. */
   installed: boolean;
+  /** `hostname:keypath` pairs installed on servers via install_key. */
+  installedKeys: string[];
+  /** Hostnames that time out. */
+  unreachable: string[];
 }
 
 export interface SshBlock {
@@ -192,6 +197,8 @@ export function seedState(): MockState {
     ],
     otherKeyFor: null,
     installed: true,
+    installedKeys: [],
+    unreachable: [],
   };
   state.applied = renderAll(state);
   return state;
@@ -421,6 +428,13 @@ function validate(profiles: Profile[]) {
     for (let j = i + 1; j < folders.length; j++)
       if (folders[i].startsWith(folders[j]) || folders[j].startsWith(folders[i]))
         throw new MockError("nested_folders", `Projektordner überschneiden sich: ${folders[i]} und ${folders[j]}`);
+  const patterns = new Set<string>();
+  for (const h of profiles.filter((p) => !p.archived).flatMap((p) => p.hosts)) {
+    for (const pattern of sshPatterns(h)) {
+      if (patterns.has(pattern)) throw new MockError("duplicate_alias", `Host „${pattern}“ ist mehreren Profilen zugeordnet`);
+      patterns.add(pattern);
+    }
+  }
   const ids = new Set<string>();
   for (const p of profiles) {
     if (ids.has(p.id)) throw new MockError("duplicate_id", `Profil-ID „${p.id}“ ist doppelt vergeben`);
@@ -646,9 +660,10 @@ export function createMockBackend(state: MockState = seedState()) {
       case "test_connection": {
         await sleep(state.latency);
         const p = find(state, String(args.id));
-        const h = p.hosts[0];
-        if (!h) throw new MockError("no_host", `Profil „${p.id}“ hat keinen Host`);
-        const ok = p.id !== "kunde-b";
+        const wanted = args.host as string | null | undefined;
+        const h = wanted ? p.hosts.find((x) => x.alias === wanted || x.hostname === wanted) : p.hosts[0];
+        if (!h) throw new MockError("no_host", wanted ? `Profil „${p.id}“ hat keinen Host ${wanted}` : `Profil „${p.id}“ hat keinen Host`);
+        const ok = p.id !== "kunde-b" && !state.unreachable.includes(h.hostname);
         const result: ProbeResult = {
           success: ok,
           host: h.alias ?? h.hostname,
@@ -657,9 +672,11 @@ export function createMockBackend(state: MockState = seedState()) {
             ? h.provider === "generic"
               ? "Anmeldung erfolgreich"
               : "Verbunden als @tristan"
-            : `${PROVIDER_NAME[h.provider]} kennt diesen Key nicht`,
-          output: ok ? "Hi tristan! You've successfully authenticated." : "git@github.com: Permission denied (publickey).",
-          command: `ssh -T -o PasswordAuthentication=no -o IdentitiesOnly=yes -o AddKeysToAgent=yes -i ${p.key.path} git@${h.hostname}`,
+            : h.provider === "generic"
+              ? `${h.alias ?? h.hostname} kennt diesen Key nicht`
+              : `${PROVIDER_NAME[h.provider]} kennt diesen Key nicht`,
+          output: ok ? "Hi tristan! You've successfully authenticated." : "Permission denied (publickey).",
+          command: `ssh -T -o PasswordAuthentication=no -o IdentitiesOnly=yes -o AddKeysToAgent=yes -i ${p.key.path} ${h.alias ?? h.hostname}`,
           used_key: ok ? p.key.path : null,
           other_key: false,
         };
@@ -674,6 +691,37 @@ export function createMockBackend(state: MockState = seedState()) {
         }
         state.lastTests.set(p.id, { success: result.success, account: result.account, message: result.message, at: Date.now() });
         return result;
+      }
+      case "install_key": {
+        await sleep(state.latency);
+        const p = find(state, String(args.id));
+        const name = String(args.host);
+        const h = p.hosts.find((x) => x.alias === name || x.hostname === name);
+        if (!h) throw new MockError("other", `Profil „${p.id}“ hat keinen Server ${name}`);
+        const key = `${h.hostname}:${p.key.path}`;
+        if (state.unreachable.includes(h.hostname)) {
+          return { success: false, already_present: false, message: `${name} ist nicht erreichbar`, output: "ssh: connect to host … Connection timed out" } satisfies InstallResult;
+        }
+        const already = state.installedKeys.includes(key);
+        if (!already) state.installedKeys.push(key);
+        return {
+          success: true,
+          already_present: already,
+          message: already ? `Der Key war auf ${name} schon eingetragen` : `Key auf ${name} eingetragen`,
+          output: "",
+        } satisfies InstallResult;
+      }
+      case "preview_add_host":
+      case "add_host": {
+        const p = find(state, String(args.id));
+        const host = structuredClone(args.host as HostEntry);
+        const next = { ...structuredClone(p), hosts: [...p.hosts, host] };
+        const profiles = state.profiles.map((x) => (x.id === p.id ? next : x));
+        validate(profiles);
+        if (cmd === "preview_add_host") return planFor(state, profiles);
+        state.profiles = profiles;
+        state.applied = renderAll(state);
+        return view(state, next);
       }
       case "last_test":
         return state.lastTests.get(String(args.id)) ?? null;

@@ -37,8 +37,20 @@ enum Command {
         #[arg(long)]
         print: bool,
     },
+    /// Pubkey auf einem Server eintragen (wie ssh-copy-id)
+    InstallKey {
+        profile: String,
+        /// Server (Alias oder Hostname/IP); ohne: alle Server des Profils
+        #[arg(long)]
+        host: Option<String>,
+    },
     /// Verbindung testen (Exit-Code 0 bei Erfolg)
-    Test { profile: String },
+    Test {
+        profile: String,
+        /// Nur diesen Host (Alias oder Hostname/IP); ohne: alle Hosts des Profils
+        #[arg(long)]
+        host: Option<String>,
+    },
     /// Welcher Key wird hier benutzt? Ohne Argument: aktuelles Verzeichnis
     Which { target: Option<String> },
     /// Repo ins richtige Profil klonen
@@ -119,7 +131,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::New(args) => commands::new(&env, *args),
         Command::Edit(args) => commands::edit(&env, *args),
         Command::Copy { profile, print } => commands::copy(&env, &profile, print),
-        Command::Test { profile } => commands::test(&env, &profile),
+        Command::Test { profile, host } => commands::test(&env, &profile, host.as_deref()),
+        Command::InstallKey { profile, host } => commands::install_key(&env, &profile, host.as_deref()),
         Command::Which { target } => commands::which(&env, target.as_deref()),
         Command::Clone { url, profile, dest } => commands::clone(&env, &url, profile.as_deref(), dest),
         Command::Apply { dry_run, yes } => commands::apply(&env, dry_run, yes),

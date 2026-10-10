@@ -17,10 +17,15 @@ export const commands = {
 	createProject: (project: NewProject, openProviderPage: boolean) => typedError<CreatedProject, CmdError>(__TAURI_INVOKE("create_project", { project, openProviderPage })),
 	updateProfile: (profile: Profile) => typedError<ProfileView, CmdError>(__TAURI_INVOKE("update_profile", { profile })),
 	setDefaultProfile: (id: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("set_default_profile", { id })),
+	previewAddHost: (id: string, host: HostEntry) => typedError<Plan, CmdError>(__TAURI_INVOKE("preview_add_host", { id, host })),
+	addHost: (id: string, host: HostEntry) => typedError<ProfileView, CmdError>(__TAURI_INVOKE("add_host", { id, host })),
 	copyPublicKey: (id: string) => typedError<string, CmdError>(__TAURI_INVOKE("copy_public_key", { id })),
 	/**  Opens an https link in the browser, also from a toolbox or an AppImage. */
 	openUrl: (url: string) => typedError<null, CmdError>(__TAURI_INVOKE("open_url", { url })),
-	testConnection: (id: string) => typedError<ProbeResult, CmdError>(__TAURI_INVOKE("test_connection", { id })),
+	/**  Tests the connection to `host` (alias or hostname) or the profile's first host. */
+	testConnection: (id: string, host: string | null) => typedError<ProbeResult, CmdError>(__TAURI_INVOKE("test_connection", { id, host })),
+	/**  Puts the profile's key on a server (`host` = alias or hostname). */
+	installKey: (id: string, host: string) => typedError<InstallResult, CmdError>(__TAURI_INVOKE("install_key", { id, host })),
 	lastTest: (id: string) => typedError<{
 	success: boolean,
 	account: string | null,
@@ -176,6 +181,14 @@ export type ImportProposal = {
 	key_exists: boolean,
 	/**  Hints for the user, e.g. that a folder is needed. */
 	notes: string[],
+};
+
+export type InstallResult = {
+	success: boolean,
+	/**  The key was already in `authorized_keys`. */
+	already_present: boolean,
+	message: string,
+	output: string,
 };
 
 /**  How the key of a new project is obtained. */

@@ -302,6 +302,16 @@ fn test_generic_server_and_missing_host() {
             .success()
             .stdout(predicate::str::contains("srv: Anmeldung erfolgreich"));
         assert!(sb.ssh_log().contains("srv true"));
+        sb.cmd()
+            .args(["test", "server", "--host", "1.2.3.4"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("srv: Anmeldung erfolgreich"));
+        sb.cmd()
+            .args(["test", "server", "--host", "nas"])
+            .assert()
+            .code(2)
+            .stderr(predicate::str::contains("Profil „server“ hat keinen Host nas"));
     }
 }
 
@@ -476,7 +486,9 @@ fn edit_changes_folders_hosts_identity_and_key() {
         .args(["edit", "kunde", "--add-host", "10.0.0.5", "--alias", "kundenserver", "--user", "admin", "--yes"])
         .assert()
         .success();
-    assert!(sb.read(".ssh/config.d/keybund.conf").contains("Host kundenserver 10.0.0.5\n    HostName 10.0.0.5\n    User admin"));
+    assert!(sb
+        .read(".ssh/config.d/keybund.conf")
+        .contains("Host kundenserver 10.0.0.5\n    HostName 10.0.0.5\n    User admin"));
     sb.cmd().args(["edit", "kunde", "--remove-host", "kundenserver", "--yes"]).assert().success();
     assert!(!sb.read(".ssh/config.d/keybund.conf").contains("kundenserver"));
 
@@ -505,4 +517,48 @@ fn edit_changes_folders_hosts_identity_and_key() {
     // Switch to an existing key.
     sb.cmd().args(["edit", "andere", "--key", "~/.ssh/kunde_ed25519", "--yes"]).assert().success();
     assert!(sb.read(".config/keybund/git/andere.gitconfig").contains("ssh -i ~/.ssh/kunde_ed25519"));
+}
+
+#[test]
+fn install_key_runs_ssh_with_the_key_on_stdin() {
+    if !has_tools() || cfg!(not(unix)) {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile("NAS", &["--provider", "generic", "--host", "192.168.1.5", "--alias", "nas", "--user", "admin"]);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // Fake ssh: records its arguments and stdin, answers like the remote script.
+        let log = sb.dir.path().join("install.log");
+        let script = sb.bin.join("ssh");
+        std::fs::write(
+            &script,
+            format!("#!/bin/sh\necho \"$@\" > '{0}'\ncat >> '{0}'\necho KEYBUND_ADDED\n", log.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        sb.cmd()
+            .args(["install-key", "nas"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Key auf nas eingetragen"));
+        let logged = std::fs::read_to_string(&log).unwrap();
+        assert!(logged.contains("IdentitiesOnly=no"));
+        assert!(logged.contains("admin@192.168.1.5"));
+        assert!(logged.contains(sb.read(".ssh/nas_ed25519.pub").trim()), "public key goes over stdin");
+
+        sb.cmd()
+            .args(["install-key", "nas", "--host", "other"])
+            .assert()
+            .code(2)
+            .stderr(predicate::str::contains("keinen Server other"));
+    }
+    sb.new_profile("Git", &["--provider", "github", "--folder", "~/dev/g", "--git-name", "T", "--git-email", "t@g.de"]);
+    sb.cmd()
+        .args(["install-key", "git"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("Git-Hosts bekommen den Key über ihre Webseite"));
 }

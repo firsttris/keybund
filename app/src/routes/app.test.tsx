@@ -52,10 +52,45 @@ describe("sidebar and home", () => {
   it("lists active and archived profiles and the doctor badge", async () => {
     await renderApp("/");
     const profiles = await screen.findByRole("navigation", { name: "Profile" });
-    await waitFor(() => expect(within(profiles).getAllByRole("link")).toHaveLength(3));
+    await waitFor(() => expect(within(profiles).getAllByRole("link")).toHaveLength(4));
+    expect(within(screen.getByRole("group", { name: "Standard" })).getByRole("link")).toHaveTextContent("Privat");
+    const projects = within(screen.getByRole("group", { name: "Projekte & Konten" })).getAllByRole("link");
+    expect(projects.map((l) => l.textContent)).toEqual(["SparkasseGitLab", "Kunde BGitHub"]);
+    expect(within(screen.getByRole("group", { name: "Server" })).getByRole("link")).toHaveTextContent("meinserverPrivat");
     expect(within(screen.getByRole("navigation", { name: "Archiv" })).getByText("Bundesagentur")).toBeInTheDocument();
     expect(await screen.findByLabelText("1 Hinweise")).toBeInTheDocument();
     expect(await screen.findByRole("alert")).toHaveTextContent("Include steht nicht ganz oben");
+  });
+
+  it("groups the home page into standard, projects and servers", async () => {
+    const { user } = await renderApp("/", (b) => {
+      b.state.profiles.push({
+        id: "hetzner",
+        name: "Hetzner",
+        color: "rose",
+        key: { path: "~/.ssh/hetzner_ed25519", comment: null },
+        git: null,
+        folders: [],
+        archived: false,
+        hosts: [{ provider: "generic", hostname: "5.6.7.8", alias: "hetzner", user: "root", port: 2222 }],
+      });
+    });
+    const main = await screen.findByRole("main");
+    const standard = await within(main).findByRole("region", { name: "Standard" });
+    expect(within(standard).getByText("Privat")).toBeInTheDocument();
+    const projects = within(main).getByRole("region", { name: "Projekte & Konten" });
+    expect(within(projects).getAllByRole("link").map((l) => l.textContent)).toEqual([
+      expect.stringContaining("Sparkasse"),
+      expect.stringContaining("Kunde B"),
+    ]);
+    const servers = within(main).getByRole("region", { name: "Server" });
+    expect(within(servers).getAllByRole("link")).toHaveLength(2);
+    expect(within(servers).getByText("root@5.6.7.8:2222")).toBeInTheDocument();
+    expect(within(servers).getByText("Key von Hetzner")).toBeInTheDocument();
+    // Server-only profiles are not listed as projects, also not in the sidebar.
+    expect(within(screen.getByRole("group", { name: "Projekte & Konten" })).queryByText("Hetzner")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Profile durchsuchen"), "5.6.7");
+    expect(within(screen.getByRole("navigation", { name: "Profile" })).getAllByRole("link")).toHaveLength(1);
   });
 
   it("shows the empty state without profiles", async () => {

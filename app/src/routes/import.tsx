@@ -83,7 +83,7 @@ function Proposals({ proposals }: { proposals: ImportProposal[] }) {
                   <CardTitle>{p.profile.name}</CardTitle>
                 </label>
                 <div className="flex gap-1.5">
-                  {p.make_default && <Badge>Default</Badge>}
+                  {p.make_default && <Badge>Standard</Badge>}
                   <Badge variant="muted">{providerLabel(p.profile.hosts[0].provider)}</Badge>
                 </div>
               </CardHeader>
