@@ -1,0 +1,223 @@
+//! Pure functions that turn profiles into config file contents.
+//! No I/O happens here, which keeps the output trivially testable.
+
+use std::collections::BTreeMap;
+use std::fmt::Write;
+use std::path::PathBuf;
+
+use crate::model::{Config, Profile};
+use crate::process::shell_quote;
+use crate::Env;
+
+const MANAGED: &str = "# Managed by Keybund – manual changes will be overwritten.";
+
+/// The `Include` line Keybund keeps at the very top of `~/.ssh/config`.
+pub const SSH_INCLUDE_LINE: &str = "Include ~/.ssh/config.d/keybund.conf";
+
+/// One generated file.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RenderedFile {
+    pub path: PathBuf,
+    pub content: String,
+}
+
+/// `core.sshCommand` value for a key.
+pub fn ssh_command(key_path: &str) -> String {
+    format!("ssh -i {} -o IdentitiesOnly=yes", shell_quote(key_path))
+}
+
+/// `~/.ssh/config.d/keybund.conf`: a `Host` block for every host that has
+/// an alias (servers), each pinned to the profile's key.
+pub fn ssh_config(config: &Config) -> String {
+    let mut out = format!("{MANAGED}\n# Included from the top of ~/.ssh/config.\n");
+    for p in config.active_profiles() {
+        for h in p.hosts.iter().filter(|h| h.alias.is_some()) {
+            let alias = h.alias.as_deref().unwrap_or_default();
+            let _ = writeln!(out, "\n# Profil: {}", p.name);
+            let _ = writeln!(out, "Host {alias}");
+            let _ = writeln!(out, "    HostName {}", h.hostname);
+            if let Some(user) = &h.user {
+                let _ = writeln!(out, "    User {user}");
+            }
+            if let Some(port) = h.port {
+                let _ = writeln!(out, "    Port {port}");
+            }
+            let _ = writeln!(out, "    IdentityFile {}", ssh_path(&p.key.path));
+            let _ = writeln!(out, "    IdentitiesOnly yes");
+            let _ = writeln!(out, "    AddKeysToAgent yes");
+        }
+    }
+    // Leave the parser in a global context again so options that follow
+    // the Include line in ~/.ssh/config keep applying to every host.
+    out.push_str("\nHost *\n");
+    out
+}
+
+/// `~/.config/keybund/git/index.gitconfig`: default key, allowed signers
+/// and one `includeIf "gitdir:…"` per profile folder.
+pub fn index_gitconfig(config: &Config, env: &Env) -> String {
+    let mut out = format!("{MANAGED}\n# Included from ~/.gitconfig.\n");
+    if let Some(def) = config.default_entry() {
+        let _ = writeln!(out, "\n# Default-Profil: {}", def.name);
+        let _ = writeln!(out, "[core]\n\tsshCommand = {}", ssh_command(&def.key.path));
+    }
+    if config.active_profiles().any(signs) {
+        let _ = writeln!(out, "\n[gpg \"ssh\"]\n\tallowedSignersFile = {}", env.contract(&env.allowed_signers()));
+    }
+    for p in config.active_profiles() {
+        for folder in &p.folders {
+            let _ = writeln!(out, "\n[includeIf \"gitdir:{folder}\"]");
+            let _ = writeln!(out, "\tpath = {}", env.contract(&env.profile_gitconfig(&p.id)));
+        }
+    }
+    out
+}
+
+/// `~/.config/keybund/git/<id>.gitconfig`.
+pub fn profile_gitconfig(profile: &Profile) -> String {
+    let mut out = format!("{MANAGED}\n# Profil: {}\n", profile.name);
+    if let Some(git) = &profile.git {
+        let _ = writeln!(out, "[user]\n\tname = {}\n\temail = {}", git_value(&git.name), git_value(&git.email));
+        if git.sign {
+            let _ = writeln!(out, "\tsigningkey = {}", git_value(&profile.key.pub_path()));
+        }
+    }
+    let _ = writeln!(out, "[core]\n\tsshCommand = {}", ssh_command(&profile.key.path));
+    if signs(profile) {
+        out.push_str("[gpg]\n\tformat = ssh\n[commit]\n\tgpgsign = true\n[tag]\n\tgpgsign = true\n");
+    }
+    out
+}
+
+/// `~/.config/keybund/allowed_signers`: one line per signing profile.
+/// `pubkeys` maps profile id → public key (`type blob`).
+pub fn allowed_signers(config: &Config, pubkeys: &BTreeMap<String, String>) -> String {
+    let mut out = format!("{MANAGED}\n");
+    for p in config.active_profiles().filter(|p| signs(p)) {
+        let (Some(git), Some(key)) = (&p.git, pubkeys.get(&p.id)) else { continue };
+        let _ = writeln!(out, "{} namespaces=\"git\" {}", git.email, key);
+    }
+    out
+}
+
+/// All files Keybund owns, in a stable order.
+pub fn render_all(config: &Config, env: &Env, pubkeys: &BTreeMap<String, String>) -> Vec<RenderedFile> {
+    let mut files = vec![
+        RenderedFile { path: env.ssh_keybund_conf(), content: ssh_config(config) },
+        RenderedFile { path: env.index_gitconfig(), content: index_gitconfig(config, env) },
+    ];
+    for p in config.active_profiles() {
+        files.push(RenderedFile { path: env.profile_gitconfig(&p.id), content: profile_gitconfig(p) });
+    }
+    if config.active_profiles().any(signs) {
+        files.push(RenderedFile { path: env.allowed_signers(), content: allowed_signers(config, pubkeys) });
+    }
+    files
+}
+
+fn signs(p: &Profile) -> bool {
+    p.git.as_ref().is_some_and(|g| g.sign)
+}
+
+/// ssh_config takes paths with spaces only when quoted.
+fn ssh_path(path: &str) -> String {
+    if path.contains(char::is_whitespace) {
+        format!("\"{path}\"")
+    } else {
+        path.to_string()
+    }
+}
+
+/// Quotes a gitconfig value if needed.
+fn git_value(v: &str) -> String {
+    if v.starts_with(char::is_whitespace) || v.ends_with(char::is_whitespace) || v.contains(['#', ';', '"', '\\']) {
+        format!("\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\""))
+    } else {
+        v.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{GitIdentity, HostEntry, KeyRef, Provider};
+
+    fn profile(id: &str, name: &str, folder: &str, sign: bool) -> Profile {
+        Profile {
+            id: id.into(),
+            name: name.into(),
+            color: None,
+            key: KeyRef { path: format!("~/.ssh/{id}_ed25519"), comment: None },
+            git: Some(GitIdentity { name: "Tristan".into(), email: format!("tristan@{id}.de"), sign }),
+            folders: vec![folder.into()],
+            archived: false,
+            hosts: vec![],
+        }
+    }
+
+    /// Server with alias, two customers on github.com, signing on/off.
+    fn sample() -> Config {
+        let mut privat = profile("privat", "Privat", "~/dev/privat/", true);
+        privat.hosts.push(HostEntry {
+            alias: Some("meinserver".into()),
+            hostname: "1.2.3.4".into(),
+            user: Some("tristan".into()),
+            port: Some(22),
+            provider: Provider::Generic,
+        });
+        let mut a = profile("kunde-a", "Kunde A", "~/dev/kunde-a/", false);
+        a.hosts.push(HostEntry { hostname: "github.com".into(), provider: Provider::Github, ..Default::default() });
+        let mut b = profile("kunde-b", "Kunde B", "~/dev/kunde-b/", false);
+        b.hosts.push(HostEntry { hostname: "github.com".into(), provider: Provider::Github, ..Default::default() });
+        let mut old = profile("alt", "Alt", "~/dev/alt/", false);
+        old.archived = true;
+        Config { default_profile: Some("privat".into()), profiles: vec![privat, a, b, old] }
+    }
+
+    #[test]
+    fn snapshot_ssh_config() {
+        insta::assert_snapshot!(ssh_config(&sample()));
+    }
+
+    #[test]
+    fn snapshot_index_gitconfig() {
+        insta::assert_snapshot!(index_gitconfig(&sample(), &Env::with_home("/home/t")));
+    }
+
+    #[test]
+    fn snapshot_profile_gitconfigs() {
+        let cfg = sample();
+        insta::assert_snapshot!("profile_signing", profile_gitconfig(&cfg.profiles[0]));
+        insta::assert_snapshot!("profile_plain", profile_gitconfig(&cfg.profiles[1]));
+    }
+
+    #[test]
+    fn snapshot_allowed_signers() {
+        let mut keys = BTreeMap::new();
+        keys.insert(
+            "privat".to_string(),
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPCiQ4JKZ4ytCkt2jcR5wRuDme4A+7To8EOX6+uTnRyy".to_string(),
+        );
+        insta::assert_snapshot!(allowed_signers(&sample(), &keys));
+    }
+
+    #[test]
+    fn archived_profiles_are_skipped() {
+        let files = render_all(&sample(), &Env::with_home("/home/t"), &BTreeMap::new());
+        assert!(files.iter().all(|f| !f.path.ends_with("alt.gitconfig")));
+        assert!(files.iter().all(|f| !f.content.contains("~/dev/alt/")));
+    }
+
+    #[test]
+    fn no_default_profile_means_no_core_section() {
+        let mut cfg = sample();
+        cfg.default_profile = None;
+        assert!(!index_gitconfig(&cfg, &Env::with_home("/home/t")).contains("[core]"));
+    }
+
+    #[test]
+    fn quotes_paths_with_spaces() {
+        assert_eq!(ssh_command("~/my keys/a"), "ssh -i ~/'my keys/a' -o IdentitiesOnly=yes");
+        assert_eq!(git_value("a # b"), "\"a # b\"");
+    }
+}

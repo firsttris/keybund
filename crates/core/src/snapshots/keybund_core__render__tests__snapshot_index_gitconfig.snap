@@ -1,0 +1,22 @@
+---
+source: crates/core/src/render.rs
+expression: "index_gitconfig(&sample(), &Env::with_home(\"/home/t\"))"
+---
+# Managed by Keybund – manual changes will be overwritten.
+# Included from ~/.gitconfig.
+
+# Default-Profil: Privat
+[core]
+	sshCommand = ssh -i ~/.ssh/privat_ed25519 -o IdentitiesOnly=yes
+
+[gpg "ssh"]
+	allowedSignersFile = ~/.config/keybund/allowed_signers
+
+[includeIf "gitdir:~/dev/privat/"]
+	path = ~/.config/keybund/git/privat.gitconfig
+
+[includeIf "gitdir:~/dev/kunde-a/"]
+	path = ~/.config/keybund/git/kunde-a.gitconfig
+
+[includeIf "gitdir:~/dev/kunde-b/"]
+	path = ~/.config/keybund/git/kunde-b.gitconfig

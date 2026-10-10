@@ -1,0 +1,18 @@
+---
+source: crates/core/src/render.rs
+expression: "profile_gitconfig(&cfg.profiles[0])"
+---
+# Managed by Keybund – manual changes will be overwritten.
+# Profil: Privat
+[user]
+	name = Tristan
+	email = tristan@privat.de
+	signingkey = ~/.ssh/privat_ed25519.pub
+[core]
+	sshCommand = ssh -i ~/.ssh/privat_ed25519 -o IdentitiesOnly=yes
+[gpg]
+	format = ssh
+[commit]
+	gpgsign = true
+[tag]
+	gpgsign = true

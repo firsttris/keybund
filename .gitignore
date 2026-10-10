@@ -1,0 +1,6 @@
+/target
+node_modules/
+/app/dist/
+/app/src-tauri/gen/schemas/
+*.keybund-backup
+.DS_Store

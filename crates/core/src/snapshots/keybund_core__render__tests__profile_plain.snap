@@ -1,0 +1,11 @@
+---
+source: crates/core/src/render.rs
+expression: "profile_gitconfig(&cfg.profiles[1])"
+---
+# Managed by Keybund – manual changes will be overwritten.
+# Profil: Kunde A
+[user]
+	name = Tristan
+	email = tristan@kunde-a.de
+[core]
+	sshCommand = ssh -i ~/.ssh/kunde-a_ed25519 -o IdentitiesOnly=yes

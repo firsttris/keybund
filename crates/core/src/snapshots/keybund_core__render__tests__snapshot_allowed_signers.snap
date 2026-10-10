@@ -1,0 +1,6 @@
+---
+source: crates/core/src/render.rs
+expression: "allowed_signers(&sample(), &keys)"
+---
+# Managed by Keybund – manual changes will be overwritten.
+tristan@privat.de namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPCiQ4JKZ4ytCkt2jcR5wRuDme4A+7To8EOX6+uTnRyy

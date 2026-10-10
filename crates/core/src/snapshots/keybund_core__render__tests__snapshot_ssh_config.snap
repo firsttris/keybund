@@ -1,0 +1,17 @@
+---
+source: crates/core/src/render.rs
+expression: ssh_config(&sample())
+---
+# Managed by Keybund – manual changes will be overwritten.
+# Included from the top of ~/.ssh/config.
+
+# Profil: Privat
+Host meinserver
+    HostName 1.2.3.4
+    User tristan
+    Port 22
+    IdentityFile ~/.ssh/privat_ed25519
+    IdentitiesOnly yes
+    AddKeysToAgent yes
+
+Host *
