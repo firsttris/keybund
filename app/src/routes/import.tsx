@@ -11,7 +11,7 @@ import { FieldError, FieldHint, Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { errorMessage } from "@/lib/api";
 import type { ImportDone, ImportProposal } from "@/lib/bindings";
-import { useCleanupApply, useCleanupPreview, useImportProfiles, useImportProposals } from "@/lib/queries";
+import { useCleanupApply, useCleanupPreview, useImportProfiles, useImportProposals, useProfiles } from "@/lib/queries";
 import { hostLabel, providerLabel } from "@/lib/utils";
 
 type Choice = { selected: boolean; name: string; folder: string };
@@ -48,6 +48,8 @@ export function ImportPage() {
 
 function Done({ done }: { done: ImportDone }) {
   const { written, backups } = done.report;
+  const profiles = useProfiles();
+  const name = (id: string) => profiles.data?.profiles.find((p) => p.profile.id === id)?.profile.name ?? id;
   return (
     <div role="status" className="flex flex-col gap-2 rounded-[10px] border border-emerald-500/30 bg-emerald-500/5 p-4 text-[13px]">
       <span className="flex items-center gap-2 font-medium text-success">
@@ -61,7 +63,7 @@ function Done({ done }: { done: ImportDone }) {
       <span className="flex flex-wrap gap-x-4 gap-y-1">
         {done.ids.map((id) => (
           <Link key={id} to="/profile/$id" params={{ id }} className="font-medium text-foreground">
-            Key {id} öffnen
+            {name(id)} öffnen
           </Link>
         ))}
         <Link to="/doctor" className="text-foreground">

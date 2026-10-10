@@ -27,7 +27,7 @@ describe("import from ~/.ssh/config", () => {
     const status = await screen.findByRole("status");
     expect(status).toHaveTextContent("Alles übernommen: 2 Keys, alte Einträge entfernt");
     expect(within(status).getByText("Backup: ~/.ssh/config.keybund-backup")).toBeInTheDocument();
-    expect(within(status).getByRole("link", { name: "Key pflegeabc öffnen" })).toBeInTheDocument();
+    expect((await within(status).findByRole("link", { name: "Pflege ABC öffnen" }))).toBeInTheDocument();
     expect(backend.state.profiles.find((p) => p.id === "pflegeabc")).toMatchObject({
       name: "Pflege ABC",
       hosts: [{ alias: "pflegeabc", hostname: "github.com" }],
