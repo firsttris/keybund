@@ -7,7 +7,7 @@ expression: "index_gitconfig(&sample(), &Env::with_home(\"/home/t\"))"
 
 # Default-Profil: Privat
 [core]
-	sshCommand = ssh -i ~/.ssh/privat_ed25519 -o IdentitiesOnly=yes
+	sshCommand = ssh -i ~/.ssh/privat_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes
 
 [gpg "ssh"]
 	allowedSignersFile = ~/.config/keybund/allowed_signers

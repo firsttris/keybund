@@ -167,7 +167,7 @@ export function seedState(): MockState {
 const MANAGED = "# Managed by Keybund – manual changes will be overwritten.";
 
 function sshCommand(path: string) {
-  return `ssh -i ${path} -o IdentitiesOnly=yes`;
+  return `ssh -i ${path} -o IdentitiesOnly=yes -o AddKeysToAgent=yes`;
 }
 
 export function renderProfileGitconfig(p: Profile): string {
@@ -325,6 +325,7 @@ function doctorReport(state: MockState): Report {
     { id: "ssh-dir-perms", status: "ok", title: "~/.ssh hat Rechte 700", detail: null, fix: null },
     { id: "key-perms", status: "ok", title: "Private Keys haben Rechte 600", detail: null, fix: null },
     { id: "agent", status: "ok", title: "ssh-agent läuft", detail: "3 Keys geladen", fix: null },
+    { id: "add-keys", status: "ok", title: "AddKeysToAgent aktiv", detail: null, fix: null },
     plan.changes.length === 0
       ? { id: "configs", status: "ok", title: "Configs sind aktuell", detail: null, fix: null }
       : {
@@ -513,7 +514,7 @@ export function createMockBackend(state: MockState = seedState()) {
               : "Verbunden als @tristan"
             : `${PROVIDER_NAME[h.provider]} kennt diesen Key nicht`,
           output: ok ? "Hi tristan! You've successfully authenticated." : "git@github.com: Permission denied (publickey).",
-          command: `ssh -T -o BatchMode=yes -o IdentitiesOnly=yes -i ${p.key.path} git@${h.hostname}`,
+          command: `ssh -T -o PasswordAuthentication=no -o IdentitiesOnly=yes -o AddKeysToAgent=yes -i ${p.key.path} git@${h.hostname}`,
         };
         state.lastTests.set(p.id, { success: ok, account: result.account, message: result.message, at: Date.now() });
         return result;

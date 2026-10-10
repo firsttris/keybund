@@ -9,7 +9,7 @@ expression: "profile_gitconfig(&cfg.profiles[0])"
 	email = tristan@privat.de
 	signingkey = ~/.ssh/privat_ed25519.pub
 [core]
-	sshCommand = ssh -i ~/.ssh/privat_ed25519 -o IdentitiesOnly=yes
+	sshCommand = ssh -i ~/.ssh/privat_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes
 [gpg]
 	format = ssh
 [commit]

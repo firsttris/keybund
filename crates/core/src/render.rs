@@ -21,9 +21,17 @@ pub struct RenderedFile {
     pub content: String,
 }
 
-/// `core.sshCommand` value for a key.
+/// `core.sshCommand` value for a key. `AddKeysToAgent` makes ssh hand a
+/// key to the running agent after its passphrase was entered once, so git
+/// does not ask again on every push.
 pub fn ssh_command(key_path: &str) -> String {
-    format!("ssh -i {} -o IdentitiesOnly=yes", shell_quote(key_path))
+    format!("ssh -i {} -o IdentitiesOnly=yes -o AddKeysToAgent=yes", shell_quote(key_path))
+}
+
+/// `true` if an ssh command line enables `AddKeysToAgent`.
+pub fn adds_keys_to_agent(command: &str) -> bool {
+    let lower = command.to_ascii_lowercase();
+    ["addkeystoagent=yes", "addkeystoagent=confirm", "addkeystoagent yes"].iter().any(|o| lower.contains(o))
 }
 
 /// `~/.ssh/config.d/keybund.conf`: a `Host` block for every host that has
@@ -238,6 +246,13 @@ mod tests {
     }
 
     #[test]
+    fn ssh_command_adds_keys_to_agent() {
+        assert!(adds_keys_to_agent(&ssh_command("~/.ssh/a")));
+        assert!(!adds_keys_to_agent("ssh -i ~/.ssh/a -o IdentitiesOnly=yes"));
+        assert!(adds_keys_to_agent("ssh -o addkeystoagent=confirm"));
+    }
+
+    #[test]
     fn per_profile_excerpts() {
         let cfg = sample();
         let env = Env::with_home("/home/t");
@@ -253,7 +268,7 @@ mod tests {
 
     #[test]
     fn quotes_paths_with_spaces() {
-        assert_eq!(ssh_command("~/my keys/a"), "ssh -i ~/'my keys/a' -o IdentitiesOnly=yes");
+        assert_eq!(ssh_command("~/my keys/a"), "ssh -i ~/'my keys/a' -o IdentitiesOnly=yes -o AddKeysToAgent=yes");
         assert_eq!(git_value("a # b"), "\"a # b\"");
     }
 }

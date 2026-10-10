@@ -41,7 +41,7 @@ test("shows the generated config", async ({ app }) => {
   await app.goto("/#/profile/privat");
   await app.getByRole("tab", { name: "Generierte Config" }).click();
   await expect(app.getByText("~/.config/keybund/git/privat.gitconfig", { exact: true })).toBeVisible();
-  await expect(app.getByText(/sshCommand = ssh -i ~\/.ssh\/privat_ed25519 -o IdentitiesOnly=yes/)).toBeVisible();
+  await expect(app.getByText(/sshCommand = ssh -i ~\/.ssh\/privat_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes/)).toBeVisible();
   await expect(app.getByText(/Host meinserver/)).toBeVisible();
 });
 

@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::Config;
-use crate::{apply, fsutil, keygen, process, store, which, Env, Result};
+use crate::{apply, fsutil, keygen, process, render, store, which, Env, Result};
 
 /// Keys older than this get a rotation hint.
 pub const OLD_KEY_DAYS: u32 = 2 * 365;
@@ -98,6 +98,7 @@ pub fn run(env: &Env) -> Report {
     checks.extend(include_checks(env));
     checks.push(up_to_date_check(env, &config));
     checks.push(agent_check(env));
+    checks.extend(add_keys_check(env, &config));
     checks.extend(global_host_checks(env, &config));
     checks.extend(key_age_checks(env, &config));
     checks.extend(folder_checks(env, &config));
@@ -196,6 +197,45 @@ fn agent_check(env: &Env) -> Check {
         None => Check::new("agent", Status::Warn, "Kein ssh-agent erreichbar")
             .detail("SSH_AUTH_SOCK ist nicht gesetzt oder der Agent läuft nicht. Keys mit Passphrase werden bei jeder Verbindung abgefragt."),
     }
+}
+
+/// Keys with a passphrase should be asked once and then kept by the agent.
+/// Checks the files as written on disk (older Keybund versions did not set
+/// `AddKeysToAgent` for git).
+fn add_keys_check(env: &Env, config: &Config) -> Option<Check> {
+    let active: Vec<_> = config.active_profiles().collect();
+    if active.is_empty() {
+        return None;
+    }
+    let mut missing = Vec::new();
+    for p in &active {
+        let path = env.profile_gitconfig(&p.id);
+        let Some(content) = fsutil::read_optional(&path).ok().flatten() else { continue };
+        let ok = content
+            .lines()
+            .filter(|l| l.trim_start().to_ascii_lowercase().starts_with("sshcommand"))
+            .all(render::adds_keys_to_agent);
+        if !ok {
+            missing.push(p.name.clone());
+        }
+    }
+    if let Some(conf) = fsutil::read_optional(&env.ssh_keybund_conf()).ok().flatten() {
+        let hosts = conf.lines().filter(|l| l.trim_start().starts_with("Host ") && l.trim() != "Host *").count();
+        let adds = conf.lines().filter(|l| l.trim().eq_ignore_ascii_case("AddKeysToAgent yes")).count();
+        if adds < hosts {
+            missing.push("~/.ssh/config.d/keybund.conf".into());
+        }
+    }
+    Some(if missing.is_empty() {
+        Check::new("add-keys", Status::Ok, "AddKeysToAgent aktiv")
+    } else {
+        Check::new("add-keys", Status::Warn, "AddKeysToAgent fehlt")
+            .detail(format!(
+                "Keys mit Passphrase werden bei jedem Zugriff neu abgefragt: {}. Configs neu schreiben.",
+                missing.join(", ")
+            ))
+            .fix(Fix::Apply)
+    })
 }
 
 /// A `Host github.com` with an `IdentityFile` in the user's own config

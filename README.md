@@ -49,7 +49,7 @@ Daraus schreibt Keybund:
 | --- | --- | --- |
 | `~/.ssh/config.d/keybund.conf` | `Host`-Blöcke für Server mit Alias, je `IdentityFile` + `IdentitiesOnly yes` | `Include` ganz oben in `~/.ssh/config` |
 | `~/.config/keybund/git/index.gitconfig` | `core.sshCommand` des Default-Profils, ein `includeIf "gitdir:…/"` pro Ordner | `[include]` in `~/.gitconfig` |
-| `~/.config/keybund/git/<id>.gitconfig` | `user.name`, `user.email`, `core.sshCommand = ssh -i <key> -o IdentitiesOnly=yes`, Signing | `index.gitconfig` |
+| `~/.config/keybund/git/<id>.gitconfig` | `user.name`, `user.email`, `core.sshCommand = ssh -i <key> -o IdentitiesOnly=yes -o AddKeysToAgent=yes`, Signing | `index.gitconfig` |
 | `~/.config/keybund/allowed_signers` | E-Mail + Pubkey je signierendem Profil | `gpg.ssh.allowedSignersFile` |
 
 ## CLI
@@ -116,6 +116,7 @@ Jede Schicht hat eigene Tests, alle laufen in der CI (`.github/workflows/ci.yml`
 | Unit (Rust) | Parsing, Validierung, Diff, Include-Logik, Provider-Ausgaben, URL-Parsing | `crates/*/src/**` |
 | Snapshot | `render` ist rein funktional, jede Profil-Kombination hat eine Golden-File (insta) | `crates/core/src/snapshots/` |
 | Integration (Rust) | `apply` gegen ein temporäres HOME, Auflösung mit echtem `git` und `ssh -G`, Doctor, Archiv | `crates/core/tests/` |
+| Integration (sshd) | Echter `sshd` auf localhost: Passphrase einmal, danach hält der Agent den Key (Test und `git`) | `crates/core/tests/sshd.rs` |
 | Integration (CLI) | Jeder Befehl gegen ein temporäres HOME, Fake-`ssh` für Provider-Antworten | `crates/cli/tests/cli.rs` |
 | E2E (CLI) | Kompletter Lebenszyklus: zwei Kunden auf github.com, Server, Clone, Doctor, Archiv | `crates/cli/tests/e2e.rs` |
 | IPC (Tauri) | Commands über die Tauri-IPC mit Mock-Runtime und echten Capabilities | `app/src-tauri/tests/ipc.rs` |
@@ -149,6 +150,9 @@ Clone über den Helfer, `keybund doctor` grün.
 - `includeIf` greift beim ersten `git clone` nicht → `keybund clone` übergibt `core.sshCommand` direkt.
 - `gitdir:` ohne abschließenden `/` matcht keine Unterordner → Ordner werden normalisiert (Slash, Symlinks aufgelöst).
 - `ssh -T` bei GitHub endet auch bei Erfolg mit Exit-Code 1 → Erfolg wird an der Ausgabe erkannt.
+- Keys mit Passphrase → `AddKeysToAgent=yes` in jedem `core.sshCommand` und Host-Block: einmal eingeben (Terminal
+  oder ksshaskpass), danach hält der Agent den Key. Der Verbindungstest nutzt deshalb kein `BatchMode`; `doctor` prüft
+  die geschriebenen Dateien.
 - Erster Kontakt blockiert im BatchMode → Test mit `StrictHostKeyChecking=accept-new`.
 - Zu offene Rechte → `doctor --fix` setzt 700/600.
 - Ein globaler `Host github.com` mit `IdentityFile` mischt sich ein → `doctor` warnt.

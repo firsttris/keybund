@@ -8,4 +8,4 @@ expression: "profile_gitconfig(&cfg.profiles[1])"
 	name = Tristan
 	email = tristan@kunde-a.de
 [core]
-	sshCommand = ssh -i ~/.ssh/kunde-a_ed25519 -o IdentitiesOnly=yes
+	sshCommand = ssh -i ~/.ssh/kunde-a_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes

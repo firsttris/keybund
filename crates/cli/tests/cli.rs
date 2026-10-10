@@ -188,7 +188,8 @@ fn test_command_uses_exit_code_from_output() {
         sb.cmd().args(["test", "p"]).assert().success().stdout(predicate::str::contains("Verbunden als @octocat"));
         let log = sb.ssh_log();
         assert!(log.contains("IdentitiesOnly=yes"));
-        assert!(log.contains("BatchMode=yes"));
+        assert!(log.contains("AddKeysToAgent=yes"));
+        assert!(!log.contains("BatchMode"));
         assert!(log.contains("StrictHostKeyChecking=accept-new"));
         assert!(log.contains("git@github.com"));
 

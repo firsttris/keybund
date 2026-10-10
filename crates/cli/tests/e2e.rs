@@ -68,7 +68,7 @@ fn two_customers_on_github_full_lifecycle() {
         sb.git(&repo, &["init", "-q"]);
         assert_eq!(
             sb.git(&repo, &["config", "core.sshCommand"]),
-            format!("ssh -i ~/.ssh/{id}_ed25519 -o IdentitiesOnly=yes")
+            format!("ssh -i ~/.ssh/{id}_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes")
         );
         assert_eq!(sb.git(&repo, &["config", "user.email"]), mail);
     }

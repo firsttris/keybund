@@ -135,7 +135,10 @@ fn git_resolves_profile_per_folder() {
         fs::create_dir_all(&repo).unwrap();
         assert!(git(&env, &repo, &["init", "-q"]).status.success());
         let out = git(&env, &repo, &["config", "--get", "core.sshCommand"]);
-        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), format!("ssh -i {key} -o IdentitiesOnly=yes"));
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout).trim(),
+            format!("ssh -i {key} -o IdentitiesOnly=yes -o AddKeysToAgent=yes")
+        );
         let out = git(&env, &repo, &["config", "--get", "user.email"]);
         assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), format!("{id}@example.org"));
     }
@@ -146,7 +149,10 @@ fn git_resolves_profile_per_folder() {
     fs::create_dir_all(&other).unwrap();
     assert!(git(&env, &other, &["init", "-q"]).status.success());
     let out = git(&env, &other, &["config", "--get", "core.sshCommand"]);
-    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "ssh -i ~/.ssh/privat_ed25519 -o IdentitiesOnly=yes");
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        "ssh -i ~/.ssh/privat_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes"
+    );
     let out = git(&env, &other, &["config", "--get", "user.email"]);
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "global@example.org");
 
@@ -326,4 +332,42 @@ fn doctor_reports_missing_keys_bad_permissions_and_old_folders() {
     fs::write(env.profiles_file(), "this is = = not toml").unwrap();
     let report = doctor::run(&env);
     assert_eq!(report.checks[0].status, doctor::Status::Error);
+}
+
+#[test]
+fn configs_from_older_versions_get_add_keys_to_agent() {
+    if !has("git") || !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    apply::apply_config(&env, &config).unwrap();
+    let ok = doctor::run(&env);
+    assert_eq!(ok.checks.iter().find(|c| c.id == "add-keys").unwrap().status, doctor::Status::Ok);
+
+    // Simulate files written by a version without AddKeysToAgent.
+    for id in ["kunde-a", "privat"] {
+        let path = env.profile_gitconfig(id);
+        let old = fs::read_to_string(&path).unwrap().replace(" -o AddKeysToAgent=yes", "");
+        fs::write(&path, old).unwrap();
+    }
+    let conf = fs::read_to_string(env.ssh_keybund_conf()).unwrap().replace("    AddKeysToAgent yes\n", "");
+    fs::write(env.ssh_keybund_conf(), conf).unwrap();
+
+    let report = doctor::run(&env);
+    let check = report.checks.iter().find(|c| c.id == "add-keys").unwrap();
+    assert_eq!(check.status, doctor::Status::Warn);
+    let detail = check.detail.as_deref().unwrap();
+    assert!(detail.contains("kunde-a") && detail.contains("privat") && detail.contains("keybund.conf"), "{detail}");
+    assert!(!detail.contains("kunde-b"));
+
+    doctor::fix(&env, check.fix.as_ref().unwrap()).unwrap();
+    let report = doctor::run(&env);
+    assert_eq!(report.checks.iter().find(|c| c.id == "add-keys").unwrap().status, doctor::Status::Ok);
+
+    // And git really passes the option to ssh.
+    let repo = env.home.join("dev/kunde-a/repo");
+    fs::create_dir_all(&repo).unwrap();
+    git(&env, &repo, &["init", "-q"]);
+    let out = git(&env, &repo, &["config", "--get", "core.sshCommand"]);
+    assert!(String::from_utf8_lossy(&out.stdout).contains("-o AddKeysToAgent=yes"));
 }

@@ -73,7 +73,7 @@ describe("apply page", () => {
     const { user } = await renderApp("/apply", (b) => {
       b.state.defaultProfile = "sparkasse";
     });
-    expect(await screen.findByText(/^\+\s+sshCommand = ssh -i ~\/\.ssh\/sparkasse_ed25519 -o IdentitiesOnly=yes$/)).toBeInTheDocument();
+    expect(await screen.findByText(/^\+\s+sshCommand = ssh -i ~\/\.ssh\/sparkasse_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes$/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Anwenden" }));
     expect(await screen.findByText("Alle Configs sind aktuell.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Anwenden" })).toBeDisabled();

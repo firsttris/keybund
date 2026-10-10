@@ -22,17 +22,27 @@ pub struct ProbeResult {
 }
 
 /// Arguments for `ssh` (without the program name).
+///
+/// No `BatchMode`: it would also suppress the passphrase prompt, so a new
+/// key with a passphrase could never be tested before it is in the agent.
+/// Instead only password and keyboard-interactive logins are switched off;
+/// the passphrase is asked on the terminal or via `SSH_ASKPASS`
+/// (ksshaskpass), and `AddKeysToAgent` keeps the key in the agent afterwards.
 pub fn ssh_args(profile: &Profile, host: &HostEntry) -> Vec<String> {
     let mut args: Vec<String> = [
         "-T",
         "-o",
-        "BatchMode=yes",
+        "PasswordAuthentication=no",
+        "-o",
+        "KbdInteractiveAuthentication=no",
         "-o",
         "ConnectTimeout=8",
         "-o",
         "StrictHostKeyChecking=accept-new",
         "-o",
         "IdentitiesOnly=yes",
+        "-o",
+        "AddKeysToAgent=yes",
         "-i",
     ]
     .iter()
@@ -92,6 +102,10 @@ pub fn interpret(host: &HostEntry, output: &str, code: Option<i32>, command: Str
         || (host.provider == Provider::Bitbucket && lower.contains("authenticated via ssh key"))
     {
         (true, "Anmeldung erfolgreich".to_string())
+    } else if lower.contains("incorrect passphrase") || lower.contains("bad passphrase") {
+        (false, "Passphrase falsch".to_string())
+    } else if lower.contains("read_passphrase") || lower.contains("ssh_askpass") {
+        (false, "Passphrase konnte nicht abgefragt werden – Key einmal mit ssh-add laden".to_string())
     } else if lower.contains("permission denied") {
         (false, format!("{} kennt diesen Key nicht", host.provider.display_name()))
     } else if lower.contains("could not resolve hostname") {
@@ -183,11 +197,25 @@ mod tests {
     }
 
     #[test]
+    fn passphrase_problems_are_not_reported_as_unknown_key() {
+        let gh = host(Provider::Github, "github.com");
+        let out = "read_passphrase: can't open /dev/tty: No such device or address\ngit@github.com: Permission denied (publickey).";
+        let r = interpret(&gh, out, Some(255), String::new());
+        assert!(!r.success);
+        assert!(r.message.starts_with("Passphrase konnte nicht abgefragt werden"));
+        let out = "Load key \"/home/t/.ssh/a\": incorrect passphrase supplied to decrypt private key\ngit@github.com: Permission denied (publickey).";
+        assert_eq!(interpret(&gh, out, Some(255), String::new()).message, "Passphrase falsch");
+    }
+
+    #[test]
     fn args_for_alias_and_git_host() {
         let p = Profile { key: crate::model::KeyRef { path: "~/.ssh/a".into(), comment: None }, ..Default::default() };
         let gh = host(Provider::Github, "github.com");
         let args = ssh_args(&p, &gh);
         assert_eq!(args.last().unwrap(), "git@github.com");
+        assert!(!args.iter().any(|a| a.starts_with("BatchMode")), "BatchMode would block the passphrase prompt");
+        assert!(args.contains(&"AddKeysToAgent=yes".to_string()));
+        assert!(args.contains(&"PasswordAuthentication=no".to_string()));
         let server = HostEntry {
             alias: Some("meinserver".into()),
             hostname: "1.2.3.4".into(),
