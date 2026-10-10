@@ -70,6 +70,7 @@ Hast du schon Einträge wie `Host github.com` mit `IdentityFile`, übernimmt Key
 ```text
 keybund list                     Profile mit Fingerprint, Ordnern, Hosts
 keybund show <profil>            Details und Pubkey
+keybund edit <profil> …          Name, Ordner, Hosts, Git-Identität, Signieren, Key ändern (siehe --help)
 keybund new                      Wizard im Terminal (oder komplett über Optionen, siehe --help)
 keybund copy <profil> [--print]  Pubkey in die Zwischenablage (wl-copy, xclip oder xsel)
 keybund test <profil>            Verbindungstest, Exit-Code 0 bei Erfolg
@@ -79,6 +80,7 @@ keybund apply [--dry-run] [-y]   Diff zeigen bzw. schreiben
 keybund doctor [--fix]           Alle Checks, Exit-Code ≠ 0 bei Problemen
 keybund keys                     Vorhandene Keys in ~/.ssh
 keybund import [--all] [-y]      Bestehende ~/.ssh/config übernehmen, alte Einträge danach entfernen
+keybund uninstall [--restore-backups] [--purge]   Alles entfernen, was Keybund geschrieben hat (Keys bleiben)
 keybund default <profil>         Default-Profil setzen
 keybund archive <profil>         Key nach ~/.ssh/archive, Configs entfernen
 ```

@@ -714,3 +714,165 @@ pub fn uninstall(env: &Env, restore_backups: bool, purge: bool, yes: bool) -> Re
     }
     Ok(ExitCode::SUCCESS)
 }
+
+#[derive(Args)]
+pub struct EditArgs {
+    /// Profil-ID
+    profile: String,
+    /// Neuer Anzeigename
+    #[arg(long)]
+    name: Option<String>,
+    #[arg(long)]
+    color: Option<String>,
+    /// Projektordner hinzufügen (wird angelegt, falls nötig)
+    #[arg(long, value_name = "ORDNER")]
+    add_folder: Vec<String>,
+    /// Projektordner entfernen
+    #[arg(long, value_name = "ORDNER")]
+    remove_folder: Vec<String>,
+    #[arg(long)]
+    git_name: Option<String>,
+    #[arg(long)]
+    git_email: Option<String>,
+    /// Commits signieren
+    #[arg(long, conflicts_with = "no_sign")]
+    sign: bool,
+    /// Commits nicht signieren
+    #[arg(long)]
+    no_sign: bool,
+    /// Host hinzufügen, z. B. gitlab.kunde.de
+    #[arg(long, value_name = "HOSTNAME")]
+    add_host: Option<String>,
+    /// SSH-Alias für den neuen Host
+    #[arg(long, requires = "add_host")]
+    alias: Option<String>,
+    #[arg(long, requires = "add_host")]
+    user: Option<String>,
+    #[arg(long, requires = "add_host")]
+    port: Option<u16>,
+    #[arg(long, value_enum, requires = "add_host")]
+    provider: Option<ProviderArg>,
+    /// Host entfernen (Alias oder Hostname)
+    #[arg(long, value_name = "HOST")]
+    remove_host: Vec<String>,
+    /// Anderen, vorhandenen Key verwenden
+    #[arg(long)]
+    key: Option<String>,
+    /// Ohne Rückfrage schreiben
+    #[arg(long, short)]
+    yes: bool,
+    /// Nur profiles.toml ändern, Configs nicht schreiben
+    #[arg(long)]
+    no_apply: bool,
+}
+
+pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
+    let mut config = store::load(env)?;
+    let before = config.profile(&args.profile)?.clone();
+    let global_name = git_global(env, "user.name");
+    let p = config.profile_mut(&args.profile)?;
+    let mut changes: Vec<String> = Vec::new();
+
+    if let Some(name) = args.name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+        changes.push(format!("Name: {name}"));
+        p.name = name.to_string();
+    }
+    if let Some(color) = &args.color {
+        changes.push(format!("Farbe: {color}"));
+        p.color = Some(color.clone());
+    }
+    for folder in &args.add_folder {
+        let normalized = store::normalize_folder(env, folder);
+        if !p.folders.contains(&normalized) {
+            changes.push(format!("+ Ordner {normalized}"));
+            p.folders.push(normalized);
+        }
+    }
+    for folder in &args.remove_folder {
+        let normalized = store::normalize_folder(env, folder);
+        let count = p.folders.len();
+        p.folders.retain(|f| f != &normalized && f != folder);
+        if p.folders.len() == count {
+            bail!("Profil „{}“ hat den Ordner {folder} nicht", p.id);
+        }
+        changes.push(format!("− Ordner {normalized}"));
+    }
+    if args.git_name.is_some() || args.git_email.is_some() || args.sign || args.no_sign {
+        let mut git = p.git.clone().unwrap_or_default();
+        if let Some(n) = &args.git_name {
+            git.name = n.clone();
+        }
+        if let Some(e) = &args.git_email {
+            git.email = e.clone();
+        }
+        if git.name.is_empty() {
+            git.name = global_name.clone().context("--git-name fehlt (kein globaler Git-Name gesetzt)")?;
+        }
+        if git.email.is_empty() {
+            bail!("--git-email fehlt");
+        }
+        if args.sign {
+            git.sign = true;
+        }
+        if args.no_sign {
+            git.sign = false;
+        }
+        changes.push(format!("Git: {} <{}>{}", git.name, git.email, if git.sign { ", signiert" } else { "" }));
+        p.git = Some(git);
+    }
+    if let Some(hostname) = &args.add_host {
+        let provider: Provider = args.provider.map(Into::into).unwrap_or_else(|| Provider::detect(hostname));
+        let host = HostEntry {
+            alias: args.alias.clone(),
+            hostname: hostname.clone(),
+            user: args.user.clone(),
+            port: args.port,
+            provider,
+        };
+        changes.push(format!("+ Host {}", host_label(&host)));
+        p.hosts.push(host);
+    }
+    for name in &args.remove_host {
+        let count = p.hosts.len();
+        p.hosts.retain(|h| h.alias.as_deref() != Some(name.as_str()) && !(h.alias.is_none() && &h.hostname == name));
+        if p.hosts.len() == count {
+            bail!("Profil „{}“ hat keinen Host {name}", p.id);
+        }
+        changes.push(format!("− Host {name}"));
+    }
+    if let Some(key) = &args.key {
+        let path = env.contract(&env.expand(key));
+        keygen::read_public(env, &KeyRef { path: path.clone(), comment: None })?;
+        changes.push(format!("Key: {path}"));
+        p.key = KeyRef { path, comment: None };
+    }
+
+    if changes.is_empty() {
+        show(env, &args.profile)?;
+        println!();
+        ui::hint("Nichts geändert – Optionen siehe `keybund edit --help`.");
+        return Ok(ExitCode::SUCCESS);
+    }
+    if *p == before {
+        ui::success("Keine Änderung");
+        return Ok(ExitCode::SUCCESS);
+    }
+    store::save(env, &config)?;
+    // Only after validation, so a rejected folder leaves nothing behind.
+    for folder in &args.add_folder {
+        let path = env.expand(folder.trim());
+        std::fs::create_dir_all(&path).with_context(|| format!("Ordner {folder} kann nicht angelegt werden"))?;
+    }
+    for c in &changes {
+        ui::row("", c);
+    }
+    ui::success(&format!("Profil „{}“ gespeichert", args.profile));
+    if args.no_apply {
+        return Ok(ExitCode::SUCCESS);
+    }
+    let plan = apply::plan(env, &config)?;
+    if !confirm_and_apply(env, &plan, args.yes || !interactive())? {
+        ui::warn("Configs nicht geschrieben – später mit `keybund apply`.");
+    }
+    Ok(ExitCode::SUCCESS)
+}

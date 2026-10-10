@@ -81,6 +81,7 @@ fn new_rejects_duplicate_and_nested_folders() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("überschneiden sich"));
+    assert!(!sb.path("work/kunde/sub").exists(), "nothing created for a rejected folder");
 }
 
 #[test]
@@ -428,4 +429,80 @@ fn uninstall_and_reinstall() {
     // The profiles survived: apply sets everything up again.
     sb.cmd().args(["apply", "--yes"]).assert().success();
     assert!(sb.read(".ssh/config").starts_with("Include"));
+}
+
+#[test]
+fn edit_changes_folders_hosts_identity_and_key() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile(
+        "Kunde",
+        &["--provider", "github", "--folder", "~/dev/kunde", "--git-name", "T", "--git-email", "t@k.de"],
+    );
+
+    // Without options: shows the profile.
+    sb.cmd().args(["edit", "kunde"]).assert().success().stdout(predicate::str::contains("Nichts geändert"));
+
+    sb.cmd()
+        .args([
+            "edit",
+            "kunde",
+            "--add-folder",
+            "~/work/kunde",
+            "--remove-folder",
+            "~/dev/kunde",
+            "--git-email",
+            "neu@k.de",
+            "--sign",
+            "--name",
+            "Kunde GmbH",
+            "--yes",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("+ Ordner ~/work/kunde/").and(predicate::str::contains("geschrieben")));
+    let toml = sb.read(".config/keybund/profiles.toml");
+    assert!(toml.contains("name = \"Kunde GmbH\""));
+    assert!(toml.contains("\"~/work/kunde/\"") && !toml.contains("~/dev/kunde/"));
+    let index = sb.read(".config/keybund/git/index.gitconfig");
+    assert!(index.contains("gitdir:~/work/kunde/") && !index.contains("gitdir:~/dev/kunde/"));
+    let gitconfig = sb.read(".config/keybund/git/kunde.gitconfig");
+    assert!(gitconfig.contains("email = neu@k.de") && gitconfig.contains("gpgsign = true"));
+
+    // Server host with alias, then remove it again.
+    sb.cmd()
+        .args(["edit", "kunde", "--add-host", "10.0.0.5", "--alias", "kundenserver", "--user", "admin", "--yes"])
+        .assert()
+        .success();
+    assert!(sb.read(".ssh/config.d/keybund.conf").contains("Host kundenserver\n    HostName 10.0.0.5\n    User admin"));
+    sb.cmd().args(["edit", "kunde", "--remove-host", "kundenserver", "--yes"]).assert().success();
+    assert!(!sb.read(".ssh/config.d/keybund.conf").contains("kundenserver"));
+
+    // Errors are explained, nothing is saved.
+    sb.cmd()
+        .args(["edit", "kunde", "--remove-folder", "~/nope"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("hat den Ordner ~/nope nicht"));
+    sb.cmd().args(["edit", "kunde", "--alias", "x"]).assert().code(2).stderr(predicate::str::contains("--add-host"));
+    sb.cmd()
+        .args(["edit", "kunde", "--key", "~/.ssh/missing"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("Key fehlt"));
+    sb.new_profile(
+        "Andere",
+        &["--provider", "github", "--folder", "~/dev/andere", "--git-name", "T", "--git-email", "t@a.de"],
+    );
+    sb.cmd()
+        .args(["edit", "andere", "--add-folder", "~/work/kunde/sub", "--yes"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("überschneiden sich"));
+
+    // Switch to an existing key.
+    sb.cmd().args(["edit", "andere", "--key", "~/.ssh/kunde_ed25519", "--yes"]).assert().success();
+    assert!(sb.read(".config/keybund/git/andere.gitconfig").contains("ssh -i ~/.ssh/kunde_ed25519"));
 }

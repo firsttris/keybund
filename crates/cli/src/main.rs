@@ -28,6 +28,8 @@ enum Command {
     Show { profile: String },
     /// Neues Projekt anlegen (interaktiv, oder komplett über Optionen)
     New(Box<commands::NewArgs>),
+    /// Profil ändern: Name, Farbe, Ordner, Hosts, Git-Identität, Key
+    Edit(Box<commands::EditArgs>),
     /// Pubkey eines Profils in die Zwischenablage kopieren
     Copy {
         profile: String,
@@ -115,6 +117,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::List { all } => commands::list(&env, all),
         Command::Show { profile } => commands::show(&env, &profile),
         Command::New(args) => commands::new(&env, *args),
+        Command::Edit(args) => commands::edit(&env, *args),
         Command::Copy { profile, print } => commands::copy(&env, &profile, print),
         Command::Test { profile } => commands::test(&env, &profile),
         Command::Which { target } => commands::which(&env, target.as_deref()),
