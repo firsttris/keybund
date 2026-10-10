@@ -16,6 +16,7 @@ pub mod doctor;
 pub mod env;
 pub mod error;
 pub mod gitenv;
+pub mod history;
 pub mod import;
 pub mod keygen;
 pub mod keyinstall;

@@ -24,11 +24,9 @@ export const commands = {
 	openUrl: (url: string) => typedError<null, CmdError>(__TAURI_INVOKE("open_url", { url })),
 	/**  Tests the connection to `host` (alias or hostname) or the profile's first host. */
 	testConnection: (id: string, host: string | null) => typedError<ProbeResult, CmdError>(__TAURI_INVOKE("test_connection", { id, host })),
+	/**  Puts the profile's key on a server (`host` = alias or hostname). */
 	installKey: (id: string, host: string) => typedError<InstallResult, CmdError>(__TAURI_INVOKE("install_key", { id, host })),
-	/**
-	 *  Puts the profile's key on a server (`host` = alias or hostname).
-	 *  How the key gets into a GitHub/GitLab account (login, token, by hand).
-	 */
+	/**  How the key gets into a GitHub/GitLab account (login, token, by hand). */
 	uploadTarget: (id: string, host: string) => typedError<UploadTarget, CmdError>(__TAURI_INVOKE("upload_target", { id, host })),
 	/**  Adds the key with a personal access token (`None`: the stored one). */
 	uploadKey: (id: string, host: string, token: string | null, remember: boolean) => typedError<UploadResult, CmdError>(__TAURI_INVOKE("upload_key", { id, host, token, remember })),
@@ -246,7 +244,6 @@ export type KeyRef = {
 	comment: string | null,
 };
 
-/**  Result of the last connection test, kept in memory for the session. */
 export type LastTest = {
 	success: boolean,
 	account: string | null,

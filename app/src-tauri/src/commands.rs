@@ -2,9 +2,7 @@
 //! from the app state, runs the blocking work off the main thread and
 //! delegates to `api` or the core.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::Arc;
 
 use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -16,7 +14,7 @@ use keybund_core::keygen::ImportCandidate;
 use keybund_core::model::Profile;
 use keybund_core::probe::{self, ProbeResult};
 use keybund_core::which::{self, WhichResult};
-use keybund_core::{store, Env};
+use keybund_core::{history, store, Env};
 
 use crate::api::{self, *};
 use crate::upload::{self, DeviceFlowStart, DeviceFlowStatus, UploadTarget};
@@ -24,17 +22,12 @@ use keybund_core::upload::UploadResult;
 
 pub struct AppState {
     pub env: Env,
-    pub last_tests: Mutex<HashMap<String, LastTest>>,
     pub flows: Arc<upload::Flows>,
 }
 
 impl AppState {
     pub fn new(env: Env) -> Self {
-        AppState { env, last_tests: Mutex::new(HashMap::new()), flows: Arc::default() }
-    }
-
-    fn last_test(&self, id: &str) -> Option<LastTest> {
-        self.last_tests.lock().ok()?.get(id).cloned()
+        AppState { env, flows: Arc::default() }
     }
 }
 
@@ -46,8 +39,7 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> CmdResult<T> + Send + '
 #[specta::specta]
 pub async fn load_profiles(state: State<'_, AppState>) -> CmdResult<ProfilesView> {
     let env = state.env.clone();
-    let tests = state.last_tests.lock().map(|t| t.clone()).unwrap_or_default();
-    blocking(move || api::load_profiles(&env, |id| tests.get(id).cloned())).await
+    blocking(move || api::load_profiles(&env)).await
 }
 
 #[tauri::command]
@@ -149,34 +141,29 @@ pub async fn open_url(url: String) -> CmdResult<()> {
 #[specta::specta]
 pub async fn test_connection(state: State<'_, AppState>, id: String, host: Option<String>) -> CmdResult<ProbeResult> {
     let env = state.env.clone();
-    let pid = id.clone();
-    let result = blocking(move || {
+    blocking(move || {
         let config = store::load(&env)?;
-        let profile = config.profile(&pid)?;
+        let profile = config.profile(&id)?;
         match host {
             Some(name) => {
                 let h = profile
                     .hosts
                     .iter()
                     .find(|h| h.target_name() == name || h.hostname == name)
-                    .ok_or_else(|| CmdError::other(format!("Profil „{pid}“ hat keinen Host {name}")))?;
+                    .ok_or_else(|| CmdError::other(format!("Profil „{id}“ hat keinen Host {name}")))?;
                 Ok(probe::probe(&env, profile, h)?)
             }
-            None => Ok(probe::probe_profile(&env, profile)?),
+            None => {
+                // The profile's test is remembered (sidebar, start page).
+                let result = probe::probe_profile(&env, profile)?;
+                history::record(&env, &id, &result)?;
+                Ok(result)
+            }
         }
     })
-    .await?;
-    let at = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0);
-    if let Ok(mut tests) = state.last_tests.lock() {
-        tests.insert(
-            id,
-            LastTest { success: result.success, account: result.account.clone(), message: result.message.clone(), at },
-        );
-    }
-    Ok(result)
+    .await
 }
 
-/// Puts the profile's key on a server (`host` = alias or hostname).
 /// How the key gets into a GitHub/GitLab account (login, token, by hand).
 #[tauri::command]
 #[specta::specta]
@@ -235,6 +222,7 @@ pub fn cancel_device_flow(state: State<'_, AppState>, flow_id: String) -> CmdRes
     Ok(())
 }
 
+/// Puts the profile's key on a server (`host` = alias or hostname).
 #[tauri::command]
 #[specta::specta]
 pub async fn install_key(
@@ -259,7 +247,7 @@ pub async fn install_key(
 #[tauri::command]
 #[specta::specta]
 pub async fn last_test(state: State<'_, AppState>, id: String) -> CmdResult<Option<LastTest>> {
-    Ok(state.last_test(&id))
+    Ok(history::get(&state.env, &id))
 }
 
 #[tauri::command]

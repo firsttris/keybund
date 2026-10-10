@@ -187,6 +187,9 @@ fn test_command_uses_exit_code_from_output() {
         // GitHub exits with 1 on success.
         sb.fake_ssh("Hi octocat! You have successfully authenticated, but GitHub does not provide shell access.", 1);
         sb.cmd().args(["test", "p"]).assert().success().stdout(predicate::str::contains("Verbunden als @octocat"));
+        // The result is remembered for `show` and the app.
+        sb.cmd().args(["show", "p"]).assert().success().stdout(predicate::str::contains("Letzter Test"));
+        assert!(sb.read(".config/keybund/last-tests.json").contains("Verbunden als @octocat"));
         let log = sb.ssh_log();
         assert!(log.contains("IdentitiesOnly=yes"));
         assert!(log.contains("AddKeysToAgent=yes"));

@@ -114,6 +114,9 @@ impl Env {
     pub fn profile_gitconfig(&self, id: &str) -> PathBuf {
         self.git_dir().join(format!("{id}.gitconfig"))
     }
+    pub fn last_tests_file(&self) -> PathBuf {
+        self.config_dir.join("last-tests.json")
+    }
     pub fn allowed_signers(&self) -> PathBuf {
         self.config_dir.join("allowed_signers")
     }

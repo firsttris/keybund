@@ -11,8 +11,8 @@ use keybund_core::doctor::{self, Status};
 use keybund_core::keygen::{self, GenerateOptions};
 use keybund_core::model::{Config, GitIdentity, HostEntry, KeyRef, Profile, Provider};
 use keybund_core::{
-    archive as archive_mod, clone as clone_mod, import as import_mod, keyinstall, probe, provider, store, tokens,
-    uninstall as uninstall_mod, upload, which as which_mod, Env,
+    archive as archive_mod, clone as clone_mod, history, import as import_mod, keyinstall, probe, provider, store,
+    tokens, uninstall as uninstall_mod, upload, which as which_mod, Env,
 };
 
 use crate::{system, ui};
@@ -81,6 +81,10 @@ pub fn show(env: &Env, id: &str) -> Result<ExitCode> {
     }
     for h in &p.hosts {
         ui::row("Host", &host_label(h));
+    }
+    if let Some(t) = history::get(env, &p.id) {
+        let when = format_millis(t.at);
+        ui::row("Letzter Test", &format!("{} ({when})", t.message));
     }
     if let Some(k) = &info.public_key {
         println!("\n{k}");
@@ -440,8 +444,13 @@ fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCod
         bail!("Profil „{}“ hat keinen Host {name}", profile.id);
     }
     let mut ok = true;
+    let mut remembered = None;
     for host in hosts {
         let r = probe::probe(env, profile, host)?;
+        // The profile's result: the first failure, else the first success.
+        if only.is_none() && (remembered.is_none() || (!r.success && ok)) {
+            remembered = Some(r.clone());
+        }
         if r.success {
             ui::success(&format!("{}: {}", r.host, r.message));
         } else {
@@ -453,7 +462,17 @@ fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCod
             }
         }
     }
+    if let Some(r) = remembered {
+        history::record(env, &profile.id, &r)?;
+    }
     Ok(if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE })
+}
+
+/// `YYYY-MM-DD HH:MM` (UTC) of a timestamp in milliseconds.
+fn format_millis(ms: f64) -> String {
+    let secs = (ms / 1000.0) as u64;
+    let time = secs % 86_400;
+    format!("{} {:02}:{:02} UTC", keygen::format_date(secs), time / 3600, time % 3600 / 60)
 }
 
 pub fn which(env: &Env, target: Option<&str>) -> Result<ExitCode> {

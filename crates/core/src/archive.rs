@@ -51,5 +51,6 @@ pub fn archive(env: &Env, config: &mut Config, id: &str) -> Result<ArchiveResult
         config.default_profile = None;
     }
     store::save(env, config)?;
+    crate::history::forget(env, id)?;
     Ok(ArchiveResult { key_path, remove_key_urls })
 }

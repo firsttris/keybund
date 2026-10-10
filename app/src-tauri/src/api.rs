@@ -41,15 +41,7 @@ pub struct HostLink {
     pub url: String,
 }
 
-/// Result of the last connection test, kept in memory for the session.
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct LastTest {
-    pub success: bool,
-    pub account: Option<String>,
-    pub message: String,
-    /// Milliseconds since the epoch.
-    pub at: f64,
-}
+pub use keybund_core::history::LastTest;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct ProfileView {
@@ -90,7 +82,9 @@ pub fn profile_view(env: &Env, config: &Config, p: &Profile, last_test: Option<L
     }
 }
 
-pub fn load_profiles(env: &Env, last_test: impl Fn(&str) -> Option<LastTest>) -> CmdResult<ProfilesView> {
+pub fn load_profiles(env: &Env) -> CmdResult<ProfilesView> {
+    let tests = keybund_core::history::load(env);
+    let last_test = |id: &str| tests.get(id).cloned();
     let config = store::load(env)?;
     let pending_changes = apply::plan(env, &config).map(|p| p.changes.len() as u32).unwrap_or(0);
     let import_available = import::proposals_for(env).map(|p| p.len() as u32).unwrap_or(0);
@@ -470,7 +464,7 @@ mod tests {
         assert!(env.home.join("dev/c").is_dir());
         assert!(plan_changes(&env).unwrap().is_empty());
 
-        let view = load_profiles(&env, |_| None).unwrap();
+        let view = load_profiles(&env).unwrap();
         assert_eq!(view.profiles.len(), 1);
         assert_eq!(view.pending_changes, 0);
         assert!(view.profiles[0].key.fingerprint.as_deref().unwrap().starts_with("SHA256:"));
@@ -482,7 +476,7 @@ mod tests {
     fn update_and_apply_with_stale_check() {
         let (_d, env) = env();
         create_project(&env, &project("a")).unwrap();
-        let mut view = load_profiles(&env, |_| None).unwrap().profiles.remove(0);
+        let mut view = load_profiles(&env).unwrap().profiles.remove(0);
         view.profile.git.as_mut().unwrap().sign = true;
         update_profile(&env, view.profile).unwrap();
 
@@ -517,7 +511,7 @@ mod tests {
         assert_eq!(res.key_path, "~/.ssh/archive/b_ed25519");
         assert!(plan_changes(&env).unwrap().changes.iter().any(|c| c.path.ends_with("b.gitconfig")));
         set_default_profile(&env, Some("a".into())).unwrap();
-        assert_eq!(load_profiles(&env, |_| None).unwrap().default_profile.as_deref(), Some("a"));
+        assert_eq!(load_profiles(&env).unwrap().default_profile.as_deref(), Some("a"));
     }
 
     #[test]
@@ -541,11 +535,11 @@ mod tests {
         )
         .unwrap();
         std::fs::write(env.ssh_config(), "# Privat\nHost github.com\n  IdentityFile ~/.ssh/privat_ed25519\n").unwrap();
-        assert_eq!(load_profiles(&env, |_| None).unwrap().import_available, 1);
+        assert_eq!(load_profiles(&env).unwrap().import_available, 1);
 
         let proposals = import_proposals(&env).unwrap();
         assert_eq!(import_profiles(&env, &proposals).unwrap(), ["privat"]);
-        let view = load_profiles(&env, |_| None).unwrap();
+        let view = load_profiles(&env).unwrap();
         assert_eq!(view.import_available, 0);
         assert_eq!(view.default_profile.as_deref(), Some("privat"));
         apply_changes(&env, &plan_changes(&env).unwrap().changes.iter().map(|c| c.diff.clone()).collect::<Vec<_>>())
@@ -593,7 +587,7 @@ mod tests {
         let diffs: Vec<String> = preview.plan.changes.iter().map(|c| c.diff.clone()).collect();
         uninstall_apply(&env, opts, &diffs).unwrap();
         assert!(!env.ssh_keybund_conf().exists());
-        assert_eq!(load_profiles(&env, |_| None).unwrap().profiles.len(), 1);
+        assert_eq!(load_profiles(&env).unwrap().profiles.len(), 1);
     }
 
     #[test]
