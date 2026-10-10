@@ -64,11 +64,11 @@ test("adds and removes a folder, rejects nested folders", async ({ app }) => {
   await app.goto("/#/profile/kunde-b");
   await app.getByRole("button", { name: "+ Ordner" }).click();
   await app.getByLabel("Neuer Ordner").fill("~/dev/sparkasse/sub");
-  await app.getByRole("button", { name: "Speichern" }).click();
+  await app.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(app.getByText(/Projektordner überschneiden sich/).first()).toBeVisible();
 
   await app.getByLabel("Neuer Ordner").fill("~/work/kunde-b");
-  await app.getByRole("button", { name: "Speichern" }).click();
+  await app.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(app.getByText("~/work/kunde-b/", { exact: true })).toBeVisible();
   await app.getByRole("button", { name: "Ordner ~/work/kunde-b/ entfernen" }).click();
   await expect(app.getByText("~/work/kunde-b/", { exact: true })).toHaveCount(0);
