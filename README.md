@@ -191,3 +191,16 @@ Die Workflows kommen aus [firsttris/workflows](https://github.com/firsttris/work
   AppImage-Pfaden bereinigte Umgebung, Fallback `gio open`; klappt es nicht, zeigt die App den Link zum Kopieren.
 - Zu offene Rechte → `doctor --fix` setzt 700/600.
 - Ein globaler `Host github.com` mit `IdentityFile` mischt sich ein → `doctor` warnt.
+
+---
+
+<div align="center">
+
+⭐ Gefällt dir Keybund? Ein [Stern auf GitHub](https://github.com/firsttris/keybund) hilft anderen, es zu finden.<br>
+🐛 [Fehler melden](https://github.com/firsttris/keybund/issues/new) · 💡 [Idee vorschlagen](https://github.com/firsttris/keybund/issues/new)
+
+<sub>Lizenz: <a href="LICENSE">GPL-3.0</a> · © Tristan Teufel und Mitwirkende<br>
+Wer eine veränderte Version weitergibt, muss sie unter der GPL und mit ihrem Quellcode weitergeben; eine kommerzielle Lizenz ohne diese Pflichten gibt es über <a href="https://teufel-it.de">teufel-it.de</a>.<br>
+Keybund steht in keiner Verbindung zu GitHub, GitLab, Atlassian (Bitbucket) oder dem OpenSSH-Projekt.</sub>
+
+</div>

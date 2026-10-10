@@ -3,7 +3,12 @@ import { Card, CardTitle } from "@/components/ui/card";
 import { FieldHint, Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { useQuery } from "@tanstack/react-query";
+import { getVersion } from "@tauri-apps/api/app";
+import { openExternal } from "@/lib/open";
 import { usePaths, useProfiles, useScanKeys, useSetDefault } from "@/lib/queries";
+
+const REPO_URL = "https://github.com/firsttris/keybund";
 import { formatAge } from "@/lib/utils";
 
 export function SettingsPage() {
@@ -11,6 +16,7 @@ export function SettingsPage() {
   const setDefault = useSetDefault();
   const paths = usePaths();
   const keys = useScanKeys();
+  const version = useQuery({ queryKey: ["version"], queryFn: () => getVersion() });
   const active = profiles.data?.profiles.filter((p) => !p.profile.archived) ?? [];
   const names = Object.fromEntries((profiles.data?.profiles ?? []).map((p) => [p.profile.id, p.profile.name]));
 
@@ -56,6 +62,21 @@ export function SettingsPage() {
               ))}
             </dl>
           )}
+        </Card>
+
+        <Card aria-labelledby="about-title">
+          <CardTitle id="about-title">Über Keybund</CardTitle>
+          <p className="m-0 text-[13px] leading-relaxed text-muted-foreground">
+            Keybund {version.data ? `${version.data} ` : ""}by Tristan Teufel ·{" "}
+            <button className="text-foreground underline-offset-4 hover:underline" onClick={() => openExternal(REPO_URL)}>
+              Quellcode auf GitHub
+            </button>
+            <br />
+            Lizenz: GPL-3.0 · eine kommerzielle Lizenz gibt es über{" "}
+            <button className="text-foreground underline-offset-4 hover:underline" onClick={() => openExternal("https://teufel-it.de")}>
+              teufel-it.de
+            </button>
+          </p>
         </Card>
 
         <Card className="col-span-full" aria-labelledby="import-title">

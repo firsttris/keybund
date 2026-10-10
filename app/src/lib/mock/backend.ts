@@ -789,6 +789,8 @@ export function createMockBackend(state: MockState = seedState()) {
         const report: ApplyReport = { written: ["~/.ssh/config"], deleted: [], backups: ["~/.ssh/config.keybund-backup"] };
         return report;
       }
+      case "plugin:app|version":
+        return "0.1.0";
       case "plugin:dialog|open":
         return "~/dev/neues-projekt";
       default:
