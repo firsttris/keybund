@@ -290,6 +290,37 @@ pub fn archive_profile(env: &Env, id: &str) -> CmdResult<archive::ArchiveResult>
     Ok(archive::archive(env, &mut config, id)?)
 }
 
+/// A file (or the part of a file) Keybund generates for a profile.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct GeneratedFile {
+    pub path: String,
+    pub content: String,
+    /// `true` if `content` is only this profile's part of a shared file.
+    pub excerpt: bool,
+}
+
+pub fn generated_config(env: &Env, id: &str) -> CmdResult<Vec<GeneratedFile>> {
+    let config = store::load(env)?;
+    let p = config.profile(id)?;
+    let mut files = vec![GeneratedFile {
+        path: env.contract(&env.profile_gitconfig(id)),
+        content: keybund_core::render::profile_gitconfig(p),
+        excerpt: false,
+    }];
+    if !p.folders.is_empty() {
+        files.push(GeneratedFile {
+            path: env.contract(&env.index_gitconfig()),
+            content: keybund_core::render::include_if_blocks(p, env),
+            excerpt: true,
+        });
+    }
+    let ssh = keybund_core::render::ssh_host_blocks(p);
+    if !ssh.is_empty() {
+        files.push(GeneratedFile { path: env.contract(&env.ssh_keybund_conf()), content: ssh, excerpt: true });
+    }
+    Ok(files)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct Paths {
     pub profiles_file: String,
@@ -417,6 +448,17 @@ mod tests {
         assert!(plan_changes(&env).unwrap().changes.iter().any(|c| c.path.ends_with("b.gitconfig")));
         set_default_profile(&env, Some("a".into())).unwrap();
         assert_eq!(load_profiles(&env, |_| None).unwrap().default_profile.as_deref(), Some("a"));
+    }
+
+    #[test]
+    fn generated_config_for_profile() {
+        let (_d, env) = env();
+        create_project(&env, &project("a")).unwrap();
+        let files = generated_config(&env, "a").unwrap();
+        assert_eq!(files[0].path, "~/.config/keybund/git/a.gitconfig");
+        assert!(files[0].content.contains("sshCommand = ssh -i ~/.ssh/a_ed25519 -o IdentitiesOnly=yes"));
+        assert!(files[1].excerpt && files[1].content.contains("gitdir:~/dev/a/"));
+        assert_eq!(files.len(), 2, "no ssh block without alias");
     }
 
     #[test]

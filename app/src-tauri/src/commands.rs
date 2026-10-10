@@ -225,6 +225,13 @@ pub async fn archive_profile(state: State<'_, AppState>, id: String) -> CmdResul
 
 #[tauri::command]
 #[specta::specta]
+pub async fn generated_config(state: State<'_, AppState>, id: String) -> CmdResult<Vec<GeneratedFile>> {
+    let env = state.env.clone();
+    blocking(move || api::generated_config(&env, &id)).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn paths(state: State<'_, AppState>) -> Paths {
     api::paths(&state.env)
 }

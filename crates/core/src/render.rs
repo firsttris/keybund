@@ -65,12 +65,34 @@ pub fn index_gitconfig(config: &Config, env: &Env) -> String {
         let _ = writeln!(out, "\n[gpg \"ssh\"]\n\tallowedSignersFile = {}", env.contract(&env.allowed_signers()));
     }
     for p in config.active_profiles() {
-        for folder in &p.folders {
-            let _ = writeln!(out, "\n[includeIf \"gitdir:{folder}\"]");
-            let _ = writeln!(out, "\tpath = {}", env.contract(&env.profile_gitconfig(&p.id)));
-        }
+        out.push('\n');
+        out.push_str(&include_if_blocks(p, env));
     }
     out
+}
+
+/// The `includeIf` sections of one profile in `index.gitconfig`.
+pub fn include_if_blocks(profile: &Profile, env: &Env) -> String {
+    let path = env.contract(&env.profile_gitconfig(&profile.id));
+    profile
+        .folders
+        .iter()
+        .map(|f| format!("[includeIf \"gitdir:{f}\"]\n\tpath = {path}\n"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The `Host` blocks of one profile in `keybund.conf` (empty without aliases).
+pub fn ssh_host_blocks(profile: &Profile) -> String {
+    let single = Config { default_profile: None, profiles: vec![Profile { archived: false, ..profile.clone() }] };
+    let full = ssh_config(&single);
+    let start = full.find("\n# Profil:").map(|i| i + 1).unwrap_or(full.len());
+    let end = full.rfind("\nHost *").unwrap_or(full.len());
+    if start >= end {
+        String::new()
+    } else {
+        full[start..end].trim_end().to_string() + "\n"
+    }
 }
 
 /// `~/.config/keybund/git/<id>.gitconfig`.
@@ -213,6 +235,20 @@ mod tests {
         let mut cfg = sample();
         cfg.default_profile = None;
         assert!(!index_gitconfig(&cfg, &Env::with_home("/home/t")).contains("[core]"));
+    }
+
+    #[test]
+    fn per_profile_excerpts() {
+        let cfg = sample();
+        let env = Env::with_home("/home/t");
+        assert_eq!(
+            include_if_blocks(&cfg.profiles[1], &env),
+            "[includeIf \"gitdir:~/dev/kunde-a/\"]\n\tpath = ~/.config/keybund/git/kunde-a.gitconfig\n"
+        );
+        let blocks = ssh_host_blocks(&cfg.profiles[0]);
+        assert!(blocks.starts_with("# Profil: Privat\nHost meinserver\n"));
+        assert!(!blocks.contains("Host *"));
+        assert_eq!(ssh_host_blocks(&cfg.profiles[1]), "");
     }
 
     #[test]

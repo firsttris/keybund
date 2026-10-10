@@ -30,6 +30,7 @@ macro_rules! keybund_commands {
             clone_preview,
             clone_repo,
             archive_profile,
+            generated_config,
             paths,
         ]
     };

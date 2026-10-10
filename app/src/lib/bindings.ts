@@ -36,6 +36,7 @@ export const commands = {
 	clonePreview: (url: string) => typedError<ClonePreview, CmdError>(__TAURI_INVOKE("clone_preview", { url })),
 	cloneRepo: (url: string, profileId: string, target: string | null) => typedError<string, CmdError>(__TAURI_INVOKE("clone_repo", { url, profileId, target })),
 	archiveProfile: (id: string) => typedError<ArchiveResult, CmdError>(__TAURI_INVOKE("archive_profile", { id })),
+	generatedConfig: (id: string) => typedError<GeneratedFile[], CmdError>(__TAURI_INVOKE("generated_config", { id })),
 	paths: () => __TAURI_INVOKE<Paths>("paths"),
 };
 
@@ -112,6 +113,14 @@ export type Fix =
 { type: "move_ssh_include" } | 
 /**  Write all pending config changes. */
 { type: "apply" };
+
+/**  A file (or the part of a file) Keybund generates for a profile. */
+export type GeneratedFile = {
+	path: string,
+	content: string,
+	/**  `true` if `content` is only this profile's part of a shared file. */
+	excerpt: boolean,
+};
 
 export type GitIdentity = {
 	name: string,
