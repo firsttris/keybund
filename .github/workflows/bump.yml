@@ -1,0 +1,22 @@
+name: Bump version
+
+# Raises the version in Cargo.toml (and app/package.json), commits "Release vX.Y.Z", tags it and
+# starts release.yml on the tag.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+jobs:
+  bump:
+    uses: firsttris/workflows/.github/workflows/bump-version.yml@v1
+    with:
+      bump: ${{ inputs.bump }}
+      version-file: Cargo.toml
+      extra-files: app/package.json
+    permissions:
+      contents: write
+      actions: write

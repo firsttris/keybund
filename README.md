@@ -134,6 +134,25 @@ just coverage   # Rust-Coverage (cargo-llvm-cov)
 Vor jedem Release zusätzlich von Hand: `ssh meinserver`, `sftp://meinserver` in Dolphin, Push in zwei Kundenordnern,
 Clone über den Helfer, `keybund doctor` grün.
 
+## Release
+
+Die Version steht nur in `Cargo.toml` (`[workspace.package]`); `app/package.json` wird mitgezogen, die Tauri-App
+übernimmt sie aus Cargo. Ein Release startet ausschließlich über einen Tag `vX.Y.Z`:
+
+1. **Actions → Bump version → Run workflow**, `patch`, `minor` oder `major` wählen. Der Workflow erhöht die Version,
+   committet `Release vX.Y.Z` auf `main`, setzt den Tag und startet `release.yml`.
+2. `release.yml` führt die komplette CI aus (`ci.yml` per `workflow_call`), baut auf Ubuntu 22.04 das CLI-Binary,
+   das AppImage und das `.deb` und legt das GitHub-Release mit generierten Notes und `SHA256SUMS` an.
+   Eine Version mit `-` (z. B. `0.2.0-rc.1`) wird ein Pre-Release.
+
+Alternativ von einem Checkout: Version in `Cargo.toml` und `app/package.json` anpassen, `cargo check` (aktualisiert
+`Cargo.lock`), committen, `git tag v0.2.0 && git push --follow-tags`. Stimmen Tag und `Cargo.toml` nicht überein,
+bricht das Release ab. `release.yml` von Hand auf einem Branch gestartet baut nur, ohne zu veröffentlichen – gut, um
+das Packaging zu testen.
+
+Die Workflows kommen aus [firsttris/workflows](https://github.com/firsttris/workflows) (`bump-version.yml`,
+`github-release.yml`, jeweils `@v1`).
+
 ## Stand
 
 - [x] Phase 0 – Gerüst (Workspace, Tauri 2, React, TanStack, shadcn, tauri-specta, CI)

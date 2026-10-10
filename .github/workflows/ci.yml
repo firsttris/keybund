@@ -2,13 +2,21 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main]            # not every branch, pull requests build through pull_request
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
+  workflow_call:                # release.yml runs the same checks before publishing
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# A new push to a pull request cancels its outdated run; runs on main and tags finish
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,7 +25,10 @@ env:
 jobs:
   rust:
     name: Rust · fmt, clippy, unit + integration + E2E tests
+    # Draft pull requests do not build; "Ready for review" starts the run
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: System packages (Tauri, ssh, git)
@@ -39,7 +50,10 @@ jobs:
 
   rust-coverage:
     name: Rust · coverage
+    # Draft pull requests do not build; "Ready for review" starts the run
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: |
@@ -63,7 +77,10 @@ jobs:
 
   frontend:
     name: Frontend · lint, typecheck, unit + component tests, build
+    # Draft pull requests do not build; "Ready for review" starts the run
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: app
@@ -91,7 +108,10 @@ jobs:
 
   e2e:
     name: Frontend · Playwright E2E
+    # Draft pull requests do not build; "Ready for review" starts the run
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: app
@@ -116,35 +136,3 @@ jobs:
             app/playwright-report
             app/test-results
 
-  bundle:
-    name: Release build · CLI binary + AppImage
-    needs: [rust, frontend, e2e]
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf file
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: app/package.json
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: app/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-        working-directory: app
-      - run: cargo build --release -p keybund-cli
-      - run: pnpm tauri build --bundles appimage
-        working-directory: app
-      - uses: actions/upload-artifact@v4
-        with:
-          name: keybund-linux-x86_64
-          path: |
-            target/release/keybund
-            target/release/bundle/appimage/*.AppImage
