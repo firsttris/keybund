@@ -2,6 +2,12 @@ use std::process::{Command, Output};
 
 use crate::{Error, Result};
 
+/// Finds `program` on `PATH`.
+pub fn find_program(program: &str) -> Option<std::path::PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path).map(|dir| dir.join(program)).find(|p| p.is_file())
+}
+
 /// Runs a command and maps "not found" to [`Error::ToolMissing`].
 pub fn output(mut cmd: Command) -> Result<Output> {
     let program = cmd.get_program().to_string_lossy().into_owned();

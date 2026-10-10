@@ -31,6 +31,7 @@ tauri-plugin-dialog = "2"
 
 [dev-dependencies]
 tempfile = "3"
+mockito = "1"
 tauri = { version = "2", features = ["test"] }
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 specta.workspace = true

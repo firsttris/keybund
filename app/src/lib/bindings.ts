@@ -24,8 +24,20 @@ export const commands = {
 	openUrl: (url: string) => typedError<null, CmdError>(__TAURI_INVOKE("open_url", { url })),
 	/**  Tests the connection to `host` (alias or hostname) or the profile's first host. */
 	testConnection: (id: string, host: string | null) => typedError<ProbeResult, CmdError>(__TAURI_INVOKE("test_connection", { id, host })),
-	/**  Puts the profile's key on a server (`host` = alias or hostname). */
 	installKey: (id: string, host: string) => typedError<InstallResult, CmdError>(__TAURI_INVOKE("install_key", { id, host })),
+	/**
+	 *  Puts the profile's key on a server (`host` = alias or hostname).
+	 *  How the key gets into a GitHub/GitLab account (login, token, by hand).
+	 */
+	uploadTarget: (id: string, host: string) => typedError<UploadTarget, CmdError>(__TAURI_INVOKE("upload_target", { id, host })),
+	/**  Adds the key with a personal access token (`None`: the stored one). */
+	uploadKey: (id: string, host: string, token: string | null, remember: boolean) => typedError<UploadResult, CmdError>(__TAURI_INVOKE("upload_key", { id, host, token, remember })),
+	forgetToken: (id: string, host: string) => typedError<null, CmdError>(__TAURI_INVOKE("forget_token", { id, host })),
+	/**  Starts the login in the browser; show the code and open the page. */
+	startDeviceFlow: (id: string, host: string) => typedError<DeviceFlowStart, CmdError>(__TAURI_INVOKE("start_device_flow", { id, host })),
+	/**  Polls the login once; once confirmed, the key is added. */
+	pollDeviceFlow: (flowId: string, remember: boolean) => typedError<DeviceFlowStatus, CmdError>(__TAURI_INVOKE("poll_device_flow", { flowId, remember })),
+	cancelDeviceFlow: (flowId: string) => typedError<null, CmdError>(__TAURI_INVOKE("cancel_device_flow", { flowId })),
 	lastTest: (id: string) => typedError<{
 	success: boolean,
 	account: string | null,
@@ -102,6 +114,19 @@ export type CreatedProject = {
 	/**  Why the provider page could not be opened, if it was requested. */
 	open_error: string | null,
 };
+
+export type DeviceFlowStart = {
+	flow_id: string,
+	user_code: string,
+	/**  Where to enter the code (with the code filled in where possible). */
+	verification_uri: string,
+	expires_in: number,
+	interval: number,
+};
+
+export type DeviceFlowStatus = 
+/**  Not confirmed yet; poll again after `interval` seconds. */
+{ status: "pending"; interval: number } | { status: "done"; result: UploadResult } | { status: "denied" } | { status: "expired" };
 
 /**  A pending change to one file. */
 export type FileChange = {
@@ -340,6 +365,36 @@ export type UninstallPreview = {
 	plan: Plan,
 	/**  Backups from before Keybund exist and could be restored. */
 	backups_available: boolean,
+};
+
+export type UploadResult = {
+	success: boolean,
+	/**  The key was already in the account. */
+	already_present: boolean,
+	/**  The account the token belongs to (`login` / `username`). */
+	account: string | null,
+	message: string,
+	/**  The token was rejected or lacks the scope: a new login helps. */
+	auth_failed: boolean,
+};
+
+/**  How the key of a profile gets into an account. */
+export type UploadTarget = {
+	provider: Provider,
+	hostname: string,
+	/**  Keybund can add the key via the API (GitHub, GitLab). */
+	supported: boolean,
+	/**  Login in the browser is available (registered OAuth app). */
+	device_flow: boolean,
+	/**  Page to create a token with the right scopes. */
+	token_url: string | null,
+	scopes: string[],
+	/**  The page to add the key by hand. */
+	manual_url: string | null,
+	/**  A token for this profile and host is in the keyring. */
+	remembered: boolean,
+	/**  Tokens can be kept (`secret-tool` is installed). */
+	keyring: boolean,
 };
 
 export type WhichMode = "folder" | "host";

@@ -47,7 +47,10 @@ impl Sandbox {
             .env_remove("SSH_AUTH_SOCK")
             .env_remove("DISPLAY")
             .env_remove("WAYLAND_DISPLAY")
-            .env_remove("KEYBUND_PASSPHRASE");
+            .env_remove("KEYBUND_PASSPHRASE")
+            .env_remove("KEYBUND_API_URL")
+            .env_remove("KEYBUND_GITHUB_CLIENT_ID")
+            .env_remove("KEYBUND_GITLAB_CLIENT_ID");
     }
 
     pub fn path(&self, rel: &str) -> PathBuf {
@@ -90,6 +93,25 @@ impl Sandbox {
     }
 
     /// Creates a profile non-interactively.
+    /// A fake `secret-tool` keeping one secret in a file; returns the file.
+    /// Every call is logged next to it (`secrets.log`).
+    #[cfg(unix)]
+    pub fn fake_secret_tool(&self) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let store = self.dir.path().join("secrets");
+        let script = self.bin.join("secret-tool");
+        fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nf='{0}'\necho \"$@\" >> \"$f.log\"\ncase \"$1\" in\n  store) cat > \"$f\" ;;\n  lookup) [ -f \"$f\" ] && cat \"$f\" || exit 1 ;;\n  clear) rm -f \"$f\" ;;\nesac\n",
+                store.display()
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        store
+    }
+
     pub fn new_profile(&self, name: &str, extra: &[&str]) {
         self.cmd().arg("new").arg("--name").arg(name).args(extra).arg("--yes").assert().success();
     }

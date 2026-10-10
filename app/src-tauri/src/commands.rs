@@ -3,7 +3,7 @@
 //! delegates to `api` or the core.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Runtime, State};
@@ -19,15 +19,18 @@ use keybund_core::which::{self, WhichResult};
 use keybund_core::{store, Env};
 
 use crate::api::{self, *};
+use crate::upload::{self, DeviceFlowStart, DeviceFlowStatus, UploadTarget};
+use keybund_core::upload::UploadResult;
 
 pub struct AppState {
     pub env: Env,
     pub last_tests: Mutex<HashMap<String, LastTest>>,
+    pub flows: Arc<upload::Flows>,
 }
 
 impl AppState {
     pub fn new(env: Env) -> Self {
-        AppState { env, last_tests: Mutex::new(HashMap::new()) }
+        AppState { env, last_tests: Mutex::new(HashMap::new()), flows: Arc::default() }
     }
 
     fn last_test(&self, id: &str) -> Option<LastTest> {
@@ -174,6 +177,64 @@ pub async fn test_connection(state: State<'_, AppState>, id: String, host: Optio
 }
 
 /// Puts the profile's key on a server (`host` = alias or hostname).
+/// How the key gets into a GitHub/GitLab account (login, token, by hand).
+#[tauri::command]
+#[specta::specta]
+pub async fn upload_target(state: State<'_, AppState>, id: String, host: String) -> CmdResult<UploadTarget> {
+    let env = state.env.clone();
+    blocking(move || upload::upload_target(&env, &id, &host)).await
+}
+
+/// Adds the key with a personal access token (`None`: the stored one).
+#[tauri::command]
+#[specta::specta]
+pub async fn upload_key(
+    state: State<'_, AppState>,
+    id: String,
+    host: String,
+    token: Option<String>,
+    remember: bool,
+) -> CmdResult<UploadResult> {
+    let env = state.env.clone();
+    blocking(move || upload::upload_key(&env, &id, &host, token, remember)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn forget_token(state: State<'_, AppState>, id: String, host: String) -> CmdResult<()> {
+    let env = state.env.clone();
+    blocking(move || upload::forget_token(&env, &id, &host)).await
+}
+
+/// Starts the login in the browser; show the code and open the page.
+#[tauri::command]
+#[specta::specta]
+pub async fn start_device_flow(state: State<'_, AppState>, id: String, host: String) -> CmdResult<DeviceFlowStart> {
+    let env = state.env.clone();
+    let flows = state.flows.clone();
+    blocking(move || upload::start_device_flow(&env, &flows, &id, &host)).await
+}
+
+/// Polls the login once; once confirmed, the key is added.
+#[tauri::command]
+#[specta::specta]
+pub async fn poll_device_flow(
+    state: State<'_, AppState>,
+    flow_id: String,
+    remember: bool,
+) -> CmdResult<DeviceFlowStatus> {
+    let env = state.env.clone();
+    let flows = state.flows.clone();
+    blocking(move || upload::poll_device_flow(&env, &flows, &flow_id, remember)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn cancel_device_flow(state: State<'_, AppState>, flow_id: String) -> CmdResult<()> {
+    upload::cancel_device_flow(&state.flows, &flow_id);
+    Ok(())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn install_key(

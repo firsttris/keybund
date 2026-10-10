@@ -57,11 +57,15 @@ test("creates a GitHub project end to end", async ({ app }) => {
 
   await app.getByRole("button", { name: "Anwenden & Pubkey kopieren" }).click();
 
-  // Clipboard, provider page, connection test.
+  // Login in the browser, the key goes into the account, then the test runs.
   await expect(app.getByRole("heading", { name: "Key eintragen & testen" })).toBeVisible();
-  expect(await mockState<string[]>(app, "openedUrls")).toEqual(["https://github.com/settings/ssh/new"]);
+  expect(await mockState<string[]>(app, "openedUrls")).toEqual([]);
   expect(await mockState<string>(app, "clipboard")).toMatch(/^ssh-ed25519 .* tristan@zentrale-kunde-c$/);
-  await app.getByRole("button", { name: "Ich hab ihn eingetragen" }).click();
+  await app.getByRole("button", { name: "Bei GitHub anmelden & eintragen" }).click();
+  await expect(app.getByTestId("user-code")).toHaveText("WDJB-MJHT");
+  await expect(app.getByText("Warte auf Bestätigung im Browser …")).toBeVisible();
+  expect(await mockState<string[]>(app, "openedUrls")).toEqual(["https://github.com/login/device"]);
+  await expect(app.getByText("Key bei GitHub eingetragen (@tristan)")).toBeVisible({ timeout: 10_000 });
   await expect(app.getByText("Verbunden als @tristan")).toBeVisible();
   await app.getByRole("link", { name: "Zum Profil" }).click();
 

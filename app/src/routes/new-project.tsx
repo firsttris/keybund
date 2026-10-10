@@ -5,6 +5,7 @@ import { useState } from "react";
 import { PageFrame } from "@/components/app-shell";
 import { ColorDot } from "@/components/color-dot";
 import { DiffView } from "@/components/diff-view";
+import { KeyUpload } from "@/components/key-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorSlot, FieldError, FieldHint, Label } from "@/components/ui/label";
@@ -19,6 +20,9 @@ import { pickFolder } from "@/lib/tauri";
 import { cn, COLOR_NAMES, defaultHostname, GIT_PROVIDERS, isValidEmail, PROFILE_COLORS, providerLabel, slugify } from "@/lib/utils";
 
 const mono = "font-mono text-[13px]";
+
+/** Providers whose API Keybund uses to add the key. */
+const API_PROVIDERS: Provider[] = ["github", "gitlab"];
 
 export type Kind = "git" | "server";
 export type StepId = "kind" | "project" | "account" | "folder" | "git" | "server" | "key" | "test";
@@ -613,7 +617,9 @@ function StepKey({
         },
       );
     } else {
-      create.mutate({ project, openPage: !server }, { onSuccess: onCreated });
+      // GitHub and GitLab get the key via their API in the next step; for
+      // the others the page to add it by hand opens right away.
+      create.mutate({ project, openPage: !server && !API_PROVIDERS.includes(draft.provider) }, { onSuccess: onCreated });
     }
   };
   const provider = providerLabel(draft.provider);
@@ -628,7 +634,9 @@ function StepKey({
       <Heading title={server ? `SSH-Key für ${profileName(draft)}` : `SSH-Key für ${draft.name.trim()}`}>
         {server
           ? "Ein eigener Key pro Server – oder ein Key, den du schon hast. Danach trägt Keybund ihn auf dem Server ein."
-          : `Jedes Projekt bekommt seinen eigenen Key. Nach dem Anwenden liegt der Pubkey in der Zwischenablage und ${provider} öffnet sich direkt auf der richtigen Seite.`}
+          : API_PROVIDERS.includes(draft.provider)
+            ? `Jedes Projekt bekommt seinen eigenen Key. Danach trägt Keybund ihn in dein ${provider}-Konto ein – du meldest dich dafür nur im Browser an.`
+            : `Jedes Projekt bekommt seinen eigenen Key. Nach dem Anwenden liegt der Pubkey in der Zwischenablage und ${provider} öffnet sich direkt auf der richtigen Seite.`}
       </Heading>
 
       <div role="radiogroup" aria-label="Key" className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
@@ -716,35 +724,45 @@ function StepTest({ created }: { created: CreatedProject }) {
   const test = useTestConnection();
   const { profile } = created.profile;
   const link = created.profile.add_key_urls[0];
+  const viaApi = !!link && API_PROVIDERS.includes(link.provider);
   const result = test.data;
   return (
     <>
       <Heading title="Key eintragen & testen">
-        Der Pubkey liegt in der Zwischenablage.{" "}
-        {link ? `Füge ihn bei ${providerLabel(link.provider)} ein und klicke dann auf „Ich hab ihn eingetragen“.` : "Trage ihn auf dem Server in ~/.ssh/authorized_keys ein (z. B. mit ssh-copy-id)."}
+        {viaApi
+          ? `Keybund trägt den Key in dein ${providerLabel(link.provider)}-Konto ein. Oder von Hand: Der Pubkey liegt schon in der Zwischenablage.`
+          : `Der Pubkey liegt in der Zwischenablage. Füge ihn bei ${link ? providerLabel(link.provider) : "deinem Anbieter"} ein und klicke dann auf „Ich hab ihn eingetragen“.`}
       </Heading>
-      <div className="flex items-center gap-2 rounded-lg border border-border bg-background py-1 pr-1 pl-3.5">
-        <code className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-secondary-foreground">{created.public_key}</code>
-      </div>
-      {link && created.open_error && (
-        <div role="alert" className="flex flex-col gap-1 rounded-[10px] border border-amber-500/35 bg-amber-500/5 p-3.5 text-[13px]">
-          <span className="font-medium">Die {providerLabel(link.provider)}-Seite hat sich nicht geöffnet</span>
-          <span className="text-muted-foreground">{created.open_error}</span>
-          <span className="font-mono text-xs break-all text-secondary-foreground">{link.url}</span>
-        </div>
+      {viaApi && (
+        <section aria-label="Automatisch eintragen" className="flex flex-col gap-3">
+          <KeyUpload profile={profile} host={link.host} manual={false} onUploaded={() => test.mutate({ id: profile.id })} />
+        </section>
       )}
-      <div className="flex flex-wrap gap-2">
-        {link && (
-          <Button variant="outline" onClick={() => openExternal(link.url)}>
-            <ExternalLink aria-hidden />
-            {providerLabel(link.provider)}-Seite öffnen
-          </Button>
+      <section aria-label="Von Hand eintragen" className="flex flex-col gap-3">
+        {viaApi && <span className="text-[13px] font-medium">Von Hand</span>}
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-background py-1 pr-1 pl-3.5">
+          <code className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-secondary-foreground">{created.public_key}</code>
+        </div>
+        {link && created.open_error && (
+          <div role="alert" className="flex flex-col gap-1 rounded-[10px] border border-amber-500/35 bg-amber-500/5 p-3.5 text-[13px]">
+            <span className="font-medium">Die {providerLabel(link.provider)}-Seite hat sich nicht geöffnet</span>
+            <span className="text-muted-foreground">{created.open_error}</span>
+            <span className="font-mono text-xs break-all text-secondary-foreground">{link.url}</span>
+          </div>
         )}
-        <Button onClick={() => test.mutate({ id: profile.id })} disabled={test.isPending}>
-          {test.isPending && <Spinner className="size-3.5" />}
-          Ich hab ihn eingetragen
-        </Button>
-      </div>
+        <div className="flex flex-wrap gap-2">
+          {link && (
+            <Button variant="outline" onClick={() => openExternal(link.url)}>
+              <ExternalLink aria-hidden />
+              {providerLabel(link.provider)}-Seite öffnen
+            </Button>
+          )}
+          <Button variant={viaApi ? "outline" : "default"} onClick={() => test.mutate({ id: profile.id })} disabled={test.isPending}>
+            {test.isPending && <Spinner className="size-3.5" />}
+            Ich hab ihn eingetragen
+          </Button>
+        </div>
+      </section>
       <div aria-live="polite">
         {result?.success && (
           <div className="flex flex-col gap-3 rounded-[10px] border border-emerald-500/30 bg-emerald-500/5 p-4">

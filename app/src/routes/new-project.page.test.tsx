@@ -47,9 +47,12 @@ describe("wizard", () => {
     await user.click(screen.getByRole("button", { name: /Anwenden & Pubkey kopieren/ }));
 
     expect(await screen.findByRole("heading", { name: "Key eintragen & testen" })).toBeInTheDocument();
-    expect(backend.state.openedUrls).toEqual(["https://gitlab.kunde-c.de/-/user_settings/ssh_keys"]);
+    // Self-hosted GitLab: a token or by hand, nothing opens by itself.
+    expect(await screen.findByLabelText("Zugriffstoken")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /anmelden/ })).not.toBeInTheDocument();
+    expect(backend.state.openedUrls).toEqual([]);
     await user.click(screen.getByRole("button", { name: "GitLab-Seite öffnen" }));
-    expect(backend.state.openedUrls).toHaveLength(2);
+    expect(backend.state.openedUrls).toEqual(["https://gitlab.kunde-c.de/-/user_settings/ssh_keys"]);
     await user.click(screen.getByRole("button", { name: "Ich hab ihn eingetragen" }));
     expect(await screen.findByText("Verbunden als @tristan")).toBeInTheDocument();
 
@@ -102,7 +105,32 @@ describe("wizard", () => {
     expect(screen.getByText("ed25519 · ~/.ssh/kunde-d2_ed25519")).toBeInTheDocument();
   });
 
-  it("tells when the provider page did not open", async () => {
+  it("adds the key to GitHub after a login in the browser and tests it", async () => {
+    const { user, backend } = await renderApp("/new");
+    const next = () => user.click(screen.getByRole("button", { name: /Weiter/ }));
+    await choose(user, GIT);
+    await user.type(await screen.findByLabelText("Projektname"), "Kunde G");
+    await screen.findByText("kunde-g");
+    await next();
+    await next();
+    await next();
+    await user.type(screen.getByLabelText("Name"), "T");
+    await user.type(screen.getByLabelText("E-Mail"), "t@g.de");
+    await next();
+    expect(await screen.findByText(/trägt Keybund ihn in dein GitHub-Konto ein/)).toBeInTheDocument();
+    await screen.findByText("Vorschau der Änderungen");
+    await user.click(screen.getByRole("button", { name: /Anwenden & Pubkey kopieren/ }));
+
+    await user.click(await screen.findByRole("button", { name: "Bei GitHub anmelden & eintragen" }));
+    expect(await screen.findByTestId("user-code")).toHaveTextContent("WDJB-MJHT");
+    expect(backend.state.openedUrls).toEqual(["https://github.com/login/device"]);
+    expect(await screen.findByText("Key bei GitHub eingetragen (@tristan)")).toBeInTheDocument();
+    // The connection test runs right after the upload.
+    expect(await screen.findByText("Verbunden als @tristan")).toBeInTheDocument();
+    expect(backend.state.uploadedKeys).toEqual(["github.com:~/.ssh/kunde-g_ed25519"]);
+  });
+
+  it("opens the page right away for Bitbucket and tells when it did not open", async () => {
     const { user } = await renderApp("/new", (b) => {
       b.state.openFails = true;
     });
@@ -111,6 +139,7 @@ describe("wizard", () => {
     await user.type(await screen.findByLabelText("Projektname"), "Kunde F");
     await screen.findByText("kunde-f");
     await next();
+    await user.click(screen.getByRole("radio", { name: "Bitbucket" }));
     await next();
     await next();
     await user.type(screen.getByLabelText("Name"), "T");
@@ -118,9 +147,10 @@ describe("wizard", () => {
     await next();
     await screen.findByText("Vorschau der Änderungen");
     await user.click(screen.getByRole("button", { name: /Anwenden & Pubkey kopieren/ }));
-    const alert = await screen.findByText("Die GitHub-Seite hat sich nicht geöffnet");
-    expect(alert.parentElement).toHaveTextContent("https://github.com/settings/ssh/new");
+    const alert = await screen.findByText("Die Bitbucket-Seite hat sich nicht geöffnet");
+    expect(alert.parentElement).toHaveTextContent("https://bitbucket.org/account/settings/ssh-keys/");
     expect(alert.parentElement).toHaveTextContent("xdg-open");
+    expect(screen.queryByRole("region", { name: "Automatisch eintragen" })).not.toBeInTheDocument();
   });
 
   it("shows validation errors", async () => {

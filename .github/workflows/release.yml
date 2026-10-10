@@ -25,6 +25,12 @@ jobs:
     # Older glibc than the test runners, so the binaries also run on older distributions
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    env:
+      # Client IDs of Keybund's OAuth apps (public, not secrets) for the login
+      # in the browser when adding keys to GitHub/GitLab. Repository
+      # variables, see docs/oauth-apps.md; empty means: tokens only.
+      KEYBUND_GITHUB_CLIENT_ID: ${{ vars.KEYBUND_GITHUB_CLIENT_ID }}
+      KEYBUND_GITLAB_CLIENT_ID: ${{ vars.KEYBUND_GITLAB_CLIENT_ID }}
     steps:
       - uses: actions/checkout@v4
       - name: System packages (Tauri bundler)

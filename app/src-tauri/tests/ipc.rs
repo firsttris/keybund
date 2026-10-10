@@ -186,3 +186,28 @@ fn test_connection_without_host_is_an_error() {
     let which = invoke(&webview, "which", json!({ "query": "~/dev/s/repo" })).unwrap();
     assert_eq!(which["profile_id"], "s");
 }
+
+#[test]
+fn key_upload_over_ipc() {
+    let (d, _app, webview) = app();
+    let config = d.path().canonicalize().unwrap().join(".config/keybund");
+    std::fs::create_dir_all(&config).unwrap();
+    std::fs::write(
+        config.join("profiles.toml"),
+        "[[profile]]\nid = \"c\"\nname = \"C\"\nkey = { path = \"~/.ssh/c_ed25519\" }\nfolders = [\"~/dev/c/\"]\n\n[[profile.host]]\nhostname = \"gitlab.kunde.de\"\nprovider = \"gitlab\"\n",
+    )
+    .unwrap();
+    // Self-hosted GitLab: no login in the browser, a token is needed.
+    let target = invoke(&webview, "upload_target", json!({ "id": "c", "host": "gitlab.kunde.de" })).unwrap();
+    assert_eq!(target["supported"], true);
+    assert_eq!(target["device_flow"], false);
+    assert_eq!(
+        target["token_url"],
+        "https://gitlab.kunde.de/-/user_settings/personal_access_tokens?name=Keybund&scopes=api"
+    );
+    let err = invoke(&webview, "start_device_flow", json!({ "id": "c", "host": "gitlab.kunde.de" })).unwrap_err();
+    assert_eq!(err["kind"], "api");
+    let err = invoke(&webview, "poll_device_flow", json!({ "flowId": "flow-9", "remember": false })).unwrap_err();
+    assert!(err["message"].as_str().unwrap().contains("nicht mehr aktiv"));
+    invoke(&webview, "cancel_device_flow", json!({ "flowId": "flow-9" })).unwrap();
+}

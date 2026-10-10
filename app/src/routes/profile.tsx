@@ -3,6 +3,7 @@ import { Archive, Check, Copy, ExternalLink, Folder, GitBranch, KeyRound, Server
 import { useState } from "react";
 import { toast } from "sonner";
 import { ColorDot } from "@/components/color-dot";
+import { KeyUpload } from "@/components/key-upload";
 import { ConfigStatus } from "@/components/pending-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { errorMessage } from "@/lib/api";
 import { openExternal } from "@/lib/open";
-import type { HostEntry, HostLink, Profile, ProfileView, Provider } from "@/lib/bindings";
+import type { HostEntry, Profile, ProfileView, Provider } from "@/lib/bindings";
 import { gitAccounts, isServerOnly, servers } from "@/lib/categories";
 import {
   useArchiveProfile,
@@ -152,7 +153,7 @@ function ProfileDetail({ view }: { view: ProfileView }) {
             <KeyCard view={view} onCopy={onCopy} />
             <ConnectionCard view={view} test={test} />
             {!serverOnly && <FoldersCard profile={profile} />}
-            {!serverOnly && <GitAccountsCard profile={profile} links={view.add_key_urls} />}
+            {!serverOnly && <GitAccountsCard profile={profile} />}
             <ServersCard profile={profile} />
             {!serverOnly && <GitCard profile={profile} />}
             {!profile.archived && <DangerCard view={view} />}
@@ -293,9 +294,10 @@ function StatusLine({ ok, title, detail }: { ok: boolean; title: string; detail:
   );
 }
 
-function GitAccountsCard({ profile, links }: { profile: Profile; links: HostLink[] }) {
+function GitAccountsCard({ profile }: { profile: Profile }) {
   const update = useUpdateProfile();
   const [adding, setAdding] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
   const accounts = gitAccounts(profile);
   const remove = (h: HostEntry) => update.mutate({ ...profile, hosts: profile.hosts.filter((x) => x !== h) });
   return (
@@ -309,30 +311,29 @@ function GitAccountsCard({ profile, links }: { profile: Profile; links: HostLink
         )}
       </CardHeader>
       {accounts.map((h) => {
-        const link = links.find((l) => l.host === h.hostname);
         const name = h.alias ?? h.hostname;
+        const uploading = open === name;
         return (
-          <ItemRow key={name}>
-            <GitBranch aria-hidden className="size-4 text-muted-foreground" />
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className={mono}>{name}</span>
-              <span className="text-xs text-muted-foreground">{hostLabel(h)}</span>
+          <div key={name} className="flex flex-col gap-3 rounded-lg bg-muted p-3">
+            <div className="flex items-center gap-3">
+              <GitBranch aria-hidden className="size-4 text-muted-foreground" />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className={mono}>{name}</span>
+                <span className="text-xs text-muted-foreground">{hostLabel(h)}</span>
+              </div>
+              {!profile.archived && (
+                <Button variant="ghost" size="sm" aria-expanded={uploading} onClick={() => setOpen(uploading ? null : name)}>
+                  {uploading ? "Schließen" : "Key eintragen"}
+                </Button>
+              )}
+              {!profile.archived && profile.hosts.length > 1 && (
+                <Button variant="ghost" size="icon" aria-label={`Konto ${name} entfernen`} onClick={() => remove(h)}>
+                  <Trash2 aria-hidden />
+                </Button>
+              )}
             </div>
-            {link && !profile.archived && (
-              <button
-                className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-foreground hover:bg-background"
-                onClick={() => openExternal(link.url)}
-              >
-                Key eintragen
-                <ExternalLink aria-hidden className="size-[13px]" />
-              </button>
-            )}
-            {!profile.archived && profile.hosts.length > 1 && (
-              <Button variant="ghost" size="icon" aria-label={`Konto ${name} entfernen`} onClick={() => remove(h)}>
-                <Trash2 aria-hidden />
-              </Button>
-            )}
-          </ItemRow>
+            {uploading && <KeyUpload profile={profile} host={name} />}
+          </div>
         );
       })}
       {accounts.length === 0 && !adding && (

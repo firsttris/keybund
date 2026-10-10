@@ -553,12 +553,173 @@ fn install_key_runs_ssh_with_the_key_on_stdin() {
             .args(["install-key", "nas", "--host", "other"])
             .assert()
             .code(2)
-            .stderr(predicate::str::contains("keinen Server other"));
+            .stderr(predicate::str::contains("keinen Host other"));
     }
-    sb.new_profile("Git", &["--provider", "github", "--folder", "~/dev/g", "--git-name", "T", "--git-email", "t@g.de"]);
+}
+
+/// A GitHub API that knows the user "octo" and accepts one new key.
+fn github_api(server: &mut mockito::Server, token: &str) -> mockito::Mock {
+    let auth = format!("Bearer {token}");
+    server.mock("GET", "/user").match_header("authorization", auth.as_str()).with_body(r#"{"login":"octo"}"#).create();
+    server
+        .mock("GET", "/user")
+        .match_header("authorization", "Bearer old")
+        .with_status(401)
+        .with_body(r#"{"message":"Bad credentials"}"#)
+        .create();
+    server.mock("GET", "/user/keys").match_query(mockito::Matcher::Any).with_body("[]").create();
+    server
+        .mock("POST", "/user/keys")
+        .match_header("authorization", auth.as_str())
+        .match_body(mockito::Matcher::PartialJsonString(r#"{"title":"t@g (Keybund)"}"#.into()))
+        .with_status(201)
+        .with_body("{}")
+        .create()
+}
+
+#[test]
+fn install_key_uploads_to_github_with_a_token() {
+    if !has_tools() || cfg!(not(unix)) {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile(
+        "Git",
+        &[
+            "--provider",
+            "github",
+            "--folder",
+            "~/dev/g",
+            "--git-name",
+            "T",
+            "--git-email",
+            "t@g.de",
+            "--comment",
+            "t@g",
+        ],
+    );
+    let mut server = mockito::Server::new();
+    let add = github_api(&mut server, "ghp_secret");
+    #[cfg(unix)]
+    {
+        let store = sb.fake_secret_tool();
+        sb.cmd()
+            .env("KEYBUND_API_URL", server.url())
+            .args(["install-key", "git", "--token-stdin", "--remember"])
+            .write_stdin("ghp_secret\n")
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Key bei GitHub eingetragen (@octo)"));
+        add.assert();
+        assert_eq!(std::fs::read_to_string(&store).unwrap(), "ghp_secret");
+        let log = std::fs::read_to_string(store.with_extension("log")).unwrap();
+        assert!(
+            log.contains("store --label=Keybund: GitHub-Token für Git application keybund profile git host github.com"),
+            "{log}"
+        );
+        assert!(!log.contains("ghp_secret"), "the token never goes on the command line");
+
+        // Next time the stored token is used.
+        sb.cmd().env("KEYBUND_API_URL", server.url()).args(["install-key", "git"]).assert().success();
+
+        // An expired token is forgotten; without a browser login a new token is needed.
+        std::fs::write(&store, "old").unwrap();
+        sb.cmd()
+            .env("KEYBUND_API_URL", server.url())
+            .args(["install-key", "git"])
+            .assert()
+            .code(1)
+            .stdout(predicate::str::contains("Das gespeicherte Token gilt nicht mehr"))
+            .stdout(predicate::str::contains("settings/tokens/new?scopes=write:public_key"));
+        assert!(!store.exists());
+    }
+}
+
+#[test]
+fn install_key_logs_in_with_the_device_flow() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile(
+        "Git",
+        &[
+            "--provider",
+            "github",
+            "--folder",
+            "~/dev/g",
+            "--git-name",
+            "T",
+            "--git-email",
+            "t@g.de",
+            "--comment",
+            "t@g",
+        ],
+    );
+    let mut server = mockito::Server::new();
+    server
+        .mock("POST", "/login/device/code")
+        .match_body(mockito::Matcher::UrlEncoded("client_id".into(), "keybund-test".into()))
+        .with_body(r#"{"device_code":"dc","user_code":"WDJB-MJHT","verification_uri":"https://github.com/login/device","expires_in":60,"interval":0}"#)
+        .create();
+    server.mock("POST", "/login/oauth/access_token").with_body(r#"{"access_token":"gho_device"}"#).create();
+    let add = github_api(&mut server, "gho_device");
     sb.cmd()
+        .env("KEYBUND_API_URL", server.url())
+        .env("KEYBUND_GITHUB_CLIENT_ID", "keybund-test")
         .args(["install-key", "git"])
         .assert()
+        .success()
+        .stdout(predicate::str::contains("Code eingeben: WDJB-MJHT"))
+        .stdout(predicate::str::contains("mit dem Konto für „Git“"))
+        .stdout(predicate::str::contains("Key bei GitHub eingetragen (@octo)"));
+    add.assert();
+}
+
+#[test]
+fn install_key_explains_hosts_without_api_login() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile(
+        "Firma",
+        &[
+            "--provider",
+            "gitlab",
+            "--host",
+            "gitlab.firma.de",
+            "--folder",
+            "~/dev/f",
+            "--git-name",
+            "T",
+            "--git-email",
+            "t@f.de",
+        ],
+    );
+    sb.cmd()
+        .args(["install-key", "firma"])
+        .assert()
         .code(2)
-        .stderr(predicate::str::contains("Git-Hosts bekommen den Key über ihre Webseite"));
+        .stderr(predicate::str::contains("Für gitlab.firma.de gibt es keine Anmeldung per Browser"))
+        .stderr(predicate::str::contains(
+            "https://gitlab.firma.de/-/user_settings/personal_access_tokens?name=Keybund&scopes=api",
+        ));
+    sb.cmd()
+        .args(["install-key", "firma", "--token-stdin"])
+        .write_stdin("\n")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("Kein Token"));
+
+    sb.new_profile(
+        "Bb",
+        &["--provider", "bitbucket", "--folder", "~/dev/b", "--git-name", "T", "--git-email", "t@b.de"],
+    );
+    sb.cmd()
+        .args(["install-key", "bb"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("Bitbucket kann Keybund nicht automatisch eintragen"))
+        .stdout(predicate::str::contains("bitbucket.org/account/settings/ssh-keys"));
 }

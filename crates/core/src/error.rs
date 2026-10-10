@@ -44,6 +44,10 @@ pub enum Error {
     Archived(String),
     #[error("Die Konfiguration hat sich seit der Vorschau geändert: {0}")]
     StalePlan(String),
+    #[error("Keine Verbindung zu {host}: {message}")]
+    Network { host: String, message: String },
+    #[error("{0}")]
+    Api(String),
     #[error("Dateizugriff auf {path} fehlgeschlagen: {source}")]
     Io {
         path: String,
@@ -80,6 +84,8 @@ impl Error {
             Error::NoHost(_) => "no_host",
             Error::Archived(_) => "archived",
             Error::StalePlan(_) => "stale_plan",
+            Error::Network { .. } => "network",
+            Error::Api(_) => "api",
             Error::Io { .. } => "io",
         }
     }
@@ -115,6 +121,8 @@ mod tests {
             Error::NoHost("a".into()),
             Error::Archived("a".into()),
             Error::StalePlan("a".into()),
+            Error::Network { host: "a".into(), message: "b".into() },
+            Error::Api("a".into()),
             Error::io("/x", io()),
         ];
         let mut kinds: Vec<&str> = all.iter().map(Error::kind).collect();

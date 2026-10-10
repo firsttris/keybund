@@ -151,3 +151,14 @@ test("a failing browser start is explained, not swallowed", async ({ app }) => {
   await expect(app.getByText("Browser konnte nicht geöffnet werden")).toBeVisible();
   await expect(app.getByRole("button", { name: "Link kopieren" })).toBeVisible();
 });
+
+test("adds the key to a self-hosted GitLab with a token", async ({ app }) => {
+  await app.goto("/#/profile/sparkasse");
+  const card = app.getByRole("region", { name: "Git-Konten" });
+  await card.getByRole("button", { name: "Key eintragen" }).click();
+  await card.getByLabel("Zugriffstoken").fill("glpat-123");
+  await card.getByRole("switch", { name: "Token im Schlüsselbund merken" }).click();
+  await card.getByRole("button", { name: "Mit Token eintragen" }).click();
+  await expect(card.getByText("Key bei GitLab eingetragen (@tristan)")).toBeVisible();
+  expect(await mockState<string[]>(app, "uploadedKeys")).toEqual(["gitlab.kunde.de:~/.ssh/sparkasse_ed25519"]);
+});

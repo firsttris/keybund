@@ -24,6 +24,20 @@ Ein Profil kann alles zugleich sein – z. B. „Privat“ als Standard, mit Git
 bekommt im Wizard („Neu“ → „Server“) einen eigenen Key oder den Key eines bestehenden Profils; Keybund trägt ihn
 danach auf dem Server ein (wie `ssh-copy-id`: Anmeldung mit Passwort oder einem Key, der dort schon gilt).
 
+## Key bei GitHub und GitLab eintragen
+
+Keybund trägt den Pubkey per API in dein Konto ein („Key eintragen“ im Profil, im Wizard oder
+`keybund install-key`). Auf github.com und gitlab.com meldest du dich dafür im Browser an: Keybund zeigt einen Code,
+du bestätigst ihn, fertig – kein Passwort, kein Token zum Abtippen. Selbst gehostetes GitLab und GitHub Enterprise
+nehmen ein persönliches Zugriffstoken; Keybund öffnet die Seite dafür mit den richtigen Berechtigungen.
+
+Tokens werden nach dem Eintragen verworfen. Nur wenn du „Token im Schlüsselbund merken“ wählst, landen sie per
+`secret-tool` im Schlüsselbund (GNOME Keyring, KWallet) – je Profil und Host, weil jedes Profil meist ein anderes Konto
+ist. Achte beim Anmelden darauf, im Browser mit dem Konto des Profils angemeldet zu sein; Keybund zeigt danach, bei
+welchem Konto der Key gelandet ist. Bitbucket hat keine passende API, dort öffnet sich die Seite zum Eintragen.
+
+Die Anmeldung im Browser braucht registrierte OAuth-Apps: [docs/oauth-apps.md](docs/oauth-apps.md).
+
 ## Wie es funktioniert
 
 `~/.config/keybund/profiles.toml` ist die einzige Quelle der Wahrheit:
@@ -88,7 +102,8 @@ keybund edit <profil> …          Name, Ordner, Hosts, Git-Identität, Signiere
 keybund new                      Wizard im Terminal (oder komplett über Optionen, siehe --help)
 keybund copy <profil> [--print]  Pubkey in die Zwischenablage (wl-copy, xclip oder xsel)
 keybund test <profil> [--host h] Verbindungstest, Exit-Code 0 bei Erfolg
-keybund install-key <profil> [--host h]   Pubkey auf einem Server eintragen (wie ssh-copy-id)
+keybund install-key <profil> [--host h] [--token-stdin] [--remember]
+                                 Pubkey eintragen: Server wie ssh-copy-id, GitHub/GitLab per API
 keybund which [pfad|host]        Welcher Key wird hier benutzt – und warum?
 keybund clone <url> [-p id]      Klont ins richtige Profil, mit dem richtigen Key
 keybund apply [--dry-run] [-y]   Diff zeigen bzw. schreiben
@@ -150,7 +165,8 @@ Jede Schicht hat eigene Tests, alle laufen in der CI (`.github/workflows/ci.yml`
 | Snapshot | `render` ist rein funktional, jede Profil-Kombination hat eine Golden-File (insta) | `crates/core/src/snapshots/` |
 | Integration (Rust) | `apply` gegen ein temporäres HOME, Auflösung mit echtem `git` und `ssh -G`, Doctor, Archiv | `crates/core/tests/` |
 | Integration (sshd) | Echter `sshd` auf localhost: Passphrase einmal, danach hält der Agent den Key (Test und `git`), falscher Key erkannt, Key auf Server eintragen | `crates/core/tests/sshd.rs` |
-| Integration (CLI) | Jeder Befehl gegen ein temporäres HOME, Fake-`ssh` für Provider-Antworten | `crates/cli/tests/cli.rs` |
+| Integration (API) | Device Flow und Key-Upload gegen eine nachgebaute GitHub-/GitLab-API (mockito) | `crates/core/tests/upload.rs` |
+| Integration (CLI) | Jeder Befehl gegen ein temporäres HOME, Fake-`ssh`/`secret-tool`, Mock-API | `crates/cli/tests/cli.rs` |
 | E2E (CLI) | Kompletter Lebenszyklus: zwei Kunden auf github.com, Server, Clone, Doctor, Archiv | `crates/cli/tests/e2e.rs` |
 | IPC (Tauri) | Commands über die Tauri-IPC mit Mock-Runtime und echten Capabilities | `app/src-tauri/tests/ipc.rs` |
 | Vertrag | `bindings.ts` muss zu den Rust-Commands passen; Mock-Backend verhält sich wie der Core | `app/src-tauri/tests/bindings.rs`, `app/src/lib/mock/*.test.ts` |
@@ -192,7 +208,8 @@ Die Workflows kommen aus [firsttris/workflows](https://github.com/firsttris/work
 - [x] Phase 1 – Core + CLI
 - [x] Phase 2 – GUI-MVP
 - [x] Phase 3 – Clone-Helfer, „Welcher Key?“, Archivieren, SSH-Signing, Warnung bei alten Keys
-- [ ] Phase 4 – KRunner, Key-Upload per API, Flatpak, known_hosts pro Profil
+- [x] Key-Upload per API (GitHub, GitLab; Device Flow und Token), Key auf Server eintragen
+- [ ] Phase 4 – KRunner, Flatpak, known_hosts pro Profil
 - [ ] Phase 5/6 – macOS und Windows
 
 ## Stolperfallen, die Keybund abfängt

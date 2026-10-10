@@ -24,7 +24,9 @@ pub mod probe;
 pub mod provider;
 pub mod render;
 pub mod store;
+pub mod tokens;
 pub mod uninstall;
+pub mod upload;
 pub mod which;
 
 mod fsutil;
