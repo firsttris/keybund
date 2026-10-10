@@ -24,7 +24,34 @@ fn list_without_profiles() {
 #[test]
 fn new_requires_flags_without_terminal() {
     let sb = Sandbox::new();
-    sb.cmd().args(["new", "--name", "Kunde C"]).assert().code(2).stderr(predicate::str::contains("--git-name fehlt"));
+    sb.cmd().args(["new"]).assert().code(2).stderr(predicate::str::contains("--name fehlt"));
+}
+
+#[test]
+fn new_follows_the_global_git_identity() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    std::fs::write(sb.path(".gitconfig"), "[user]\n\tname = Tristan\n\temail = t@privat.de\n").unwrap();
+    // Same as ~/.gitconfig: nothing stored, the key follows it.
+    sb.new_profile("Privat", &["--provider", "github", "--folder", "~/dev/privat"]);
+    assert!(!sb.read(".config/keybund/profiles.toml").contains("[profile.git]"));
+    assert!(!sb.read(".config/keybund/git/privat.gitconfig").contains("[user]"));
+    // Another e-mail for a customer: only that is different.
+    sb.new_profile("Kunde", &["--provider", "github", "--folder", "~/dev/kunde", "--git-email", "t@kunde.de"]);
+    let kunde = sb.read(".config/keybund/git/kunde.gitconfig");
+    assert!(kunde.contains("name = Tristan") && kunde.contains("email = t@kunde.de"), "{kunde}");
+    sb.cmd()
+        .args(["show", "privat"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("t@privat.de (aus ~/.gitconfig)"));
+    sb.cmd()
+        .args(["edit", "kunde", "--sign", "--git-email", ""])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("soll Commits signieren, hat aber keine eigene E-Mail"));
 }
 
 #[test]
@@ -81,7 +108,8 @@ fn new_rejects_duplicate_and_nested_folders() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("überschneiden sich"));
-    assert!(!sb.path("work/kunde/sub").exists(), "nothing created for a rejected folder");
+    assert!(!sb.path("dev/a/sub").exists(), "nothing created for a rejected folder");
+    assert!(!sb.path(".ssh/b_ed25519").exists(), "no key for a rejected entry");
 }
 
 #[test]
@@ -374,6 +402,32 @@ fn invalid_id_and_existing_key_errors() {
         .assert()
         .code(2)
         .stderr(predicate::str::contains("Key existiert bereits"));
+}
+
+#[test]
+fn without_terminal_nothing_is_removed_or_archived_without_yes() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    std::fs::create_dir_all(sb.path(".ssh")).unwrap();
+    std::process::Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", "", "-f"])
+        .arg(sb.path(".ssh/work_ed25519"))
+        .status()
+        .unwrap();
+    std::fs::write(sb.path(".ssh/config"), "Host work\n    HostName 10.0.0.1\n    IdentityFile ~/.ssh/work_ed25519\n")
+        .unwrap();
+    sb.cmd().args(["import", "--all", "--keep-old", "--yes"]).assert().success();
+    // A later plain import must not delete the user's block.
+    sb.cmd().arg("import").assert().success().stdout(predicate::str::contains("Ohne Terminal nur mit --yes"));
+    assert!(sb.read(".ssh/config").contains("Host work"));
+    sb.cmd()
+        .args(["archive", "work"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Ohne Terminal nur mit --yes"));
+    assert!(sb.path(".ssh/work_ed25519").exists());
 }
 
 #[test]

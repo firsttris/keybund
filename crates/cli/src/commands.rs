@@ -77,7 +77,10 @@ pub fn show(env: &Env, id: &str) -> Result<ExitCode> {
         let global = keybund_core::gitenv::global_identity(env);
         let own = |v: Option<&str>, fallback: Option<String>| match v.filter(|v| !v.trim().is_empty()) {
             Some(v) => v.to_string(),
-            None => format!("{} (aus ~/.gitconfig)", fallback.unwrap_or_else(|| "–".into())),
+            None => match fallback {
+                Some(v) => format!("{v} (aus ~/.gitconfig)"),
+                None => "nicht gesetzt – Git fragt beim ersten Commit".into(),
+            },
         };
         let g = p.git.as_ref();
         ui::row("Git-Name", &own(g.map(|g| g.name.as_str()), global.name));
@@ -239,37 +242,58 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
     if folders.is_empty() && tty && provider.is_git_host() {
         folders.push(ask("Git-Ordner", Some(config.settings.project_folder(&id)))?);
     }
-    let folders: Vec<String> = folders
-        .iter()
-        .map(|f| {
-            let path = env.expand(f.trim());
-            std::fs::create_dir_all(&path).with_context(|| format!("Ordner {f} kann nicht angelegt werden"))?;
-            Ok(store::normalize_folder(env, f))
-        })
-        .collect::<Result<_>>()?;
+    let folders: Vec<String> = folders.iter().map(|f| store::normalize_folder(env, f)).collect();
 
-    // 4. Git-Identität
-    let git = if provider.is_git_host() || args.git_email.is_some() {
-        let global_name = git_global(env, "user.name");
+    // 4. Git-Identität: suggested from ~/.gitconfig; the same values mean
+    // "follow ~/.gitconfig", so nothing is stored for the key.
+    let git = if provider.is_git_host() || args.git_email.is_some() || args.git_name.is_some() {
+        let global = keybund_core::gitenv::global_identity(env);
         let git_name = match args.git_name.clone() {
             Some(n) => n,
-            None if tty => ask("Git-Name", global_name)?,
-            None => require(global_name, "--git-name")?,
+            None if tty => ask("Git-Name", global.name.clone())?,
+            None => global.name.clone().unwrap_or_default(),
         };
         let git_email = match args.git_email.clone() {
             Some(e) => e,
-            None if tty => ask("Git-E-Mail", None)?,
-            None => require(None, "--git-email")?,
+            None if tty => ask("Git-E-Mail", global.email.clone())?,
+            None => global.email.clone().unwrap_or_default(),
         };
         let sign = if args.sign || !tty {
             args.sign
         } else {
             Confirm::with_theme(&theme()).with_prompt("Commits mit diesem Key signieren?").default(false).interact()?
         };
-        Some(GitIdentity { name: git_name, email: git_email, sign })
+        let same = |v: &str, g: &Option<String>| v.trim() == g.as_deref().unwrap_or_default();
+        if !sign && same(&git_name, &global.name) && same(&git_email, &global.email) {
+            None
+        } else {
+            Some(GitIdentity { name: git_name.trim().to_string(), email: git_email.trim().to_string(), sign })
+        }
     } else {
         None
     };
+
+    // Check everything before anything is created: a refused key must not
+    // leave a key file or folders behind.
+    let planned_key = match &args.key {
+        Some(path) => env.contract(&env.expand(path)),
+        None => config.settings.key_path(&id),
+    };
+    let mut candidate = config.clone();
+    candidate.profiles.push(Profile {
+        id: id.clone(),
+        name: name.clone(),
+        key: KeyRef { path: planned_key, comment: None },
+        git: git.clone(),
+        folders: folders.clone(),
+        hosts: vec![host.clone()],
+        ..Default::default()
+    });
+    store::validate(&candidate)?;
+    for f in &folders {
+        let path = env.expand(f);
+        std::fs::create_dir_all(&path).with_context(|| format!("Ordner {f} kann nicht angelegt werden"))?;
+    }
 
     // 5. Key
     let key = match args.key.clone() {
@@ -368,12 +392,6 @@ fn default_comment(id: &str) -> String {
     } else {
         format!("{user}@{host}-{id}")
     }
-}
-
-fn git_global(env: &Env, key: &str) -> Option<String> {
-    let out = env.command("git").args(["config", "--global", "--get", key]).output().ok()?;
-    let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    (!v.is_empty()).then_some(v)
 }
 
 fn print_plan(plan: &Plan) {
@@ -685,6 +703,9 @@ pub fn set_default(env: &Env, id: &str) -> Result<ExitCode> {
 pub fn archive(env: &Env, id: &str, yes: bool) -> Result<ExitCode> {
     let mut config: Config = store::load(env)?;
     let name = config.profile(id)?.name.clone();
+    if !yes && !interactive() {
+        bail!("Ohne Terminal nur mit --yes – archivieren verschiebt den Key");
+    }
     if !yes
         && interactive()
         && !Confirm::with_theme(&theme())
@@ -766,7 +787,13 @@ pub fn import(env: &Env, all: bool, yes: bool, keep_old: bool) -> Result<ExitCod
     ui::heading("Übernommene Einträge aus ~/.ssh/config entfernen");
     ui::hint("Solange sie dort stehen, bietet ssh ihre Keys zusätzlich an – die Anmeldung kann mit dem falschen Key gelingen.");
     println!();
-    if !confirm_and_apply(env, &cleanup, !tty)? {
+    // Removing blocks from the user's own file needs a yes: asked, or --yes.
+    if !yes && !interactive() {
+        print_plan(&cleanup);
+        ui::warn("Ohne Terminal nur mit --yes – alte Einträge bleiben vorerst.");
+        return Ok(ExitCode::SUCCESS);
+    }
+    if !confirm_and_apply(env, &cleanup, yes)? {
         ui::warn("Alte Einträge bleiben – `keybund doctor --fix` entfernt sie später.");
     }
     Ok(ExitCode::SUCCESS)
@@ -861,7 +888,6 @@ pub struct EditArgs {
 pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
     let mut config = store::load(env)?;
     let before = config.profile(&args.profile)?.clone();
-    let global_name = git_global(env, "user.name");
     let p = config.profile_mut(&args.profile)?;
     let mut changes: Vec<String> = Vec::new();
 
@@ -897,20 +923,29 @@ pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
         if let Some(e) = &args.git_email {
             git.email = e.clone();
         }
-        if git.name.is_empty() {
-            git.name = global_name.clone().context("--git-name fehlt (kein globaler Git-Name gesetzt)")?;
-        }
-        if git.email.is_empty() {
-            bail!("--git-email fehlt");
-        }
         if args.sign {
             git.sign = true;
         }
         if args.no_sign {
             git.sign = false;
         }
-        changes.push(format!("Git: {} <{}>{}", git.name, git.email, if git.sign { ", signiert" } else { "" }));
-        p.git = Some(git);
+        // Empty name or e-mail: git keeps the one from ~/.gitconfig. Signing
+        // needs the key's own e-mail (validated when saving).
+        let shown = |v: &str, label: &str| {
+            if v.trim().is_empty() {
+                format!("{label} aus ~/.gitconfig")
+            } else {
+                v.to_string()
+            }
+        };
+        changes.push(format!(
+            "Git: {} <{}>{}",
+            shown(&git.name, "Name"),
+            shown(&git.email, "E-Mail"),
+            if git.sign { ", signiert" } else { "" }
+        ));
+        let empty = git.name.trim().is_empty() && git.email.trim().is_empty() && !git.sign;
+        p.git = if empty { None } else { Some(git) };
     }
     if let Some(hostname) = &args.add_host {
         let provider: Provider = args.provider.map(Into::into).unwrap_or_else(|| Provider::detect(hostname));
@@ -926,7 +961,10 @@ pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
     }
     for name in &args.remove_host {
         let count = p.hosts.len();
-        p.hosts.retain(|h| h.alias.as_deref() != Some(name.as_str()) && !(h.alias.is_none() && &h.hostname == name));
+        // By alias or hostname, like test and trust.
+        p.hosts.retain(|h| {
+            !(h.alias.as_deref().is_some_and(|a| a.eq_ignore_ascii_case(name)) || h.hostname.eq_ignore_ascii_case(name))
+        });
         if p.hosts.len() == count {
             bail!("Key „{}“ hat keinen Host {name}", p.id);
         }
@@ -975,7 +1013,9 @@ pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
 fn host_key_ok(env: &Env, settings: &Settings, profile: &Profile, host: &HostEntry, yes: bool) -> Result<()> {
     use keybund_core::hostkeys::{self, HostKeyCheck};
     match hostkeys::check(env, settings, profile, host)? {
-        HostKeyCheck::Known | HostKeyCheck::Unreachable { .. } => Ok(()),
+        HostKeyCheck::Known => Ok(()),
+        // ssh reports the network problem itself.
+        HostKeyCheck::Unreachable { .. } => Ok(()),
         HostKeyCheck::Pinned => {
             ui::hint(&format!("Veröffentlichten Host-Key von {} in ~/.ssh/known_hosts eingetragen", host.hostname));
             Ok(())
@@ -1028,6 +1068,11 @@ pub fn trust(env: &Env, id: &str, host: Option<&str>, yes: bool) -> Result<ExitC
             ui::success(&format!("{}: Host-Key ist bekannt", target.target_name()));
             continue;
         }
+        if let keybund_core::hostkeys::HostKeyCheck::Unreachable { .. } =
+            keybund_core::hostkeys::check(env, &config.settings, p, target)?
+        {
+            bail!("{} ist nicht erreichbar – Host-Key nicht geprüft", target.target_name());
+        }
         host_key_ok(env, &config.settings, p, target, yes)?;
     }
     Ok(ExitCode::SUCCESS)
@@ -1059,6 +1104,8 @@ pub fn install_key(env: &Env, id: &str, host: Option<&str>) -> Result<ExitCode> 
         let success = if target.provider.is_git_host() {
             add_to_account(env, p, target)?
         } else {
+            // keyinstall connects with StrictHostKeyChecking=yes: confirm first.
+            host_key_ok(env, &config.settings, p, target, false)?;
             ui::hint(&format!(
                 "Melde mich an {} an (Passwort oder ein bereits eingetragener Key) …",
                 target.target_name()

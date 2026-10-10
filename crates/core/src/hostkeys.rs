@@ -128,7 +128,7 @@ pub fn scan(env: &Env, host: &HostEntry) -> Result<Vec<(HostKey, String)>> {
     if let Some(port) = host.port {
         cmd.arg("-p").arg(port.to_string());
     }
-    cmd.arg(&host.hostname);
+    cmd.arg("--").arg(&host.hostname);
     let out = process::output(cmd)?;
     Ok(parse_scan(&String::from_utf8_lossy(&out.stdout)))
 }
@@ -137,7 +137,12 @@ fn append(path: &Path, name: &str, keys: &[String]) -> Result<()> {
     if let Some(dir) = path.parent() {
         fsutil::ensure_dir(dir, Some(0o700))?;
     }
+    // A hand-edited file may lack the final newline; the first key would glue onto its last line.
+    let needs_newline = std::fs::read(path).ok().is_some_and(|c| !c.is_empty() && !c.ends_with(b"\n"));
     let mut file = std::fs::OpenOptions::new().create(true).append(true).open(path).map_err(|e| Error::io(path, e))?;
+    if needs_newline {
+        writeln!(file).map_err(|e| Error::io(path, e))?;
+    }
     for key in keys {
         writeln!(file, "{name} {key}").map_err(|e| Error::io(path, e))?;
     }

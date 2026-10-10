@@ -132,12 +132,46 @@ pub fn generate(env: &Env, opts: &GenerateOptions) -> Result<KeyInfo> {
         fsutil::ensure_dir(dir, mode)?;
     }
     let mut cmd = env.command("ssh-keygen");
-    cmd.args(["-q", "-t", "ed25519", "-C", &opts.comment, "-f"])
-        .arg(&path)
-        .args(["-N", opts.passphrase.as_deref().unwrap_or("")]);
-    process::stdout(cmd)?;
+    cmd.args(["-q", "-t", "ed25519", "-C", &opts.comment, "-f"]).arg(&path);
+    let passphrase = opts.passphrase.as_deref().filter(|p| !p.is_empty());
+    // A passphrase never goes on the command line (`ps` shows it to every
+    // user): ssh-keygen asks a tiny askpass helper, which reads it from the
+    // environment that only this user can see.
+    let helper = match passphrase {
+        None => {
+            cmd.args(["-N", ""]);
+            None
+        }
+        Some(p) => {
+            let helper = askpass_helper(env)?;
+            cmd.env("KEYBUND_NEW_PASSPHRASE", p)
+                .env("SSH_ASKPASS", helper.join("askpass"))
+                .env("SSH_ASKPASS_REQUIRE", "force")
+                .stdin(std::process::Stdio::null());
+            Some(helper)
+        }
+    };
+    let result = process::stdout(cmd);
+    if let Some(dir) = helper {
+        let _ = fs::remove_dir_all(dir);
+    }
+    result?;
     fsutil::set_mode(&path, 0o600)?;
     Ok(key_info(env, &KeyRef { path: opts.path.clone(), comment: Some(opts.comment.clone()) }))
+}
+
+/// A private directory (0700) with a script that prints `$KEYBUND_NEW_PASSPHRASE`.
+fn askpass_helper(env: &Env) -> Result<std::path::PathBuf> {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    fsutil::ensure_dir(&env.config_dir, Some(0o700))?;
+    let dir = env.config_dir.join(format!(".askpass-{}-{n}", std::process::id()));
+    fs::create_dir(&dir).map_err(|e| Error::io(&dir, e))?;
+    fsutil::set_mode(&dir, 0o700)?;
+    let script = dir.join("askpass");
+    fs::write(&script, "#!/bin/sh\nprintf '%s\\n' \"$KEYBUND_NEW_PASSPHRASE\"\n").map_err(|e| Error::io(&script, e))?;
+    fsutil::set_mode(&script, 0o700)?;
+    Ok(dir)
 }
 
 /// Default file name for a profile key: `~/.ssh/<id>_ed25519`.
@@ -207,6 +241,42 @@ pub fn format_date(secs: u64) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn passphrase_never_goes_on_the_command_line() {
+        if std::process::Command::new("ssh-keygen").arg("-?").output().is_err() {
+            assert!(std::env::var_os("CI").is_none(), "ssh-keygen is required in CI");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let env = Env::with_home(dir.path());
+        let opts = GenerateOptions {
+            path: "~/.ssh/p_ed25519".into(),
+            comment: "c".into(),
+            passphrase: Some("ge heim".into()),
+        };
+        generate(&env, &opts).unwrap();
+        let key = env.expand("~/.ssh/p_ed25519");
+        let check = |pass: &str| {
+            std::process::Command::new("ssh-keygen")
+                .args(["-y", "-P", pass, "-f"])
+                .arg(&key)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        };
+        assert!(check("ge heim"));
+        assert!(!check(""));
+        // The helper is gone again.
+        let leftovers: Vec<_> = fs::read_dir(&env.config_dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with(".askpass"))
+            .collect();
+        assert!(leftovers.is_empty());
+    }
+
     use super::*;
 
     // Test vector generated with ssh-keygen; fingerprint from `ssh-keygen -lf`.

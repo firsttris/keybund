@@ -31,6 +31,27 @@ pub fn archive(env: &Env, config: &mut Config, id: &str) -> Result<ArchiveResult
     }
     let remove_key_urls: Vec<String> =
         profile.hosts.iter().filter_map(|h| provider::keys_url(h.provider, &h.hostname)).collect();
+    // Another active key entry uses the same file: it stays where it is.
+    let shared = config.active_profiles().any(|p| p.id != id && p.key.path == profile.key.path);
+
+    // Check the result before anything is moved, so a refusal leaves no half-done archive.
+    let mut after = config.clone();
+    {
+        let p = after.profile_mut(id)?;
+        p.archived = true;
+    }
+    if after.default_profile.as_deref() == Some(id) {
+        after.default_profile = None;
+    }
+    store::validate(&after)?;
+
+    if shared {
+        let key_path = profile.key.path.clone();
+        *config = after;
+        store::save(env, config)?;
+        crate::history::forget(env, id)?;
+        return Ok(ArchiveResult { key_path, remove_key_urls });
+    }
 
     if src.exists() {
         std::fs::rename(&src, &dst).map_err(|e| Error::io(&src, e))?;

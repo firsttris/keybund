@@ -25,6 +25,16 @@ pub struct RepoUrl {
 pub fn parse_url(url: &str) -> Result<RepoUrl> {
     let url = url.trim();
     let invalid = || Error::InvalidUrl(url.to_string());
+    // The URL goes to `git clone`: nothing that git could read as an option
+    // or a special transport (`ext::`, local paths).
+    if url.starts_with('-') || url.contains("::") || url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err(invalid());
+    }
+    if let Some((scheme, _)) = url.split_once("://") {
+        if !["ssh", "git+ssh", "ssh+git", "https", "http", "git"].contains(&scheme.to_ascii_lowercase().as_str()) {
+            return Err(invalid());
+        }
+    }
     let (host, path) = if let Some(rest) = url.split_once("://").map(|(_, r)| r) {
         let (authority, path) = rest.split_once('/').ok_or_else(invalid)?;
         let host = authority.rsplit('@').next().unwrap_or(authority);
@@ -39,7 +49,11 @@ pub fn parse_url(url: &str) -> Result<RepoUrl> {
     let path = path.trim_matches('/').to_string();
     let last = path.rsplit('/').next().unwrap_or(&path);
     let name = last.strip_suffix(".git").unwrap_or(last).to_string();
-    if host.is_empty() || name.is_empty() || host.contains(char::is_whitespace) {
+    let host_ok = !host.is_empty()
+        && !host.starts_with('-')
+        && host.chars().all(|c| c.is_ascii_alphanumeric() || ".-_[]".contains(c));
+    let name_ok = !name.is_empty() && name != "." && name != ".." && !name.contains([':', '\\']);
+    if !host_ok || !name_ok {
         return Err(invalid());
     }
     Ok(RepoUrl { host, path, name })
@@ -78,6 +92,7 @@ pub fn clone(env: &Env, profile: &Profile, url: &str, target: Option<PathBuf>) -
     cmd.arg("clone")
         .arg("-c")
         .arg(format!("core.sshCommand={}", ssh_command(&profile.key.path)))
+        .arg("--")
         .arg(url.trim())
         .arg(&target)
         .env("GIT_TERMINAL_PROMPT", "0");
@@ -88,6 +103,21 @@ pub fn clone(env: &Env, profile: &Profile, url: &str, target: Option<PathBuf>) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_urls_git_would_read_as_options() {
+        for bad in [
+            "--upload-pack=id>/tmp/p;:a/x:b",
+            "-oProxyCommand=x:a/b",
+            "ext::sh -c touch% /tmp/x",
+            "file:///etc/passwd",
+            "git@host name:a/b.git",
+            "git@-host:a/b.git",
+            "git@host:a/..",
+        ] {
+            assert!(parse_url(bad).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn parses_urls() {

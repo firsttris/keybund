@@ -14,6 +14,10 @@ pub enum Error {
     InvalidId(String),
     #[error("Key „{0}“ braucht einen Namen")]
     MissingName(String),
+    #[error("Key „{0}“ soll Commits signieren, hat aber keine eigene E-Mail")]
+    SignWithoutEmail(String),
+    #[error("Ungültiger Wert für {field}: „{value}“")]
+    InvalidValue { field: String, value: String },
     #[error("Standard-Key „{0}“ existiert nicht")]
     DefaultProfileMissing(String),
     #[error("Git-Ordner überschneiden sich: {0} und {1}")]
@@ -71,6 +75,8 @@ impl Error {
             Error::DuplicateId(_) => "duplicate_id",
             Error::InvalidId(_) => "invalid_id",
             Error::MissingName(_) => "missing_name",
+            Error::SignWithoutEmail(_) => "sign_without_email",
+            Error::InvalidValue { .. } => "invalid_value",
             Error::DefaultProfileMissing(_) => "default_profile_missing",
             Error::NestedFolders(..) => "nested_folders",
             Error::DuplicateAlias(_) => "duplicate_alias",
@@ -109,6 +115,8 @@ mod tests {
             Error::DuplicateId("a".into()),
             Error::InvalidId("a".into()),
             Error::MissingName("a".into()),
+            Error::SignWithoutEmail("a".into()),
+            Error::InvalidValue { field: "a".into(), value: "b".into() },
             Error::DefaultProfileMissing("a".into()),
             Error::NestedFolders("a".into(), "b".into()),
             Error::DuplicateAlias("a".into()),

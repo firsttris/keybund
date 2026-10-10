@@ -192,14 +192,64 @@ pub fn load(env: &Env) -> Result<Config> {
 /// Validates and atomically writes `profiles.toml`.
 pub fn save(env: &Env, config: &Config) -> Result<()> {
     validate(config)?;
+    // New or changed key paths must exist. A key file that disappeared later
+    // must not block every other change (the doctor reports it).
+    let previous = load(env).unwrap_or_default();
     for p in config.active_profiles() {
-        if !env.expand(&p.key.path).exists() {
+        let known = previous.active_profiles().any(|q| q.id == p.id && q.key.path == p.key.path);
+        if !known && !env.expand(&p.key.path).exists() {
             return Err(Error::KeyMissing(p.key.path.clone()));
         }
     }
     fsutil::ensure_dir(&env.config_dir, Some(0o700))?;
     let header = "# Keybund profiles – source of truth for all generated SSH and Git configs.\n\n";
     fsutil::atomic_write(&env.profiles_file(), &format!("{header}{}", to_toml(config)), Some(0o600))
+}
+
+/// Values end up verbatim in ssh and git configs: a line break would add
+/// directives, a wildcard or space in a Host pattern would match other hosts.
+fn check_values(p: &Profile) -> Result<()> {
+    let invalid = |field: &str, value: &str| Error::InvalidValue { field: field.into(), value: value.into() };
+    let printable = |field: &str, value: &str| {
+        if value.chars().any(char::is_control) {
+            Err(invalid(field, value))
+        } else {
+            Ok(())
+        }
+    };
+    // A token for `Host` / `HostName` / `User`: no spaces, wildcards, quotes or leading '-'.
+    let token = |field: &str, value: &str| {
+        let bad = value.is_empty()
+            || value.starts_with('-')
+            || value.chars().any(|c| c.is_whitespace() || c.is_control() || "*?!,\"'#".contains(c));
+        if bad {
+            Err(invalid(field, value))
+        } else {
+            Ok(())
+        }
+    };
+    printable("Name", &p.name)?;
+    printable("Key", &p.key.path)?;
+    if let Some(g) = &p.git {
+        printable("Git-Name", &g.name)?;
+        printable("Git-E-Mail", &g.email)?;
+    }
+    for f in &p.folders {
+        printable("Ordner", f)?;
+        if f.contains('"') || !(f.starts_with('/') || f.starts_with("~/")) {
+            return Err(Error::InvalidPath(f.clone()));
+        }
+    }
+    for h in &p.hosts {
+        token("Hostname", &h.hostname)?;
+        if let Some(a) = &h.alias {
+            token("Alias", a)?;
+        }
+        if let Some(u) = &h.user {
+            token("Benutzer", u)?;
+        }
+    }
+    Ok(())
 }
 
 /// Structural checks that do not touch the file system.
@@ -215,6 +265,11 @@ pub fn validate(config: &Config) -> Result<()> {
         }
         if p.name.trim().is_empty() {
             return Err(Error::MissingName(p.id.clone()));
+        }
+        check_values(p)?;
+        // allowed_signers needs the e-mail as principal; ~/.gitconfig's is not known there.
+        if p.git.as_ref().is_some_and(|g| g.sign && g.email.trim().is_empty()) {
+            return Err(Error::SignWithoutEmail(p.id.clone()));
         }
         if p.archived {
             continue;
@@ -294,7 +349,26 @@ pub fn normalize_dir(env: &Env, input: &str) -> Result<String> {
 pub fn normalize_folder(env: &Env, input: &str) -> String {
     let trimmed = input.trim();
     let expanded = env.expand(trimmed);
-    let resolved = std::fs::canonicalize(&expanded).unwrap_or(expanded);
+    // Resolve symlinks of the part that exists (e.g. ~/dev -> ~/data/dev),
+    // also for a folder that is only created later.
+    let mut existing = expanded.as_path();
+    let mut rest = Vec::new();
+    while !existing.exists() {
+        match (existing.parent(), existing.file_name()) {
+            (Some(parent), Some(name)) => {
+                rest.push(name.to_os_string());
+                existing = parent;
+            }
+            _ => break,
+        }
+    }
+    let resolved = match std::fs::canonicalize(existing) {
+        Ok(mut base) if expanded.is_absolute() => {
+            base.extend(rest.iter().rev());
+            base
+        }
+        _ => expanded.clone(),
+    };
     let mut s = env.contract(Path::new(&resolved));
     if !s.ends_with('/') {
         s.push('/');
@@ -404,6 +478,15 @@ provider = "gitlab"
         // meinserver is 1.2.3.4 in "privat"; the same IP in another profile is ambiguous.
         cfg.profiles[1].hosts.push(HostEntry { hostname: "1.2.3.4".into(), ..Default::default() });
         assert!(matches!(validate(&cfg), Err(Error::DuplicateAlias(h)) if h == "1.2.3.4"));
+
+        let mut cfg = Config::default();
+        cfg.profiles.push(Profile {
+            id: "s".into(),
+            name: "S".into(),
+            git: Some(GitIdentity { name: "T".into(), email: " ".into(), sign: true }),
+            ..Default::default()
+        });
+        assert!(matches!(validate(&cfg), Err(Error::SignWithoutEmail(id)) if id == "s"));
         // Two profiles on github.com are fine: no Host block for it.
         let mut cfg = parse(SAMPLE).unwrap();
         cfg.profiles[0].hosts.push(HostEntry {
@@ -454,5 +537,12 @@ provider = "gitlab"
         std::fs::write(env.home.join(".ssh/sparkasse_ed25519"), "x").unwrap();
         save(&env, &cfg).unwrap();
         assert_eq!(load(&env).unwrap(), cfg);
+        // A key file that vanished later does not block other changes.
+        std::fs::remove_file(env.home.join(".ssh/sparkasse_ed25519")).unwrap();
+        let mut changed = cfg.clone();
+        changed.profiles[0].name = "Privat neu".into();
+        save(&env, &changed).unwrap();
+        changed.profiles[0].key.path = "~/.ssh/gibtsnicht".into();
+        assert!(matches!(save(&env, &changed), Err(Error::KeyMissing(_))));
     }
 }

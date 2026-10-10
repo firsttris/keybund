@@ -5,12 +5,23 @@ use std::path::{Path, PathBuf};
 use crate::{Error, Result};
 
 /// Writes `content` to `path` atomically (temp file in the same directory,
-/// then rename) and applies `mode` on Unix.
+/// then rename). `mode` is applied on Unix; without one an existing file
+/// keeps its permissions (e.g. 0600 of `~/.ssh/config`, which ssh insists
+/// on). A symlink (dotfile managers) is written through, not replaced.
 pub fn atomic_write(path: &Path, content: &str, mode: Option<u32>) -> Result<()> {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let target = match fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_symlink() => fs::canonicalize(path).map_err(|e| Error::io(path, e))?,
+        _ => path.to_path_buf(),
+    };
+    let path = target.as_path();
+    let mode = mode.or_else(|| self::mode(path));
     let dir = path.parent().unwrap_or(Path::new("."));
     fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
     let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let tmp = dir.join(format!(".{file_name}.keybund-tmp-{}", std::process::id()));
+    // Unique per write, so two threads never share a temp file.
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = dir.join(format!(".{file_name}.keybund-tmp-{}-{n}", std::process::id()));
     let result = (|| {
         let mut f = fs::File::create(&tmp).map_err(|e| Error::io(&tmp, e))?;
         if let Some(mode) = mode {
@@ -86,4 +97,33 @@ pub fn mode(path: &Path) -> Option<u32> {
 #[cfg(not(unix))]
 pub fn mode(_path: &Path) -> Option<u32> {
     None
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keeps_permissions_and_symlinks() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config");
+        fs::write(&config, "Host a\n").unwrap();
+        set_mode(&config, 0o600).unwrap();
+        atomic_write(&config, "Include x\nHost a\n", None).unwrap();
+        assert_eq!(mode(&config), Some(0o600), "ssh refuses a group-writable config");
+        assert_eq!(fs::read_to_string(&config).unwrap(), "Include x\nHost a\n");
+
+        // ~/.ssh/config -> dotfiles/ssh_config stays a link.
+        let real = dir.path().join("ssh_config");
+        fs::write(&real, "old\n").unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        atomic_write(&link, "new\n", None).unwrap();
+        assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert_eq!(fs::read_to_string(&real).unwrap(), "new\n");
+
+        // An explicit mode still wins.
+        atomic_write(&config, "x\n", Some(0o644)).unwrap();
+        assert_eq!(mode(&config), Some(0o644));
+    }
 }

@@ -483,6 +483,10 @@ function normalizeFolder(f: string): string {
 }
 
 function validate(profiles: Profile[]) {
+  for (const p of profiles) {
+    if (p.git?.sign && !p.git.email.trim())
+      throw new MockError("sign_without_email", `Key „${p.id}“ soll Commits signieren, hat aber keine eigene E-Mail`);
+  }
   const folders = profiles.filter((p) => !p.archived).flatMap((p) => p.folders);
   for (let i = 0; i < folders.length; i++)
     for (let j = i + 1; j < folders.length; j++)

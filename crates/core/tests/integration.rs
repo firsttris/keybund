@@ -310,7 +310,7 @@ fn doctor_reports_missing_keys_bad_permissions_and_old_folders() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(env.ssh_dir(), fs::Permissions::from_mode(0o755)).unwrap();
+        fs::set_permissions(env.ssh_dir(), fs::Permissions::from_mode(0o775)).unwrap();
     }
     fs::write(
         env.ssh_config(),

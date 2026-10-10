@@ -62,6 +62,8 @@ pub fn ssh_args(host: &HostEntry) -> Vec<String> {
         Some(u) => format!("{u}@{}", host.hostname),
         None => host.hostname.clone(),
     };
+    // `--`: a host can never be read as an ssh option.
+    args.push("--".into());
     args.push(target);
     args.push(format!("sh -c '{REMOTE_SCRIPT}'"));
     args

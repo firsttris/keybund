@@ -189,11 +189,12 @@ fn tool_checks(env: &Env) -> Vec<Check> {
 fn permission_checks(env: &Env, config: &Config) -> Vec<Check> {
     let mut checks = Vec::new();
     if let Some(mode) = fsutil::mode(&env.ssh_dir()) {
-        checks.push(if mode & 0o077 == 0 {
-            Check::new("ssh-dir-perms", Status::Ok, "~/.ssh hat Rechte 700")
+        // sshd (StrictModes) only rejects ~/.ssh when others can write to it.
+        checks.push(if mode & 0o022 == 0 {
+            Check::new("ssh-dir-perms", Status::Ok, format!("~/.ssh hat Rechte {mode:o}"))
         } else {
             Check::new("ssh-dir-perms", Status::Error, format!("~/.ssh hat Rechte {mode:o} statt 700"))
-                .detail("ssh verweigert Keys in zu offenen Verzeichnissen.")
+                .detail("Andere dürfen in ~/.ssh schreiben – sshd verweigert dann die Anmeldung mit Keys.")
                 .fix(Fix::Permissions)
         });
     }

@@ -109,6 +109,16 @@ pub fn shell_vars(shell: &Path, home: &Path, timeout: Duration) -> Option<Vec<(S
         .stderr(Stdio::null())
         .spawn()
         .ok()?;
+    // Read stdout on a thread: a large environment would otherwise fill the
+    // pipe, and a background process started by the shell config keeps the
+    // pipe open after the shell exits – neither may block us past the timeout.
+    let mut stdout = child.stdout.take()?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = std::io::Read::read_to_end(&mut stdout, &mut buf);
+        let _ = tx.send(buf);
+    });
     let start = Instant::now();
     loop {
         match child.try_wait() {
@@ -122,9 +132,10 @@ pub fn shell_vars(shell: &Path, home: &Path, timeout: Duration) -> Option<Vec<(S
             Err(_) => return None,
         }
     }
-    let out = child.wait_with_output().ok()?;
+    // `env` is done when the shell exits; give lingering pipe holders only the rest of the timeout.
+    let out = rx.recv_timeout(timeout.saturating_sub(start.elapsed()).max(Duration::from_millis(200))).ok()?;
     Some(
-        String::from_utf8_lossy(&out.stdout)
+        String::from_utf8_lossy(&out)
             .lines()
             .filter_map(|l| l.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())))
             .collect(),
@@ -181,12 +192,21 @@ pub struct GlobalIdentity {
 /// Reads `user.name` and `user.email` with `git config --global`, which does
 /// not follow includes – so Keybund's own files never count.
 pub fn global_identity(env: &Env) -> GlobalIdentity {
-    let get = |key: &str| {
-        let mut cmd = env.command("git");
-        cmd.args(["config", "--global", "--get", key]);
-        crate::process::stdout(cmd).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
-    };
-    GlobalIdentity { name: get("user.name"), email: get("user.email") }
+    let mut cmd = env.command("git");
+    cmd.args(["config", "--global", "--get-regexp", r"^user\.(name|email)$"]);
+    // Exit code 1: neither is set.
+    let out = crate::process::stdout(cmd).unwrap_or_default();
+    let mut id = GlobalIdentity::default();
+    for line in out.lines() {
+        let (key, value) = line.split_once(' ').unwrap_or((line, ""));
+        let value = Some(value.trim().to_string()).filter(|v| !v.is_empty());
+        match key {
+            "user.name" => id.name = value.or(id.name),
+            "user.email" => id.email = value.or(id.email),
+            _ => {}
+        }
+    }
+    id
 }
 
 #[cfg(test)]
@@ -195,6 +215,10 @@ mod tests {
 
     #[test]
     fn reads_the_global_identity_without_includes() {
+        // These point git at another global config than the temporary HOME.
+        if ["GIT_CONFIG_GLOBAL", "XDG_CONFIG_HOME"].iter().any(|v| std::env::var_os(v).is_some()) {
+            return;
+        }
         if Command::new("git").arg("--version").output().is_err() {
             assert!(std::env::var_os("CI").is_none(), "git is required in CI");
             return;

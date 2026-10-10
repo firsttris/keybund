@@ -91,7 +91,7 @@ pub fn index_gitconfig(config: &Config, env: &Env) -> String {
     let mut out = format!("{MANAGED}\n# Included from ~/.gitconfig.\n");
     if let Some(def) = config.default_entry() {
         let _ = writeln!(out, "\n# Standard-Key: {}", def.name);
-        let _ = writeln!(out, "[core]\n\tsshCommand = {}", ssh_command(&def.key.path));
+        let _ = writeln!(out, "[core]\n\tsshCommand = {}", git_value(&ssh_command(&def.key.path)));
     }
     if config.active_profiles().any(signs) {
         let _ = writeln!(out, "\n[gpg \"ssh\"]\n\tallowedSignersFile = {}", env.contract(&env.allowed_signers()));
@@ -154,7 +154,7 @@ pub fn profile_gitconfig(profile: &Profile) -> String {
             let _ = writeln!(out, "\tsigningkey = {}", git_value(&profile.key.pub_path()));
         }
     }
-    let _ = writeln!(out, "[core]\n\tsshCommand = {}", ssh_command(&profile.key.path));
+    let _ = writeln!(out, "[core]\n\tsshCommand = {}", git_value(&ssh_command(&profile.key.path)));
     if signs(profile) {
         out.push_str("[gpg]\n\tformat = ssh\n[commit]\n\tgpgsign = true\n[tag]\n\tgpgsign = true\n");
     }

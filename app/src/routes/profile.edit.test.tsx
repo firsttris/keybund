@@ -80,7 +80,7 @@ describe("key page", () => {
 
   it("shows the global identity for a key without git folders", async () => {
     await renderApp("/profile/privat", (b) => {
-      b.state.profiles.find((p) => p.id === "privat")!.folders = [];
+      Object.assign(b.state.profiles.find((p) => p.id === "privat")!, { folders: [], git: null });
     });
     const card = await screen.findByRole("region", { name: "Git-Identität" });
     expect(card).toHaveTextContent("Dieser Key hat keinen Git-Ordner");
@@ -90,7 +90,7 @@ describe("key page", () => {
 
   it("says when ~/.gitconfig has no identity either", async () => {
     await renderApp("/profile/privat", (b) => {
-      b.state.profiles.find((p) => p.id === "privat")!.folders = [];
+      Object.assign(b.state.profiles.find((p) => p.id === "privat")!, { folders: [], git: null });
       b.state.globalIdentity = { name: null, email: null };
     });
     const card = await screen.findByRole("region", { name: "Git-Identität" });

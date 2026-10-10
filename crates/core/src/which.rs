@@ -125,10 +125,11 @@ fn which_folder(env: &Env, config: &Config, query: &str) -> Result<WhichResult> 
         result.identities_only = Some(true);
         result.source = Some(env.contract(&env.profile_gitconfig(&p.id)));
         result.via = Some(format!("includeIf \"gitdir:{folder}\""));
-        if let Some(g) = &p.git {
-            result.git_name = Some(g.name.clone());
-            result.git_email = Some(g.email.clone());
-        }
+        // Empty fields of the key fall back to ~/.gitconfig, like git does.
+        let global = gitenv::global_identity(env);
+        let own = |v: Option<&String>| v.filter(|v| !v.trim().is_empty()).cloned();
+        result.git_name = own(p.git.as_ref().map(|g| &g.name)).or(global.name);
+        result.git_email = own(p.git.as_ref().map(|g| &g.email)).or(global.email);
         result.notes.push("Kein Git-Repo: gilt für alle Repos in diesem Ordner.".into());
     } else if let Some(def) = config.default_entry() {
         result.key_path = Some(def.key.path.clone());

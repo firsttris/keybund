@@ -22,6 +22,8 @@ pub struct HostBlock {
     pub user: Option<String>,
     pub port: Option<u16>,
     pub identity_files: Vec<String>,
+    /// Directives Keybund does not carry over, e.g. `proxyjump`, `localforward`.
+    pub other: Vec<String>,
     /// Comment line directly above the block, e.g. `Privater Account`.
     pub comment: Option<String>,
     /// Lines `[start, end)` of the block including its comment.
@@ -78,6 +80,7 @@ pub fn parse_ssh_config(text: &str) -> Vec<HostBlock> {
             user: None,
             port: None,
             identity_files: Vec::new(),
+            other: Vec::new(),
             comment,
             start,
             end,
@@ -88,7 +91,10 @@ pub fn parse_ssh_config(text: &str) -> Vec<HostBlock> {
                 Some((k, v)) if k == "user" => block.user = Some(v),
                 Some((k, v)) if k == "port" => block.port = v.parse().ok(),
                 Some((k, v)) if k == "identityfile" => block.identity_files.push(v),
-                _ => {}
+                // Implied by Keybund's own Host block.
+                Some((k, _)) if k == "identitiesonly" || k == "addkeystoagent" => {}
+                Some((k, _)) => block.other.push(k),
+                None => {}
             }
         }
         blocks.push(block);
@@ -250,9 +256,13 @@ pub fn import(env: &Env, chosen: &[ImportProposal]) -> Result<Vec<String>> {
 }
 
 /// Blocks of `ssh_config` that a profile now covers with the same key.
+/// Blocks with more than Keybund writes (ProxyJump, forwards, a second
+/// IdentityFile …) stay: removing them would lose those settings, and their
+/// key is the profile's own anyway.
 pub fn migrated_blocks<'a>(env: &Env, config: &Config, blocks: &'a [HostBlock]) -> Vec<&'a HostBlock> {
     blocks
         .iter()
+        .filter(|b| b.other.is_empty() && b.identity_files.len() == 1)
         .filter(|b| {
             let Some(identity) = b.identity_files.first() else { return false };
             config.active_profiles().any(|p| {
@@ -305,6 +315,29 @@ pub fn plan_cleanup(env: &Env) -> Result<Plan> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keeps_blocks_with_settings_keybund_does_not_write() {
+        let env = Env::with_home("/home/t");
+        let text = "Host srv\n  HostName 1.2.3.4\n  IdentityFile ~/.ssh/k\n  ProxyJump bastion\n\nHost plain\n  HostName 5.6.7.8\n  IdentityFile ~/.ssh/k\n  IdentitiesOnly yes\n";
+        let blocks = parse_ssh_config(text);
+        assert_eq!(blocks[0].other, ["proxyjump"]);
+        assert!(blocks[1].other.is_empty());
+        let mut config = Config::default();
+        config.profiles.push(Profile {
+            id: "k".into(),
+            name: "K".into(),
+            key: KeyRef { path: "~/.ssh/k".into(), comment: None },
+            hosts: vec![
+                HostEntry { alias: Some("srv".into()), hostname: "1.2.3.4".into(), ..Default::default() },
+                HostEntry { alias: Some("plain".into()), hostname: "5.6.7.8".into(), ..Default::default() },
+            ],
+            ..Default::default()
+        });
+        let migrated = migrated_blocks(&env, &config, &blocks);
+        assert_eq!(migrated.iter().map(|b| b.pattern.as_str()).collect::<Vec<_>>(), ["plain"]);
+        assert!(without_blocks(text, &migrated).contains("ProxyJump bastion"));
+    }
 
     /// The ssh config of the issue report.
     const USER_CONFIG: &str = "Include ~/.ssh/config.d/keybund.conf

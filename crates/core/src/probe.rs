@@ -136,6 +136,14 @@ pub fn ssh_args(profile: &Profile, host: &HostEntry) -> Vec<String> {
         "IdentitiesOnly=yes",
         "-o",
         "AddKeysToAgent=yes",
+        // Only this key may log in: no shared master connection, no Kerberos
+        // or host-based login that would make any key look accepted.
+        "-o",
+        "ControlPath=none",
+        "-o",
+        "GSSAPIAuthentication=no",
+        "-o",
+        "HostbasedAuthentication=no",
         "-i",
     ]
     .iter()
@@ -156,6 +164,8 @@ pub fn ssh_args(profile: &Profile, host: &HostEntry) -> Vec<String> {
         Some(u) => format!("{u}@{name}"),
         None => name.to_string(),
     };
+    // `--`: an alias or hostname can never be read as an ssh option.
+    args.push("--".into());
     args.push(target);
     if host.provider == Provider::Generic {
         args.push("true".into());

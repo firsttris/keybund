@@ -114,7 +114,8 @@ function KeyDetail({ view }: { view: ProfileView }) {
           <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4 max-[640px]:grid-cols-1">
             <UsageCard view={view} />
             <KeyCard view={view} onCopy={onCopy} />
-            {profile.folders.length > 0 ? <GitCard profile={profile} /> : usesGit && <GlobalIdentityCard />}
+            {/* A stored identity stays visible (and clearable) even without folders. */}
+            {profile.folders.length > 0 || profile.git ? <GitCard profile={profile} /> : usesGit && <GlobalIdentityCard />}
             {!profile.archived && <DangerCard view={view} />}
           </div>
         </TabsContent>
@@ -580,7 +581,8 @@ function FolderForm({ profile, onDone }: { profile: Profile; onDone: () => void 
           </div>
           {global?.email && (
             <FieldHint className="col-span-full">
-              Vorgeschlagen aus ~/.gitconfig. Für einen Kunden einfach die E-Mail ändern – sie gilt dann nur in diesem Ordner.
+              Vorgeschlagen aus ~/.gitconfig. Für einen Kunden einfach die E-Mail ändern – sie gilt dann nur in den Git-Ordnern
+              dieses Keys.
             </FieldHint>
           )}
         </div>
