@@ -11,7 +11,8 @@ use keybund_core::doctor::{self, Status};
 use keybund_core::keygen::{self, GenerateOptions};
 use keybund_core::model::{Config, GitIdentity, HostEntry, KeyRef, Profile, Provider};
 use keybund_core::{
-    archive as archive_mod, clone as clone_mod, import as import_mod, probe, provider, store, which as which_mod, Env,
+    archive as archive_mod, clone as clone_mod, import as import_mod, probe, provider, store,
+    uninstall as uninstall_mod, which as which_mod, Env,
 };
 
 use crate::{system, ui};
@@ -676,6 +677,40 @@ pub fn import(env: &Env, all: bool, yes: bool, keep_old: bool) -> Result<ExitCod
     println!();
     if !confirm_and_apply(env, &cleanup, !tty)? {
         ui::warn("Alte Einträge bleiben – `keybund doctor --fix` entfernt sie später.");
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+pub fn uninstall(env: &Env, restore_backups: bool, purge: bool, yes: bool) -> Result<ExitCode> {
+    let opts = uninstall_mod::UninstallOptions { restore_backups, purge };
+    let preview = uninstall_mod::preview(env, opts)?;
+    if preview.plan.is_empty() {
+        ui::success("Nichts zu entfernen – Keybund hat keine Spuren hinterlassen.");
+        return Ok(ExitCode::SUCCESS);
+    }
+    print_plan(&preview.plan);
+    if preview.backups_available && !restore_backups {
+        ui::hint("Mit --restore-backups kommen ~/.ssh/config und ~/.gitconfig wieder so, wie sie vor Keybund waren.");
+    }
+    if !(yes || !interactive())
+        && !Confirm::with_theme(&theme()).with_prompt("Keybund entfernen?").default(false).interact()?
+    {
+        return Ok(ExitCode::SUCCESS);
+    }
+    if !yes && !interactive() {
+        bail!("Ohne Terminal nur mit --yes");
+    }
+    let report = uninstall_mod::uninstall(env, &preview.plan)?;
+    ui::success(&format!(
+        "Keybund entfernt: {} Datei(en) geändert, {} gelöscht",
+        report.written.len(),
+        report.deleted.len()
+    ));
+    ui::hint("Deine Keys in ~/.ssh sind unverändert.");
+    if !purge {
+        ui::hint(
+            "Die Profile liegen weiter in ~/.config/keybund/profiles.toml – `keybund apply` richtet alles wieder ein.",
+        );
     }
     Ok(ExitCode::SUCCESS)
 }

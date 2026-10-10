@@ -28,6 +28,8 @@ import type {
   ProfilesView,
   Provider,
   Report,
+  UninstallOptions,
+  UninstallPreview,
   WhichResult,
 } from "../bindings";
 import { slugify } from "../utils";
@@ -106,6 +108,8 @@ export interface MockState {
   sshBlocks: SshBlock[];
   /** Profile whose connection test logs in with another key from ~/.ssh/config. */
   otherKeyFor: string | null;
+  /** Keybund's include lines are in the user's files. */
+  installed: boolean;
 }
 
 export interface SshBlock {
@@ -187,6 +191,7 @@ export function seedState(): MockState {
       },
     ],
     otherKeyFor: null,
+    installed: true,
   };
   state.applied = renderAll(state);
   return state;
@@ -788,6 +793,28 @@ export function createMockBackend(state: MockState = seedState()) {
           throw new MockError("stale_plan", "Die Konfiguration hat sich seit der Vorschau geändert: Bitte Vorschau neu laden");
         state.sshBlocks = state.sshBlocks.filter((b) => !covered(state, b));
         const report: ApplyReport = { written: ["~/.ssh/config"], deleted: [], backups: ["~/.ssh/config.keybund-backup"] };
+        return report;
+      }
+      case "uninstall_preview":
+      case "uninstall_apply": {
+        const opts = args.opts as UninstallOptions;
+        const files: FileChange[] = [];
+        if (state.installed) {
+          files.push({ ...lineDiff("~/.ssh/config", renderSshConfig(state.sshBlocks), renderSshConfig(state.sshBlocks).replace("Include ~/.ssh/config.d/keybund.conf\n\n", "")), user_file: true });
+          for (const [path, content] of state.applied) files.push(lineDiff(path, content, undefined));
+        }
+        if (opts.purge) files.push(lineDiff("~/.config/keybund/profiles.toml", "default_profile = …\n", undefined));
+        const plan: Plan = { changes: files };
+        if (cmd === "uninstall_preview") return { plan, backups_available: true } satisfies UninstallPreview;
+        if (JSON.stringify(plan.changes.map((c) => c.diff)) !== JSON.stringify(args.expectedDiffs))
+          throw new MockError("stale_plan", "Die Konfiguration hat sich seit der Vorschau geändert: Bitte Vorschau neu laden");
+        state.installed = false;
+        state.applied = new Map();
+        if (opts.purge) {
+          state.profiles = [];
+          state.defaultProfile = null;
+        }
+        const report: ApplyReport = { written: ["~/.ssh/config"], deleted: files.slice(1).map((f) => f.path), backups: [] };
         return report;
       }
       case "plugin:app|version":

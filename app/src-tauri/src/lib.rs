@@ -35,6 +35,8 @@ macro_rules! keybund_commands {
             import_profiles,
             cleanup_preview,
             cleanup_apply,
+            uninstall_preview,
+            uninstall_apply,
             paths,
         ]
     };

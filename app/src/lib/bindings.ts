@@ -42,6 +42,8 @@ export const commands = {
 	importProfiles: (chosen: ImportProposal[]) => typedError<string[], CmdError>(__TAURI_INVOKE("import_profiles", { chosen })),
 	cleanupPreview: () => typedError<Plan, CmdError>(__TAURI_INVOKE("cleanup_preview")),
 	cleanupApply: (expectedDiffs: string[]) => typedError<ApplyReport, CmdError>(__TAURI_INVOKE("cleanup_apply", { expectedDiffs })),
+	uninstallPreview: (opts: UninstallOptions) => typedError<UninstallPreview, CmdError>(__TAURI_INVOKE("uninstall_preview", { opts })),
+	uninstallApply: (opts: UninstallOptions, expectedDiffs: string[]) => typedError<ApplyReport, CmdError>(__TAURI_INVOKE("uninstall_apply", { opts, expectedDiffs })),
 	paths: () => __TAURI_INVOKE<Paths>("paths"),
 };
 
@@ -309,6 +311,23 @@ export type Report = {
 };
 
 export type Status = "ok" | "warn" | "error";
+
+export type UninstallOptions = {
+	/**
+	 *  Put back `~/.ssh/config` and `~/.gitconfig` as they were before
+	 *  Keybund's first write (from `*.keybund-backup`), instead of only
+	 *  removing Keybund's lines. Brings back entries removed by the import.
+	 */
+	restore_backups: boolean,
+	/**  Also delete `profiles.toml`. */
+	purge: boolean,
+};
+
+export type UninstallPreview = {
+	plan: Plan,
+	/**  Backups from before Keybund exist and could be restored. */
+	backups_available: boolean,
+};
 
 export type WhichMode = "folder" | "host";
 

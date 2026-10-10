@@ -77,6 +77,17 @@ enum Command {
         #[arg(long)]
         keep_old: bool,
     },
+    /// Alles entfernen, was Keybund geschrieben hat (Keys bleiben)
+    Uninstall {
+        /// ~/.ssh/config und ~/.gitconfig aus den Backups von vor Keybund wiederherstellen
+        #[arg(long)]
+        restore_backups: bool,
+        /// Auch profiles.toml löschen
+        #[arg(long)]
+        purge: bool,
+        #[arg(long, short)]
+        yes: bool,
+    },
     /// Default-Profil setzen (Key außerhalb aller Projektordner)
     Default { profile: String },
     /// Profil archivieren: Key nach ~/.ssh/archive, Configs entfernen
@@ -113,6 +124,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Keys => commands::keys(&env),
         Command::Import { all, yes, keep_old } => commands::import(&env, all, yes, keep_old),
         Command::Default { profile } => commands::set_default(&env, &profile),
+        Command::Uninstall { restore_backups, purge, yes } => commands::uninstall(&env, restore_backups, purge, yes),
         Command::Archive { profile, yes } => commands::archive(&env, &profile, yes),
     }
 }

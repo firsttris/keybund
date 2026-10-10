@@ -403,3 +403,29 @@ fn import_takes_over_an_existing_ssh_config() {
     sb.cmd().arg("list").assert().success().stdout(predicate::str::contains("Privater Account (privat) default"));
     sb.cmd().arg("import").assert().success().stdout(predicate::str::contains("Nichts zu übernehmen"));
 }
+
+#[test]
+fn uninstall_and_reinstall() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    std::fs::create_dir_all(sb.path(".ssh")).unwrap();
+    std::fs::write(sb.path(".ssh/config"), "Host nas\n    User admin\n").unwrap();
+    sb.new_profile("P", &["--provider", "github", "--folder", "~/dev/p", "--git-name", "T", "--git-email", "t@p.de"]);
+    assert!(sb.read(".ssh/config").starts_with("Include"));
+
+    sb.cmd().arg("uninstall").assert().code(2).stderr(predicate::str::contains("--yes"));
+    sb.cmd().args(["uninstall", "--yes"]).assert().success().stdout(
+        predicate::str::contains("-Include ~/.ssh/config.d/keybund.conf")
+            .and(predicate::str::contains("Keybund entfernt")),
+    );
+    assert_eq!(sb.read(".ssh/config"), "Host nas\n    User admin\n");
+    assert!(!sb.path(".ssh/config.d/keybund.conf").exists());
+    assert!(sb.path(".ssh/p_ed25519").exists());
+    sb.cmd().args(["uninstall", "--yes"]).assert().success().stdout(predicate::str::contains("Nichts zu entfernen"));
+
+    // The profiles survived: apply sets everything up again.
+    sb.cmd().args(["apply", "--yes"]).assert().success();
+    assert!(sb.read(".ssh/config").starts_with("Include"));
+}

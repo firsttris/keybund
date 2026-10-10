@@ -254,6 +254,27 @@ pub async fn cleanup_apply(state: State<'_, AppState>, expected_diffs: Vec<Strin
 
 #[tauri::command]
 #[specta::specta]
+pub async fn uninstall_preview(
+    state: State<'_, AppState>,
+    opts: keybund_core::uninstall::UninstallOptions,
+) -> CmdResult<keybund_core::uninstall::UninstallPreview> {
+    let env = state.env.clone();
+    blocking(move || api::uninstall_preview(&env, opts)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn uninstall_apply(
+    state: State<'_, AppState>,
+    opts: keybund_core::uninstall::UninstallOptions,
+    expected_diffs: Vec<String>,
+) -> CmdResult<ApplyReport> {
+    let env = state.env.clone();
+    blocking(move || api::uninstall_apply(&env, opts, &expected_diffs)).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn generated_config(state: State<'_, AppState>, id: String) -> CmdResult<Vec<GeneratedFile>> {
     let env = state.env.clone();
     blocking(move || api::generated_config(&env, &id)).await

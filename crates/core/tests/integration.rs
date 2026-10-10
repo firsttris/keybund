@@ -486,3 +486,42 @@ fn git_ssh_command_in_the_shell_config_is_reported() {
     assert_eq!(r.source.as_deref(), Some("~/.config/fish/config.fish:2"));
     assert!(r.notes[0].starts_with("GIT_SSH_COMMAND ist gesetzt"));
 }
+
+#[test]
+fn uninstall_removes_only_keybund_and_can_restore_the_originals() {
+    use keybund_core::uninstall::{self, UninstallOptions};
+    if !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    let ssh_before = fs::read_to_string(env.ssh_config()).unwrap();
+    let git_before = fs::read_to_string(env.gitconfig()).unwrap();
+    apply::apply_config(&env, &config).unwrap();
+    // The user keeps editing their own config after installing Keybund.
+    let edited = fs::read_to_string(env.ssh_config()).unwrap() + "\nHost nas\n    User admin\n";
+    fs::write(env.ssh_config(), &edited).unwrap();
+
+    // Default: only Keybund's lines and files go, later edits stay.
+    let preview = uninstall::preview(&env, UninstallOptions::default()).unwrap();
+    assert!(preview.backups_available);
+    let paths: Vec<&str> = preview.plan.changes.iter().map(|c| c.path.as_str()).collect();
+    assert!(paths.contains(&"~/.ssh/config.d/keybund.conf"));
+    assert!(paths.contains(&"~/.config/keybund/git/privat.gitconfig"));
+    assert!(!paths.contains(&"~/.config/keybund/profiles.toml"));
+    uninstall::uninstall(&env, &preview.plan).unwrap();
+    assert_eq!(fs::read_to_string(env.ssh_config()).unwrap(), format!("{ssh_before}\nHost nas\n    User admin\n"));
+    assert_eq!(fs::read_to_string(env.gitconfig()).unwrap(), git_before);
+    assert!(!env.ssh_keybund_conf().exists());
+    assert!(!env.git_dir().exists());
+    assert!(env.profiles_file().exists(), "profiles stay for a later reinstall");
+    assert!(env.expand("~/.ssh/privat_ed25519").exists(), "keys are never touched");
+    assert!(uninstall::preview(&env, UninstallOptions::default()).unwrap().plan.is_empty());
+
+    // Reinstall, then restore the originals and purge everything.
+    apply::apply_config(&env, &config).unwrap();
+    let opts = UninstallOptions { restore_backups: true, purge: true };
+    let preview = uninstall::preview(&env, opts).unwrap();
+    uninstall::uninstall(&env, &preview.plan).unwrap();
+    assert_eq!(fs::read_to_string(env.ssh_config()).unwrap(), ssh_before);
+    assert!(!env.config_dir.exists());
+}

@@ -10,6 +10,7 @@ use keybund_core::clone::{self, RepoUrl};
 use keybund_core::import::{self, ImportProposal};
 use keybund_core::keygen::{self, GenerateOptions, ImportCandidate, KeyInfo};
 use keybund_core::model::{Config, KeyRef, Profile, Provider};
+use keybund_core::uninstall::{self, UninstallOptions, UninstallPreview};
 use keybund_core::{archive, provider, store, Env, Error};
 
 /// Error as the frontend sees it: a stable kind plus a readable message.
@@ -321,6 +322,20 @@ pub fn cleanup_apply(env: &Env, expected_diffs: &[String]) -> CmdResult<ApplyRep
     Ok(apply::apply(env, &plan)?)
 }
 
+pub fn uninstall_preview(env: &Env, opts: UninstallOptions) -> CmdResult<UninstallPreview> {
+    Ok(uninstall::preview(env, opts)?)
+}
+
+/// Uninstalls, but only if the plan still matches the previewed diffs.
+pub fn uninstall_apply(env: &Env, opts: UninstallOptions, expected_diffs: &[String]) -> CmdResult<ApplyReport> {
+    let plan = uninstall::preview(env, opts)?.plan;
+    let current: Vec<&str> = plan.changes.iter().map(|c| c.diff.as_str()).collect();
+    if current != expected_diffs.iter().map(String::as_str).collect::<Vec<_>>() {
+        return Err(Error::StalePlan("Bitte Vorschau neu laden".into()).into());
+    }
+    Ok(uninstall::uninstall(env, &plan)?)
+}
+
 /// A file (or the part of a file) Keybund generates for a profile.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct GeneratedFile {
@@ -519,6 +534,20 @@ mod tests {
         cleanup_apply(&env, &diffs).unwrap();
         assert_eq!(std::fs::read_to_string(env.ssh_config()).unwrap(), "Include ~/.ssh/config.d/keybund.conf\n");
         assert!(cleanup_preview(&env).unwrap().is_empty());
+    }
+
+    #[test]
+    fn uninstall_with_preview() {
+        let (_d, env) = env();
+        create_project(&env, &project("a")).unwrap();
+        let opts = UninstallOptions::default();
+        let preview = uninstall_preview(&env, opts).unwrap();
+        assert!(preview.plan.changes.iter().any(|c| c.path == "~/.ssh/config.d/keybund.conf"));
+        assert_eq!(uninstall_apply(&env, opts, &[]).unwrap_err().kind, "stale_plan");
+        let diffs: Vec<String> = preview.plan.changes.iter().map(|c| c.diff.clone()).collect();
+        uninstall_apply(&env, opts, &diffs).unwrap();
+        assert!(!env.ssh_keybund_conf().exists());
+        assert_eq!(load_profiles(&env, |_| None).unwrap().profiles.len(), 1);
     }
 
     #[test]

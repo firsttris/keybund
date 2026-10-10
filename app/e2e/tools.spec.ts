@@ -123,3 +123,15 @@ test("doctor removes an old entry after the import", async ({ app }) => {
   await app.getByRole("button", { name: "Doppelter Eintrag für pflegeabc in ~/.ssh/config beheben" }).click();
   await expect(app.getByText(/Doppelter Eintrag/)).toHaveCount(0);
 });
+
+test("removes Keybund after a preview", async ({ app }) => {
+  await app.goto("/#/settings");
+  await app.getByRole("link", { name: "Entfernen …" }).click();
+  await expect(app.getByText("-Include ~/.ssh/config.d/keybund.conf")).toBeVisible();
+  await app.getByRole("button", { name: "Keybund entfernen" }).click();
+  await app.getByRole("alertdialog").getByRole("button", { name: "Entfernen" }).click();
+  await expect(app.getByRole("status")).toContainText("Keybund ist entfernt");
+  // Configs are now missing, the profiles are still there to set it up again.
+  await app.goto("/#/");
+  await expect(app.getByText(/Dateien sind nicht aktuell/)).toBeVisible();
+});

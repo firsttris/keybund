@@ -172,8 +172,19 @@ fn diff(name: &str, old: &str, new: &str) -> (String, u32, u32) {
 /// A plan that replaces the content of one of the user's own files (with a
 /// one-time backup), e.g. to remove migrated blocks from `~/.ssh/config`.
 pub fn plan_user_file(env: &Env, path: &Path, new_content: String) -> Result<Plan> {
+    plan_files(env, vec![(path.to_path_buf(), Some(new_content), true)])
+}
+
+/// A plan for arbitrary files: `(path, new content or None to delete,
+/// user_file)`. Unchanged files are left out.
+pub fn plan_files(env: &Env, files: Vec<(PathBuf, Option<String>, bool)>) -> Result<Plan> {
     let mut changes = Vec::new();
-    push_change(env, &mut changes, path, Some(new_content), None, true)?;
+    for (path, content, user_file) in files {
+        if content.is_none() && !path.exists() {
+            continue;
+        }
+        push_change(env, &mut changes, &path, content, None, user_file)?;
+    }
     Ok(Plan { changes })
 }
 

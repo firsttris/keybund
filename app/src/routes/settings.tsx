@@ -79,6 +79,14 @@ export function SettingsPage() {
           </p>
         </Card>
 
+        <Card aria-labelledby="remove-title">
+          <CardTitle id="remove-title">Keybund entfernen</CardTitle>
+          <FieldHint>Nimmt alle Änderungen von Keybund zurück, mit Vorschau. Deine Keys bleiben.</FieldHint>
+          <Link to="/uninstall" className="self-start text-[13px] font-medium text-foreground">
+            Entfernen …
+          </Link>
+        </Card>
+
         <Card className="col-span-full" aria-labelledby="import-title">
           <CardTitle id="import-title">Vorhandene Keys</CardTitle>
           <FieldHint>
