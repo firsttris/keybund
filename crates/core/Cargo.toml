@@ -21,9 +21,7 @@ similar = "3"
 sha2 = "0.11"
 base64 = "0.23"
 serde_json.workspace = true
-ureq = { version = "3", features = ["json", "platform-verifier"] }
 
 [dev-dependencies]
 insta = "1"
 tempfile = "3"
-mockito = "1"

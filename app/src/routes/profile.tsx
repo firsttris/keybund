@@ -1,9 +1,8 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Archive, Check, Copy, Folder, FolderOpen, GitBranch, KeyRound, Server, Star, Trash2, X, Zap } from "lucide-react";
+import { Archive, Check, Copy, ExternalLink, Folder, FolderOpen, GitBranch, KeyRound, Server, Star, Trash2, X, Zap } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ColorDot } from "@/components/color-dot";
-import { KeyUpload } from "@/components/key-upload";
 import { ConfigStatus } from "@/components/pending-banner";
 import { ProbeDetails } from "@/components/probe-details";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +39,7 @@ import {
   useTestConnection,
   useUpdateProfile,
 } from "@/lib/queries";
+import { openExternal } from "@/lib/open";
 import { pickFolder } from "@/lib/tauri";
 import { defaultHostname, formatAge, formatDate, GIT_PROVIDERS, isValidEmail, providerLabel } from "@/lib/utils";
 
@@ -190,7 +190,13 @@ function UsageCard({ view }: { view: ProfileView }) {
             />
           ))}
           {accounts.map((h) => (
-            <AccountRow key={`a-${h.alias ?? h.hostname}`} profile={profile} host={h} onRemove={() => removeHost(h)} />
+            <AccountRow
+              key={`a-${h.alias ?? h.hostname}`}
+              profile={profile}
+              host={h}
+              addKeyUrl={view.add_key_urls.find((l) => l.host === h.hostname)?.url ?? null}
+              onRemove={() => removeHost(h)}
+            />
           ))}
           {serverList.map((h) => (
             <ServerRow key={`s-${h.alias ?? h.hostname}`} profile={profile} host={h} onRemove={() => removeHost(h)} />
@@ -351,11 +357,30 @@ function TestResult({ test, fix }: { test: ReturnType<typeof useTestConnection>;
   );
 }
 
-function AccountRow({ profile, host, onRemove }: { profile: Profile; host: HostEntry; onRemove: () => void }) {
+function AccountRow({
+  profile,
+  host,
+  addKeyUrl,
+  onRemove,
+}: {
+  profile: Profile;
+  host: HostEntry;
+  addKeyUrl: string | null;
+  onRemove: () => void;
+}) {
   const test = useTestConnection();
-  const [uploading, setUploading] = useState(false);
+  const copy = useCopyPublicKey();
+  // The pubkey was copied and the page opened: now it is the user's turn.
+  const [pasting, setPasting] = useState(false);
   const name = host.alias ?? host.hostname;
   const provider = providerLabel(host.provider);
+  const signs = host.provider === "github" && !!profile.git?.sign;
+  const addKey = async () => {
+    await copy.mutateAsync(profile.id).catch(() => undefined);
+    if (addKeyUrl) await openExternal(addKeyUrl);
+    setPasting(true);
+  };
+  const testNow = () => test.mutate({ id: profile.id, host: name }, { onSuccess: (r) => r.success && setPasting(false) });
   return (
     <UsageRow
       icon={<GitBranch aria-hidden className="size-4 text-muted-foreground" />}
@@ -372,10 +397,10 @@ function AccountRow({ profile, host, onRemove }: { profile: Profile; host: HostE
       actions={
         !profile.archived && (
           <>
-            <Button variant="ghost" size="sm" aria-expanded={uploading} onClick={() => setUploading(!uploading)}>
-              {uploading ? "Schließen" : "Key eintragen"}
+            <Button variant="ghost" size="sm" onClick={addKey} title={`Pubkey kopieren und die ${provider}-Seite zum Einfügen öffnen`}>
+              Key eintragen
             </Button>
-            <Button variant="ghost" size="sm" disabled={test.isPending} onClick={() => test.mutate({ id: profile.id, host: name })}>
+            <Button variant="ghost" size="sm" disabled={test.isPending} onClick={testNow}>
               <Zap aria-hidden />
               Testen
             </Button>
@@ -386,16 +411,41 @@ function AccountRow({ profile, host, onRemove }: { profile: Profile; host: HostE
         )
       }
     >
-      {uploading && <KeyUpload profile={profile} host={name} onUploaded={() => test.mutate({ id: profile.id, host: name })} />}
+      {pasting && (
+        <div role="status" className="flex flex-col gap-2 rounded-[10px] border border-border bg-background p-3.5 text-[13px]">
+          <span>
+            <span className="font-medium">Pubkey ist kopiert.</span>{" "}
+            <span className="text-muted-foreground">
+              Auf der {provider}-Seite „New SSH key“ wählen, einfügen und speichern – angemeldet mit dem Konto für „{profile.name}“.
+            </span>
+          </span>
+          {signs && (
+            <span className="text-muted-foreground">
+              Für signierte Commits denselben Key dort noch einmal mit „Key type: Signing Key“ eintragen.
+            </span>
+          )}
+          <span className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={testNow} disabled={test.isPending}>
+              Erledigt – jetzt testen
+            </Button>
+            {addKeyUrl && (
+              <Button variant="ghost" size="sm" onClick={() => openExternal(addKeyUrl)}>
+                <ExternalLink aria-hidden />
+                Seite nochmal öffnen
+              </Button>
+            )}
+          </span>
+        </div>
+      )}
       <TestResult
         test={test}
         fix={
-          uploading
+          pasting
             ? null
             : {
-                text: `Der Key steht noch nicht in deinem ${provider}-Konto. Keybund kann ihn eintragen – danach klappt die Anmeldung.`,
-                label: `Jetzt bei ${provider} eintragen`,
-                onClick: () => setUploading(true),
+                text: `Der Key steht noch nicht in deinem ${provider}-Konto. Kopiere den Pubkey und füge ihn dort bei den SSH-Keys ein – Keybund öffnet die Seite.`,
+                label: `Pubkey kopieren & ${provider}-Seite öffnen`,
+                onClick: addKey,
               }
         }
       />

@@ -14,7 +14,6 @@ export const keys = {
   paths: ["paths"] as const,
   importProposals: ["import-proposals"] as const,
   cleanup: ["cleanup"] as const,
-  uploadTarget: (id: string, host: string) => ["upload-target", id, host] as const,
   settings: ["settings"] as const,
 };
 
@@ -173,27 +172,6 @@ export function useUpdateSettings() {
     mutationFn: (settings: Settings) => api.updateSettings(settings),
     // Paths change the defaults of new profiles, the switches the generated configs.
     onSuccess: () => client.invalidateQueries(),
-  });
-}
-
-export function useUploadTarget(id: string, host: string) {
-  return useQuery({ queryKey: keys.uploadTarget(id, host), queryFn: () => api.uploadTarget(id, host) });
-}
-
-export function useUploadKey() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, host, token, remember }: { id: string; host: string; token: string | null; remember: boolean }) =>
-      api.uploadKey(id, host, token, remember),
-    onSettled: (_r, _e, { id, host }) => client.invalidateQueries({ queryKey: keys.uploadTarget(id, host) }),
-  });
-}
-
-export function useForgetToken() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, host }: { id: string; host: string }) => api.forgetToken(id, host),
-    onSuccess: (_r, { id, host }) => client.invalidateQueries({ queryKey: keys.uploadTarget(id, host) }),
   });
 }
 

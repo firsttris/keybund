@@ -12,7 +12,7 @@ use keybund_core::keygen::{self, GenerateOptions};
 use keybund_core::model::{Config, GitIdentity, HostEntry, KeyRef, Profile, Provider, Settings};
 use keybund_core::{
     archive as archive_mod, clone as clone_mod, history, import as import_mod, keyinstall, probe, provider, store,
-    tokens, uninstall as uninstall_mod, upload, which as which_mod, Env,
+    uninstall as uninstall_mod, which as which_mod, Env,
 };
 
 use crate::{system, ui};
@@ -1025,15 +1025,10 @@ pub fn trust(env: &Env, id: &str, host: Option<&str>, yes: bool) -> Result<ExitC
     Ok(ExitCode::SUCCESS)
 }
 
-/// How `install-key` gets a token for git hosts.
-pub struct TokenOptions {
-    /// Read a personal access token from stdin.
-    pub stdin: bool,
-    /// Keep the token in the keyring for next time.
-    pub remember: bool,
-}
-
-pub fn install_key(env: &Env, id: &str, host: Option<&str>, tokens: &TokenOptions) -> Result<ExitCode> {
+/// `keybund install-key`: puts the key on servers (like `ssh-copy-id`);
+/// for GitHub, GitLab and Bitbucket it copies the pubkey and opens the page
+/// where it is pasted.
+pub fn install_key(env: &Env, id: &str, host: Option<&str>) -> Result<ExitCode> {
     let config = store::load(env)?;
     let p = config.profile(id)?;
     let targets: Vec<&HostEntry> = p
@@ -1051,20 +1046,10 @@ pub fn install_key(env: &Env, id: &str, host: Option<&str>, tokens: &TokenOption
             None => bail!("Key „{id}“ hat keinen Host"),
         }
     }
-    let mut token_from_stdin = None;
-    if tokens.stdin {
-        let mut t = String::new();
-        std::io::stdin().read_line(&mut t).context("Token von stdin lesen")?;
-        let t = t.trim().to_string();
-        if t.is_empty() {
-            bail!("Kein Token auf stdin");
-        }
-        token_from_stdin = Some(t);
-    }
     let mut ok = true;
     for target in targets {
         let success = if target.provider.is_git_host() {
-            upload_to_account(env, p, target, token_from_stdin.as_deref(), tokens.remember)?
+            add_to_account(env, p, target)?
         } else {
             ui::hint(&format!(
                 "Melde mich an {} an (Passwort oder ein bereits eingetragener Key) …",
@@ -1086,91 +1071,23 @@ pub fn install_key(env: &Env, id: &str, host: Option<&str>, tokens: &TokenOption
     Ok(if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE })
 }
 
-/// Uploads the key to a GitHub/GitLab account: with the given token, a
-/// stored one, or after a login in the browser (device flow).
-fn upload_to_account(env: &Env, p: &Profile, host: &HostEntry, given: Option<&str>, remember: bool) -> Result<bool> {
+/// GitHub & Co.: the pubkey goes into the clipboard and the page to paste
+/// it opens in the browser – the account stays the user's business.
+fn add_to_account(env: &Env, p: &Profile, host: &HostEntry) -> Result<bool> {
     let name = host.provider.display_name();
-    let Some(api) = upload::Api::new(env, host.provider, &host.hostname) else {
-        ui::error(&format!("{name} kann Keybund nicht automatisch eintragen"));
-        if let Some(url) = provider::add_key_url(host.provider, &host.hostname) {
-            ui::hint(&format!("Pubkey kopieren (keybund copy {}) und hier eintragen: {url}", p.id));
-        }
-        return Ok(false);
+    let public = keygen::read_public(env, &p.key)?.line();
+    let Some(url) = provider::add_key_url(host.provider, &host.hostname) else {
+        bail!("Für {} kenne ich keine Seite zum Eintragen", host.hostname);
     };
-    let sign = p.git.as_ref().is_some_and(|g| g.sign);
-    let public = keygen::read_public(env, &p.key)?;
-    let title = upload::key_title(&public, &p.name);
-    let label = format!("Keybund: {name}-Token für {}", p.name);
-
-    let stored = if given.is_none() { tokens::load(env, &p.id, &api.hostname) } else { None };
-    let (token, fresh) = match (given, stored) {
-        (Some(t), _) => (t.to_string(), true),
-        (None, Some(t)) => (t, false),
-        (None, None) => (device_login(&api, sign, &p.name)?, true),
-    };
-    let mut result = api.upload(&token, &public, &title, sign)?;
-    if result.auth_failed && !fresh {
-        // The stored token expired: forget it and log in again.
-        ui::warn("Das gespeicherte Token gilt nicht mehr – bitte neu anmelden");
-        tokens::forget(env, &p.id, &api.hostname).ok();
-        if !api.device_flow() {
-            ui::hint(&format!("Neues Token erstellen: {} und mit --token-stdin übergeben", api.token_url(sign)));
-            return Ok(false);
-        }
-        let token = device_login(&api, sign, &p.name)?;
-        result = api.upload(&token, &public, &title, sign)?;
-        if result.success && remember {
-            keep_token(env, &p.id, &api.hostname, &label, &token);
-        }
-    } else if result.success && fresh && remember {
-        keep_token(env, &p.id, &api.hostname, &label, &token);
+    match system::copy_to_clipboard(&public) {
+        Ok(()) => ui::success("Pubkey in der Zwischenablage"),
+        Err(_) => println!("{public}"),
     }
-    if result.success {
-        ui::success(&result.message);
-        ui::hint("Prüfe, ob das das richtige Konto ist – mit keybund test siehst du, als wer Git sich anmeldet.");
-    } else {
-        ui::error(&result.message);
+    println!("Bei {name} als neuen SSH-Key einfügen: {url}");
+    if p.git.as_ref().is_some_and(|g| g.sign) {
+        ui::hint("Für signierte Commits dort zusätzlich als „Signing Key“ eintragen.");
     }
-    Ok(result.success)
-}
-
-fn keep_token(env: &Env, id: &str, hostname: &str, label: &str, token: &str) {
-    match tokens::store(env, id, hostname, label, token) {
-        Ok(()) => ui::hint("Token im Schlüsselbund gespeichert"),
-        Err(e) => ui::warn(&format!("Token nicht gespeichert: {e}")),
-    }
-}
-
-/// The device flow on the terminal: show the code, open the browser, wait.
-fn device_login(api: &upload::Api, sign: bool, profile: &str) -> Result<String> {
-    if !api.device_flow() {
-        bail!(
-            "Für {} gibt es keine Anmeldung per Browser. Token mit Berechtigung „{}“ erstellen: {}\n  und übergeben: keybund install-key … --token-stdin",
-            api.hostname,
-            api.scopes(sign).join(", "),
-            api.token_url(sign)
-        );
-    }
-    let code = api.start_device_flow(sign)?;
-    let url = code.verification_uri_complete.clone().unwrap_or_else(|| code.verification_uri.clone());
-    println!("Bei {} anmelden – mit dem Konto für „{profile}“:", api.provider.display_name());
-    println!("  1. {url}");
-    println!("  2. Code eingeben: {}", style(&code.user_code).bold());
-    system::copy_to_clipboard(&code.user_code).ok();
     system::open_url(&url).ok();
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(code.expires_in);
-    let mut interval = code.interval;
-    loop {
-        if std::time::Instant::now() >= deadline {
-            bail!("Der Code ist abgelaufen – bitte erneut versuchen");
-        }
-        std::thread::sleep(std::time::Duration::from_secs(interval));
-        match api.poll_device_flow(&code.device_code)? {
-            upload::Poll::Token(t) => return Ok(t),
-            upload::Poll::Pending => {}
-            upload::Poll::SlowDown => interval += 5,
-            upload::Poll::Denied => bail!("Anmeldung abgelehnt"),
-            upload::Poll::Expired => bail!("Der Code ist abgelaufen – bitte erneut versuchen"),
-        }
-    }
+    ui::hint(&format!("Danach prüfen: keybund test {} --host {}", p.id, host.target_name()));
+    Ok(true)
 }

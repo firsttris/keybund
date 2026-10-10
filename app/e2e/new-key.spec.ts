@@ -29,12 +29,11 @@ test("creates a key and sets it up for a GitHub folder", async ({ app }) => {
   await expect(row(app, "~/dev/kunde-c/")).toBeVisible();
   const github = row(app, "GitHub-Konto");
   await github.getByRole("button", { name: "Key eintragen" }).click();
-  await github.getByRole("button", { name: "Bei GitHub anmelden & eintragen" }).click();
-  await expect(github.getByTestId("user-code")).toHaveText("WDJB-MJHT");
-  await expect(github.getByText("Key bei GitHub eingetragen (@tristan)")).toBeVisible({ timeout: 10_000 });
-  // The test runs right after the upload.
+  await expect(github.getByText("Pubkey ist kopiert.")).toBeVisible();
+  expect(await mockState<string[]>(app, "openedUrls")).toEqual(["https://github.com/settings/ssh/new"]);
+  expect(await mockState<string>(app, "clipboard")).toMatch(/^ssh-ed25519 /);
+  await github.getByRole("button", { name: "Erledigt – jetzt testen" }).click();
   await expect(github.getByTestId("connection-status")).toHaveText("Verbunden als @tristan");
-  expect(await mockState<string[]>(app, "uploadedKeys")).toEqual(["github.com:~/.ssh/kunde-c_ed25519"]);
   await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Kunde C.*~\/dev\/kunde-c\/ · GitHub/ })).toBeVisible();
 });
 

@@ -3,7 +3,6 @@
 
 pub mod api;
 pub mod commands;
-pub mod upload;
 
 /// All commands, for a given runtime. Expects `commands::*` in scope; used
 /// by [`specta_builder`] and by the IPC tests with the mock runtime.
@@ -26,12 +25,6 @@ macro_rules! keybund_commands {
             trust_host_key,
             test_connection,
             install_key,
-            upload_target,
-            upload_key,
-            forget_token,
-            start_device_flow,
-            poll_device_flow,
-            cancel_device_flow,
             last_test,
             plan_changes,
             apply_changes,

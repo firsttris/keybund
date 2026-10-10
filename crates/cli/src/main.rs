@@ -45,22 +45,14 @@ enum Command {
         #[arg(long)]
         print: bool,
     },
-    /// Pubkey eintragen: auf Servern wie ssh-copy-id, bei GitHub/GitLab per API
-    ///
-    /// Für GitHub und GitLab meldest du dich im Browser an (Code bestätigen);
-    /// selbst gehostete Instanzen brauchen ein Token (--token-stdin).
+    /// Pubkey eintragen: auf Servern wie ssh-copy-id; bei GitHub, GitLab und
+    /// Bitbucket kopiert es den Pubkey und öffnet die Seite zum Einfügen.
     InstallKey {
         #[arg(value_name = "KEY")]
         profile: String,
         /// Nur dieser Host (Alias oder Hostname/IP); ohne: alle Hosts des Keys
         #[arg(long)]
         host: Option<String>,
-        /// Persönliches Zugriffstoken von stdin lesen
-        #[arg(long)]
-        token_stdin: bool,
-        /// Token im Schlüsselbund merken (secret-tool)
-        #[arg(long)]
-        remember: bool,
     },
     /// Host-Keys der Server eines Keys prüfen und bestätigen
     Trust {
@@ -170,12 +162,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Copy { profile, print } => commands::copy(&env, &profile, print),
         Command::Test { profile, host } => commands::test(&env, &profile, host.as_deref()),
         Command::Trust { profile, host, yes } => commands::trust(&env, &profile, host.as_deref(), yes),
-        Command::InstallKey { profile, host, token_stdin, remember } => commands::install_key(
-            &env,
-            &profile,
-            host.as_deref(),
-            &commands::TokenOptions { stdin: token_stdin, remember },
-        ),
+        Command::InstallKey { profile, host } => commands::install_key(&env, &profile, host.as_deref()),
         Command::Which { target } => commands::which(&env, target.as_deref()),
         Command::Clone { url, profile, dest } => commands::clone(&env, &url, profile.as_deref(), dest),
         Command::Apply { dry_run, yes } => commands::apply(&env, dry_run, yes),

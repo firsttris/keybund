@@ -50,8 +50,6 @@ pub enum Error {
     HostKeyChanged(String),
     #[error("Keine Verbindung zu {host}: {message}")]
     Network { host: String, message: String },
-    #[error("{0}")]
-    Api(String),
     #[error("Dateizugriff auf {path} fehlgeschlagen: {source}")]
     Io {
         path: String,
@@ -91,7 +89,6 @@ impl Error {
             Error::InvalidPath(_) => "invalid_path",
             Error::HostKeyChanged(_) => "host_key_changed",
             Error::Network { .. } => "network",
-            Error::Api(_) => "api",
             Error::Io { .. } => "io",
         }
     }
@@ -130,7 +127,6 @@ mod tests {
             Error::InvalidPath("a".into()),
             Error::HostKeyChanged("a".into()),
             Error::Network { host: "a".into(), message: "b".into() },
-            Error::Api("a".into()),
             Error::io("/x", io()),
         ];
         let mut kinds: Vec<&str> = all.iter().map(Error::kind).collect();

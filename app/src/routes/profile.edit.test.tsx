@@ -247,12 +247,15 @@ describe("key page", () => {
     const github = await row("GitHub-Konto");
     await user.click(within(github).getByRole("button", { name: "Testen" }));
     expect(await within(github).findByTestId("connection-status")).toHaveTextContent("GitHub kennt diesen Key nicht");
-    await user.click(within(github).getByRole("button", { name: "Jetzt bei GitHub eintragen" }));
-    await user.click(within(github).getByRole("button", { name: "Bei GitHub anmelden & eintragen" }));
-    // Uploaded, then tested again by itself.
-    expect(await within(github).findByText("Verbunden als @tristan", {}, { timeout: 3000 })).toBeInTheDocument();
-    expect(backend.state.uploadedKeys).toEqual(["github.com:~/.ssh/kunde-b_ed25519"]);
-    expect(within(github).queryByRole("button", { name: "Jetzt bei GitHub eintragen" })).not.toBeInTheDocument();
+    await user.click(within(github).getByRole("button", { name: "Pubkey kopieren & GitHub-Seite öffnen" }));
+    expect(await within(github).findByText("Pubkey ist kopiert.")).toBeInTheDocument();
+    expect(backend.state.clipboard).toMatch(/^ssh-ed25519 .* tristan@zentrale-kunde-b$/);
+    expect(backend.state.openedUrls).toEqual(["https://github.com/settings/ssh/new"]);
+    // The user pastes it on GitHub, then tests.
+    backend.state.accountKeys.push("github.com:~/.ssh/kunde-b_ed25519");
+    await user.click(within(github).getByRole("button", { name: "Erledigt – jetzt testen" }));
+    expect(await within(github).findByText("Verbunden als @tristan")).toBeInTheDocument();
+    expect(within(github).queryByText("Pubkey ist kopiert.")).not.toBeInTheDocument();
   });
 
   it("offers to install the key on a server when the test fails", async () => {
@@ -275,7 +278,7 @@ describe("key page", () => {
     const gitlab = await row("GitLab-Konto");
     await user.click(within(gitlab).getByRole("button", { name: "Testen" }));
     expect(await within(gitlab).findByTestId("connection-status")).toBeInTheDocument();
-    expect(within(gitlab).queryByRole("button", { name: /Jetzt bei/ })).not.toBeInTheDocument();
+    expect(within(gitlab).queryByRole("button", { name: /Pubkey kopieren/ })).not.toBeInTheDocument();
   });
 
   it("shows the generated config", async () => {
@@ -287,113 +290,35 @@ describe("key page", () => {
     expect(screen.getByText("Sagt ssh, welcher Key für welchen Server oder Alias gilt.")).toBeInTheDocument();
   });
 
-  it("adds the key to a self-hosted GitLab with a token and keeps it", async () => {
+  it("copies the pubkey and opens the page of a self-hosted GitLab", async () => {
     const { user, backend } = await renderApp("/profile/sparkasse");
     const card = await row(/Konto/);
     await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
-    // No login in the browser for self-hosted instances.
-    expect(await within(card).findByLabelText("Zugriffstoken")).toBeInTheDocument();
-    expect(within(card).queryByRole("button", { name: /anmelden/ })).not.toBeInTheDocument();
-    expect(within(card).getByText(/Braucht die Berechtigung „api“/)).toBeInTheDocument();
-    await user.click(within(card).getByRole("button", { name: "Token erstellen" }));
-    await user.click(within(card).getByRole("button", { name: "Lieber von Hand: GitLab-Seite öffnen" }));
+    const hint = await within(card).findByRole("status");
+    expect(hint).toHaveTextContent("Auf der GitLab-Seite „New SSH key“ wählen, einfügen und speichern – angemeldet mit dem Konto für „Sparkasse“.");
+    expect(hint).not.toHaveTextContent("Signing Key");
+    expect(backend.state.clipboard).toMatch(/tristan@zentrale-sparkasse$/);
+    await user.click(within(hint).getByRole("button", { name: "Seite nochmal öffnen" }));
     expect(backend.state.openedUrls).toEqual([
-      "https://gitlab.kunde.de/-/user_settings/personal_access_tokens?name=Keybund&scopes=api",
+      "https://gitlab.kunde.de/-/user_settings/ssh_keys",
       "https://gitlab.kunde.de/-/user_settings/ssh_keys",
     ]);
-
-    await user.type(within(card).getByLabelText("Zugriffstoken"), "falsch");
-    await user.click(within(card).getByRole("button", { name: "Mit Token eintragen" }));
-    expect(await within(card).findByText(/GitLab hat das Token abgelehnt/)).toBeInTheDocument();
-    expect(within(card).getByText(/Bitte neu anmelden/)).toBeInTheDocument();
-
-    await user.clear(within(card).getByLabelText("Zugriffstoken"));
-    await user.type(within(card).getByLabelText("Zugriffstoken"), "glpat-123");
-    await user.click(within(card).getByRole("switch", { name: "Token im Schlüsselbund merken" }));
-    await user.click(within(card).getByRole("button", { name: "Mit Token eintragen" }));
-    expect(await within(card).findByText("Key bei GitLab eingetragen (@tristan)")).toBeInTheDocument();
-    expect(within(card).getByText(/Gehört @tristan zu „Sparkasse“/)).toBeInTheDocument();
-    expect(backend.state.storedTokens.get("sparkasse@gitlab.kunde.de")).toBe("glpat-123");
-
-    // Next time the stored token is offered.
-    await user.click(within(card).getByRole("button", { name: "Schließen" }));
-    await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
-    await user.click(await within(card).findByRole("button", { name: "Mit gespeichertem Token eintragen" }));
-    expect(await within(card).findByText("Der Key war bei GitLab schon eingetragen (@tristan)")).toBeInTheDocument();
-    await user.click(within(card).getByRole("button", { name: "Schließen" }));
-    await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
-    await user.click(await within(card).findByRole("button", { name: "Token vergessen" }));
-    await waitFor(() => expect(within(card).queryByRole("button", { name: "Mit gespeichertem Token eintragen" })).not.toBeInTheDocument());
-    expect(backend.state.storedTokens.size).toBe(0);
   });
 
-  it("logs in to GitHub with the device flow", async () => {
-    const { user, backend } = await renderApp("/profile/privat");
-    const card = await row(/Konto/);
-    await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
-    await user.click(await within(card).findByRole("button", { name: "Bei GitHub anmelden & eintragen" }));
-    expect(await within(card).findByText("Key bei GitHub eingetragen (@tristan)")).toBeInTheDocument();
-    expect(backend.state.uploadedKeys).toEqual(["github.com:~/.ssh/privat_ed25519"]);
-    expect(backend.state.openedUrls).toEqual(["https://github.com/login/device"]);
-  });
-
-  it("reports a denied login and can cancel a pending one", async () => {
+  it("reminds of the signing key on GitHub and opens Bitbucket's page", async () => {
     const { user, backend } = await renderApp("/profile/privat", (b) => {
-      b.state.deviceFlowOutcome = "denied";
-    });
-    const card = await row(/Konto/);
-    await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
-    await user.click(await within(card).findByRole("button", { name: "Bei GitHub anmelden & eintragen" }));
-    expect(await within(card).findByText("Anmeldung abgelehnt.")).toBeInTheDocument();
-
-    backend.state.deviceFlowPolls = 1_000_000;
-    backend.state.pollInterval = 60;
-    await user.click(within(card).getByRole("button", { name: "Bei GitHub anmelden & eintragen" }));
-    const login = await within(card).findByRole("group", { name: "Anmeldung bei GitHub" });
-    expect(within(login).getByTestId("user-code")).toHaveTextContent("WDJB-MJHT");
-    expect(within(login).getByText(/angemeldet mit dem Konto für „Privat“/)).toBeInTheDocument();
-    await user.click(within(login).getByRole("button", { name: "Seite öffnen" }));
-    await user.click(within(login).getByRole("button", { name: "Code kopieren" }));
-    expect(backend.state.flows.size).toBe(1);
-    await user.click(within(card).getByRole("button", { name: "Abbrechen" }));
-    await waitFor(() => expect(backend.state.flows.size).toBe(0));
-    expect(within(card).getByRole("button", { name: "Bei GitHub anmelden & eintragen" })).toBeInTheDocument();
-  });
-
-  it("reports an expired code and a failing login start", async () => {
-    const { user, backend } = await renderApp("/profile/privat", (b) => {
-      b.state.deviceFlowOutcome = "expired";
-    });
-    const card = await row(/Konto/);
-    await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
-    await user.click(await within(card).findByRole("button", { name: "Bei GitHub anmelden & eintragen" }));
-    expect(await within(card).findByText("Der Code ist abgelaufen – bitte neu anmelden.")).toBeInTheDocument();
-    // The OAuth app vanished in between: the backend refuses the login.
-    backend.state.deviceFlow = false;
-    await user.click(within(card).getByRole("button", { name: "Bei GitHub anmelden & eintragen" }));
-    expect(await within(card).findByText(/bitte ein Token verwenden/)).toBeInTheDocument();
-    await user.click(within(card).getByRole("button", { name: "Stattdessen ein Token verwenden" }));
-    expect(within(card).getByLabelText("Zugriffstoken")).toBeInTheDocument();
-  });
-
-  it("offers a token when no OAuth app is registered and explains Bitbucket", async () => {
-    const { user } = await renderApp("/profile/privat", (b) => {
-      b.state.deviceFlow = false;
-      b.state.keyring = false;
       b.state.profiles.find((p) => p.id === "kunde-b")!.hosts[0] = { provider: "bitbucket", hostname: "bitbucket.org", alias: null, user: null, port: null };
     });
-    const card = await row(/Konto/);
+    const card = await row(/GitHub-Konto/);
     await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
-    expect(await within(card).findByLabelText("Zugriffstoken")).toBeInTheDocument();
-    expect(within(card).getByText(/„write:public_key“ und „admin:ssh_signing_key“/)).toBeInTheDocument();
-    expect(within(card).queryByRole("switch", { name: "Token im Schlüsselbund merken" })).not.toBeInTheDocument();
+    expect(await within(card).findByText(/„Key type: Signing Key“/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: /Kunde B/ }));
     await screen.findByRole("heading", { level: 1, name: "Kunde B" });
     const other = await row(/Bitbucket-Konto/);
-    await user.click(await within(other).findByRole("button", { name: "Key eintragen" }));
-    expect(await within(other).findByText(/Bitbucket kann Keybund nicht automatisch eintragen/)).toBeInTheDocument();
-    expect(within(other).getByRole("button", { name: "Bitbucket-Seite öffnen" })).toBeInTheDocument();
+    await user.click(within(other).getByRole("button", { name: "Key eintragen" }));
+    await within(other).findByText("Pubkey ist kopiert.");
+    expect(backend.state.openedUrls.at(-1)).toBe("https://bitbucket.org/account/settings/ssh-keys/");
   });
 
   it("explains when the browser cannot be opened", async () => {
@@ -402,7 +327,6 @@ describe("key page", () => {
     });
     const card = await row(/Konto/);
     await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
-    await user.click(await within(card).findByRole("button", { name: "Lieber von Hand: GitLab-Seite öffnen" }));
     expect(await screen.findByText("Browser konnte nicht geöffnet werden")).toBeInTheDocument();
     expect(screen.getByText(/xdg-open.*https:\/\/gitlab\.kunde\.de\/-\/user_settings\/ssh_keys/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Link kopieren" })).toBeInTheDocument();

@@ -15,37 +15,8 @@ pub struct Env {
     /// The user's login shell (`$SHELL`), asked for variables like
     /// `GIT_SSH_COMMAND` that a GUI process does not inherit.
     pub login_shell: Option<PathBuf>,
-    /// How to reach the hosting APIs for uploading keys.
-    pub api: ApiConfig,
     /// The system-wide known_hosts (`/etc/ssh/ssh_known_hosts`); none in tests.
     pub global_known_hosts: Option<PathBuf>,
-}
-
-/// OAuth apps and API endpoints for uploading keys to GitHub and GitLab.
-///
-/// The client IDs of Keybund's registered OAuth apps are compiled in from
-/// `KEYBUND_GITHUB_CLIENT_ID` / `KEYBUND_GITLAB_CLIENT_ID` (release builds)
-/// and can be overridden by the same environment variables at runtime.
-#[derive(Debug, Clone, Default)]
-pub struct ApiConfig {
-    /// Replaces every API and OAuth base URL (tests: a local mock server).
-    pub base_url: Option<String>,
-    pub github_client_id: Option<String>,
-    pub gitlab_client_id: Option<String>,
-}
-
-impl ApiConfig {
-    pub fn from_system() -> Self {
-        let var = |name: &str| std::env::var(name).ok().filter(|v| !v.trim().is_empty());
-        let built_in = |v: Option<&str>| v.filter(|v| !v.trim().is_empty()).map(str::to_string);
-        ApiConfig {
-            base_url: var("KEYBUND_API_URL"),
-            github_client_id: var("KEYBUND_GITHUB_CLIENT_ID")
-                .or_else(|| built_in(option_env!("KEYBUND_GITHUB_CLIENT_ID"))),
-            gitlab_client_id: var("KEYBUND_GITLAB_CLIENT_ID")
-                .or_else(|| built_in(option_env!("KEYBUND_GITLAB_CLIENT_ID"))),
-        }
-    }
 }
 
 impl Env {
@@ -62,7 +33,6 @@ impl Env {
             home,
             config_dir: config_base.join("keybund"),
             login_shell,
-            api: ApiConfig::from_system(),
             global_known_hosts: Some(PathBuf::from("/etc/ssh/ssh_known_hosts")),
         })
     }
@@ -71,7 +41,7 @@ impl Env {
     pub fn with_home(home: impl Into<PathBuf>) -> Self {
         let home = home.into();
         let config_dir = home.join(".config").join("keybund");
-        Env { home, config_dir, login_shell: None, api: ApiConfig::default(), global_known_hosts: None }
+        Env { home, config_dir, login_shell: None, global_known_hosts: None }
     }
 
     /// Expands a leading `~` to the home directory.

@@ -10,8 +10,6 @@ import type {
   Check,
   ClonePreview,
   CreatedProject,
-  DeviceFlowStart,
-  DeviceFlowStatus,
   FileChange,
   HostKeyCheck,
   Fix,
@@ -33,8 +31,6 @@ import type {
   ProfilesView,
   Provider,
   Settings,
-  UploadResult,
-  UploadTarget,
   Report,
   UninstallOptions,
   UninstallPreview,
@@ -122,20 +118,8 @@ export interface MockState {
   installedKeys: string[];
   /** Hostnames that time out. */
   unreachable: string[];
-  /** Keybund's OAuth apps are registered (login in the browser on github.com / gitlab.com). */
-  deviceFlow: boolean;
-  /** Polls the device flow answers "pending" before the outcome. */
-  deviceFlowPolls: number;
-  deviceFlowOutcome: "done" | "denied" | "expired";
-  /** Seconds between polls the device flow asks for. */
-  pollInterval: number;
-  /** `secret-tool` is installed. */
-  keyring: boolean;
-  /** Tokens in the keyring by `profile@host`. */
-  storedTokens: Map<string, string>;
-  /** `hostname:keypath` pairs added to git accounts via the API. */
-  uploadedKeys: string[];
-  flows: Map<string, { id: string; host: string; polls: number }>;
+  /** `hostname:keypath` pairs the user pasted into git accounts (by hand). */
+  accountKeys: string[];
   settings: Settings;
   /** Key paths loaded in ssh-agent (`null`: no agent). */
   agentKeys: string[] | null;
@@ -228,14 +212,7 @@ export function seedState(): MockState {
     otherKeyFor: null,
     installed: true,
     installedKeys: [],
-    deviceFlow: true,
-    deviceFlowPolls: 1,
-    deviceFlowOutcome: "done",
-    pollInterval: 2,
-    keyring: true,
-    storedTokens: new Map(),
-    uploadedKeys: [],
-    flows: new Map(),
+    accountKeys: [],
     knownHosts: ["1.2.3.4", "gitlab.kunde.de"],
     dolphinLibssh: null,
     agentKeys: ["~/.ssh/privat_ed25519", "~/.ssh/sparkasse_ed25519"],
@@ -451,7 +428,6 @@ function keyInfo(state: MockState, path: string): KeyInfo {
   };
 }
 
-const API_PROVIDERS: Provider[] = ["github", "gitlab"];
 const PINNED_HOSTS = ["github.com", "gitlab.com", "bitbucket.org"];
 
 function knownName(h: HostEntry): string {
@@ -472,34 +448,6 @@ function hostOf(state: MockState, id: string, host: string | null | undefined): 
 
 function hostKeyKnown(state: MockState, h: HostEntry): boolean {
   return state.knownHosts.includes(knownName(h));
-}
-
-function gitHost(state: MockState, id: string, host: string): { p: Profile; h: HostEntry } {
-  const p = find(state, id);
-  const h = p.hosts.find((x) => x.provider !== "generic" && (x.alias === host || x.hostname === host));
-  if (!h) throw new MockError("other", `Key „${p.id}“ hat kein Git-Konto ${host}`);
-  return { p, h };
-}
-
-function hasDeviceFlow(state: MockState, h: HostEntry): boolean {
-  return state.deviceFlow && ((h.provider === "github" && h.hostname === "github.com") || (h.provider === "gitlab" && h.hostname === "gitlab.com"));
-}
-
-function uploadTo(state: MockState, p: Profile, h: HostEntry, token: string): UploadResult {
-  const name = PROVIDER_NAME[h.provider];
-  if (token === "falsch") {
-    return { success: false, already_present: false, account: null, message: `${name} hat das Token abgelehnt (abgelaufen, widerrufen oder ohne Berechtigung)`, auth_failed: true };
-  }
-  const key = `${h.hostname}:${p.key.path}`;
-  const already = state.uploadedKeys.includes(key);
-  if (!already) state.uploadedKeys.push(key);
-  return {
-    success: true,
-    already_present: already,
-    account: "tristan",
-    message: already ? `Der Key war bei ${name} schon eingetragen (@tristan)` : `Key bei ${name} eingetragen (@tristan)`,
-    auth_failed: false,
-  };
 }
 
 function view(state: MockState, p: Profile): ProfileView {
@@ -828,7 +776,7 @@ export function createMockBackend(state: MockState = seedState()) {
         }
         // Kunde B's key is not in its GitHub account until it is uploaded.
         const where = `${h.hostname}:${p.key.path}`;
-        const registered = p.id !== "kunde-b" || state.uploadedKeys.includes(where) || state.installedKeys.includes(where);
+        const registered = p.id !== "kunde-b" || state.accountKeys.includes(where) || state.installedKeys.includes(where);
         const ok = registered && !state.unreachable.includes(h.hostname);
         const user = h.user ?? (h.provider === "generic" ? "tristan" : "git");
         const steps: ProbeResult["steps"] = state.unreachable.includes(h.hostname)
@@ -923,77 +871,6 @@ export function createMockBackend(state: MockState = seedState()) {
           throw new MockError("host_key_changed", `Der Host-Key von ${h.hostname} ist nicht der bestätigte – Verbindung abgebrochen.`);
         }
         state.knownHosts.push(knownName(h));
-        return null;
-      }
-      case "upload_target": {
-        const { p, h } = gitHost(state, String(args.id), String(args.host));
-        const sign = !!p.git?.sign;
-        const supported = API_PROVIDERS.includes(h.provider);
-        const scopes = !supported ? [] : h.provider === "github" ? ["write:public_key", ...(sign ? ["admin:ssh_signing_key"] : [])] : ["api"];
-        return {
-          provider: h.provider,
-          hostname: h.hostname,
-          supported,
-          device_flow: supported && hasDeviceFlow(state, h),
-          token_url: !supported
-            ? null
-            : h.provider === "github"
-              ? `https://${h.hostname}/settings/tokens/new?scopes=${scopes.join(",")}&description=Keybund`
-              : `https://${h.hostname}/-/user_settings/personal_access_tokens?name=Keybund&scopes=api`,
-          scopes,
-          manual_url: ADD_KEY_URL[h.provider]?.(h.hostname) ?? null,
-          remembered: state.keyring && state.storedTokens.has(`${p.id}@${h.hostname}`),
-          keyring: state.keyring,
-        } satisfies UploadTarget;
-      }
-      case "start_device_flow": {
-        await sleep(state.latency);
-        const { p, h } = gitHost(state, String(args.id), String(args.host));
-        if (!hasDeviceFlow(state, h)) throw new MockError("api", `Für ${h.hostname} ist keine Anmeldung per Browser eingerichtet – bitte ein Token verwenden`);
-        const flowId = `flow-${state.flows.size + 1}`;
-        state.flows.set(flowId, { id: p.id, host: String(args.host), polls: 0 });
-        return {
-          flow_id: flowId,
-          user_code: "WDJB-MJHT",
-          verification_uri: h.provider === "github" ? "https://github.com/login/device" : "https://gitlab.com/oauth/device?user_code=WDJB-MJHT",
-          expires_in: 900,
-          interval: state.pollInterval,
-        } satisfies DeviceFlowStart;
-      }
-      case "poll_device_flow": {
-        const flowId = String(args.flowId);
-        const flow = state.flows.get(flowId);
-        if (!flow) throw new MockError("other", "Diese Anmeldung ist nicht mehr aktiv – bitte neu starten");
-        if (flow.polls < state.deviceFlowPolls) {
-          flow.polls++;
-          return { status: "pending", interval: state.pollInterval } satisfies DeviceFlowStatus;
-        }
-        state.flows.delete(flowId);
-        if (state.deviceFlowOutcome !== "done") return { status: state.deviceFlowOutcome } satisfies DeviceFlowStatus;
-        const { p, h } = gitHost(state, flow.id, flow.host);
-        const result = uploadTo(state, p, h, "gho_mock");
-        if (args.remember && state.keyring) state.storedTokens.set(`${p.id}@${h.hostname}`, "gho_mock");
-        return { status: "done", result } satisfies DeviceFlowStatus;
-      }
-      case "cancel_device_flow":
-        state.flows.delete(String(args.flowId));
-        return null;
-      case "upload_key": {
-        await sleep(state.latency);
-        const { p, h } = gitHost(state, String(args.id), String(args.host));
-        if (!API_PROVIDERS.includes(h.provider)) throw new MockError("other", `${PROVIDER_NAME[h.provider]} kann Keybund nicht automatisch eintragen`);
-        const slot = `${p.id}@${h.hostname}`;
-        const given = (args.token as string | null)?.trim() || null;
-        const token = given ?? state.storedTokens.get(slot);
-        if (!token) throw new MockError("other", "Kein gespeichertes Token – bitte anmelden oder ein Token eingeben");
-        const result = uploadTo(state, p, h, token);
-        if (result.auth_failed && !given) state.storedTokens.delete(slot);
-        if (result.success && given && args.remember && state.keyring) state.storedTokens.set(slot, given);
-        return result;
-      }
-      case "forget_token": {
-        const { p, h } = gitHost(state, String(args.id), String(args.host));
-        state.storedTokens.delete(`${p.id}@${h.hostname}`);
         return null;
       }
       case "preview_add_host":

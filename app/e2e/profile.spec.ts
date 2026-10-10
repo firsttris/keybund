@@ -37,10 +37,15 @@ test("connection test shows success and failure with the steps", async ({ app })
   // The sidebar reflects the failed test.
   await expect(app.getByRole("navigation", { name: "Keys" }).getByText("Test fehlgeschlagen")).toBeVisible();
 
-  // The fix is one click away: add the key to the account, then it is tested again.
-  await failing.getByRole("button", { name: "Jetzt bei GitHub eintragen" }).click();
-  await failing.getByRole("button", { name: "Bei GitHub anmelden & eintragen" }).click();
-  await expect(failing.getByTestId("connection-status")).toHaveText("Verbunden als @tristan", { timeout: 10_000 });
+  // The fix is one click away: copy the pubkey, paste it on GitHub, test again.
+  await failing.getByRole("button", { name: "Pubkey kopieren & GitHub-Seite öffnen" }).click();
+  await expect(failing.getByText("Pubkey ist kopiert.")).toBeVisible();
+  expect(await mockState<string[]>(app, "openedUrls")).toEqual(["https://github.com/settings/ssh/new"]);
+  await app.evaluate(() => {
+    (window as unknown as { __keybundMock: { state: { accountKeys: string[] } } }).__keybundMock.state.accountKeys.push("github.com:~/.ssh/kunde-b_ed25519");
+  });
+  await failing.getByRole("button", { name: "Erledigt – jetzt testen" }).click();
+  await expect(failing.getByTestId("connection-status")).toHaveText("Verbunden als @tristan");
   await expect(app.getByRole("navigation", { name: "Keys" }).getByText("Test fehlgeschlagen")).toHaveCount(0);
 });
 
@@ -48,8 +53,9 @@ test("opens the provider page", async ({ app }) => {
   await app.goto("/#/profile/sparkasse");
   const accounts = row(app, "GitLab-Konto");
   await accounts.getByRole("button", { name: "Key eintragen" }).click();
-  await accounts.getByRole("button", { name: "Lieber von Hand: GitLab-Seite öffnen" }).click();
+  await expect(accounts.getByText("Pubkey ist kopiert.")).toBeVisible();
   await expect.poll(() => mockState<string[]>(app, "openedUrls")).toEqual(["https://gitlab.kunde.de/-/user_settings/ssh_keys"]);
+  expect(await mockState<string>(app, "clipboard")).toMatch(/tristan@zentrale-sparkasse$/);
 });
 
 test("shows the generated config", async ({ app }) => {
@@ -176,18 +182,6 @@ test("a failing browser start is explained, not swallowed", async ({ app }) => {
   });
   const accounts = row(app, "GitLab-Konto");
   await accounts.getByRole("button", { name: "Key eintragen" }).click();
-  await accounts.getByRole("button", { name: "Lieber von Hand: GitLab-Seite öffnen" }).click();
   await expect(app.getByText("Browser konnte nicht geöffnet werden")).toBeVisible();
   await expect(app.getByRole("button", { name: "Link kopieren" })).toBeVisible();
-});
-
-test("adds the key to a self-hosted GitLab with a token", async ({ app }) => {
-  await app.goto("/#/profile/sparkasse");
-  const card = row(app, "GitLab-Konto");
-  await card.getByRole("button", { name: "Key eintragen" }).click();
-  await card.getByLabel("Zugriffstoken").fill("glpat-123");
-  await card.getByRole("switch", { name: "Token im Schlüsselbund merken" }).click();
-  await card.getByRole("button", { name: "Mit Token eintragen" }).click();
-  await expect(card.getByText("Key bei GitLab eingetragen (@tristan)")).toBeVisible();
-  expect(await mockState<string[]>(app, "uploadedKeys")).toEqual(["gitlab.kunde.de:~/.ssh/sparkasse_ed25519"]);
 });

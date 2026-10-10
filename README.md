@@ -25,22 +25,18 @@ In Keybund legst du **Keys** an – „Privat“, „Kunde C“, „NAS“ – u
 Ein Key kann alles zugleich sein – z. B. „Privat“ als Standard, mit GitHub und deinem Heimserver. Neuer Key: Name
 eingeben, „Key anlegen“ – wo er gilt, legst du danach auf seiner Seite fest. Bei jeder Verwendung gibt es „Testen“
 (mit einer verständlichen Schritt-für-Schritt-Erklärung, was ssh gemacht hat) und, wo es geht, „Key eintragen“.
-Schlägt ein Test fehl, weil der Server den Key nicht kennt, steht der passende Knopf gleich daneben („Jetzt bei GitHub
-eintragen“, „Key auf nas eintragen“). Gespeichert wird in `~/.config/keybund/profiles.toml`.
+Schlägt ein Test fehl, weil der Server den Key nicht kennt, steht der passende Knopf gleich daneben („Pubkey kopieren
+& GitHub-Seite öffnen“, „Key auf nas eintragen“). Gespeichert wird in `~/.config/keybund/profiles.toml`.
 
-## Key bei GitHub und GitLab eintragen
+## Key bei GitHub, GitLab und Bitbucket eintragen
 
-Keybund trägt den Pubkey per API in dein Konto ein („Key eintragen“ beim Git-Konto eines Keys oder
-`keybund install-key`). Auf github.com und gitlab.com meldest du dich dafür im Browser an: Keybund zeigt einen Code,
-du bestätigst ihn, fertig – kein Passwort, kein Token zum Abtippen. Selbst gehostetes GitLab und GitHub Enterprise
-nehmen ein persönliches Zugriffstoken; Keybund öffnet die Seite dafür mit den richtigen Berechtigungen.
+Keybund verwaltet die Keys auf deinem Rechner und meldet sich nirgends an. „Key eintragen“ beim Git-Konto eines Keys
+(oder `keybund install-key`) kopiert den Pubkey in die Zwischenablage und öffnet die Seite, auf der du ihn einfügst –
+bei GitHub, GitLab (auch selbst gehostet) und Bitbucket. Dort „New SSH key“ wählen, einfügen, speichern; danach
+„Erledigt – jetzt testen“. Achte darauf, im Browser mit dem richtigen Konto angemeldet zu sein: Der Test zeigt, als
+wer du angemeldet wurdest.
 
-Tokens werden nach dem Eintragen verworfen. Nur wenn du „Token im Schlüsselbund merken“ wählst, landen sie per
-`secret-tool` im Schlüsselbund (GNOME Keyring, KWallet) – je Key und Host, weil jeder Key meist zu einem anderen Konto
-gehört. Achte beim Anmelden darauf, im Browser mit dem richtigen Konto angemeldet zu sein; Keybund zeigt danach, bei
-welchem Konto der Key gelandet ist. Bitbucket hat keine passende API, dort öffnet sich die Seite zum Eintragen.
-
-Die Anmeldung im Browser braucht registrierte OAuth-Apps: [docs/oauth-apps.md](docs/oauth-apps.md).
+Auf **Servern** trägt Keybund den Key selbst ein, wie `ssh-copy-id` – der Server fragt dafür einmal nach dem Passwort.
 
 ## Host-Keys
 
@@ -126,8 +122,9 @@ keybund edit <key> …             Name, Git-Ordner, Hosts, Git-Identität, Sign
 keybund new                      Neuen Key anlegen, Fragen im Terminal (oder alles über Optionen, siehe --help)
 keybund copy <key> [--print]     Pubkey in die Zwischenablage (wl-copy, xclip oder xsel)
 keybund test <key> [--host h]    Verbindungstest, Exit-Code 0 bei Erfolg
-keybund install-key <key> [--host h] [--token-stdin] [--remember]
-                                 Pubkey eintragen: Server wie ssh-copy-id, GitHub/GitLab per API
+keybund install-key <key> [--host h]
+                                 Pubkey eintragen: Server wie ssh-copy-id; GitHub/GitLab/Bitbucket:
+                                 Pubkey kopieren und die Seite zum Einfügen öffnen
 keybund trust <key> [--host h]   Host-Keys prüfen und bestätigen (Fingerprint)
 keybund config [key] [wert]      Einstellungen: projects-dir, keys-dir, known-hosts-per-profile, absolute-ssh-include
 keybund which [pfad|host]        Welcher Key wird hier benutzt – und warum?
@@ -192,8 +189,7 @@ Jede Schicht hat eigene Tests, alle laufen in der CI (`.github/workflows/ci.yml`
 | Snapshot | `render` ist rein funktional, jede Key-Kombination hat eine Golden-File (insta) | `crates/core/src/snapshots/` |
 | Integration (Rust) | `apply` gegen ein temporäres HOME, Auflösung mit echtem `git` und `ssh -G`, Doctor, Archiv | `crates/core/tests/` |
 | Integration (sshd) | Echter `sshd` auf localhost: Passphrase einmal, danach hält der Agent den Key (Test und `git`), falscher Key erkannt, Key auf Server eintragen | `crates/core/tests/sshd.rs` |
-| Integration (API) | Device Flow und Key-Upload gegen eine nachgebaute GitHub-/GitLab-API (mockito) | `crates/core/tests/upload.rs` |
-| Integration (CLI) | Jeder Befehl gegen ein temporäres HOME, Fake-`ssh`/`secret-tool`, Mock-API | `crates/cli/tests/cli.rs` |
+| Integration (CLI) | Jeder Befehl gegen ein temporäres HOME, Fake-`ssh`/`xdg-open` | `crates/cli/tests/cli.rs` |
 | E2E (CLI) | Kompletter Lebenszyklus: zwei Kunden auf github.com, Server, Clone, Doctor, Archiv | `crates/cli/tests/e2e.rs` |
 | IPC (Tauri) | Commands über die Tauri-IPC mit Mock-Runtime und echten Capabilities | `app/src-tauri/tests/ipc.rs` |
 | Vertrag | `bindings.ts` muss zu den Rust-Commands passen; Mock-Backend verhält sich wie der Core | `app/src-tauri/tests/bindings.rs`, `app/src/lib/mock/*.test.ts` |
@@ -235,7 +231,7 @@ Die Workflows kommen aus [firsttris/workflows](https://github.com/firsttris/work
 - [x] Phase 1 – Core + CLI
 - [x] Phase 2 – GUI-MVP
 - [x] Phase 3 – Clone-Helfer, „Welcher Key?“, Archivieren, SSH-Signing, Warnung bei alten Keys
-- [x] Key-Upload per API (GitHub, GitLab; Device Flow und Token), Key auf Server eintragen
+- [x] Key eintragen: Pubkey kopieren und Seite öffnen (GitHub, GitLab, Bitbucket), auf Servern wie ssh-copy-id
 - [x] Host-Keys bestätigen, known_hosts pro Key, letzter Test bleibt gespeichert, Ordner einstellbar
 - [ ] Phase 4 – KRunner, Flatpak
 - [ ] Phase 5/6 – macOS und Windows

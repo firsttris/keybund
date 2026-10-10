@@ -12,7 +12,6 @@ export function installMockBackend(options: { latency?: number; openTabs?: boole
   const backend = createMockBackend();
   if (options.latency !== undefined) {
     backend.state.latency = options.latency;
-    if (options.latency === 0) backend.state.pollInterval = 0;
   }
   // In the browser preview links really open; under Playwright they are only recorded.
   backend.state.openTabs = options.openTabs ?? !navigator.webdriver;
