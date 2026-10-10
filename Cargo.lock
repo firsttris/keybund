@@ -2168,7 +2168,7 @@ dependencies = [
 
 [[package]]
 name = "keybund-app"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "keybund-core",
  "mockito",
@@ -2186,7 +2186,7 @@ dependencies = [
 
 [[package]]
 name = "keybund-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "arboard",
@@ -2202,7 +2202,7 @@ dependencies = [
 
 [[package]]
 name = "keybund-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.23.1",
  "insta",
