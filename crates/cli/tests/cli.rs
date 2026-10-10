@@ -194,7 +194,7 @@ fn test_command_uses_exit_code_from_output() {
         assert!(log.contains("IdentitiesOnly=yes"));
         assert!(log.contains("AddKeysToAgent=yes"));
         assert!(!log.contains("BatchMode"));
-        assert!(log.contains("StrictHostKeyChecking=accept-new"));
+        assert!(log.contains("StrictHostKeyChecking=yes"));
         assert!(log.contains("git@github.com"));
 
         sb.fake_ssh("git@github.com: Permission denied (publickey).", 255);
@@ -766,4 +766,48 @@ fn config_changes_the_defaults_for_new_profiles() {
         &["--provider", "github", "--git-name", "T", "--git-email", "t@x.de", "--folder", "~/work/kunde-x"],
     );
     assert!(sb.path(".ssh/keybund/kunde-x_ed25519").exists());
+}
+
+#[test]
+fn unknown_host_keys_are_confirmed_first() {
+    if !has_tools() || cfg!(not(unix)) {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile("Server", &["--provider", "generic", "--host", "10.1.2.3", "--alias", "srv", "--port", "2222"]);
+    #[cfg(unix)]
+    {
+        sb.fake_ssh("", 0);
+        sb.fake_keyscan(
+            "[10.1.2.3]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
+        );
+        sb.cmd()
+            .args(["test", "server"])
+            .assert()
+            .code(2)
+            .stdout(predicate::str::contains("Erste Verbindung zu [10.1.2.3]:2222"))
+            .stdout(predicate::str::contains("SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU"))
+            .stderr(predicate::str::contains("keybund trust server --host srv"));
+        assert!(!sb.ssh_log().contains(" true"), "no connection before the key is confirmed");
+
+        sb.cmd()
+            .args(["trust", "server", "--yes"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("in ~/.ssh/known_hosts.d/server gespeichert"));
+        assert!(sb.read(".ssh/known_hosts.d/server").starts_with("[10.1.2.3]:2222 ssh-ed25519 AAAA"));
+        sb.cmd().args(["trust", "server"]).assert().success().stdout(predicate::str::contains("Host-Key ist bekannt"));
+        sb.cmd().args(["test", "server"]).assert().success();
+        assert!(sb.ssh_log().contains("StrictHostKeyChecking=yes"));
+
+        // The Host block keeps new keys of this server in the profile's file.
+        assert!(sb
+            .read(".ssh/config.d/keybund.conf")
+            .contains("UserKnownHostsFile ~/.ssh/known_hosts.d/server ~/.ssh/known_hosts"));
+
+        // Archiving takes the file along.
+        sb.cmd().args(["archive", "server", "--yes"]).assert().success();
+        assert!(!sb.path(".ssh/known_hosts.d/server").exists());
+        assert!(sb.path(".ssh/archive/known_hosts-server").exists());
+    }
 }

@@ -7,6 +7,7 @@ use specta::Type;
 
 use keybund_core::apply::{self, ApplyReport, Plan};
 use keybund_core::clone::{self, RepoUrl};
+use keybund_core::hostkeys::{self, HostKeyCheck};
 use keybund_core::import::{self, ImportProposal};
 use keybund_core::keygen::{self, GenerateOptions, ImportCandidate, KeyInfo};
 use keybund_core::model::{Config, HostEntry, KeyRef, Profile, Provider, Settings};
@@ -241,6 +242,32 @@ pub fn add_host(env: &Env, id: &str, host: HostEntry) -> CmdResult<ProfileView> 
     Ok(profile_view(env, &config, profile, None))
 }
 
+fn host_of<'a>(profile: &'a Profile, host: Option<&str>) -> CmdResult<&'a HostEntry> {
+    match host {
+        Some(name) => profile
+            .hosts
+            .iter()
+            .find(|h| h.target_name() == name || h.hostname == name)
+            .ok_or_else(|| CmdError::other(format!("Profil „{}“ hat keinen Host {name}", profile.id))),
+        None => Ok(profile.hosts.first().ok_or_else(|| Error::NoHost(profile.id.clone()))?),
+    }
+}
+
+/// Before a connection: is the host key known? `host` `None` = first host.
+pub fn host_key_check(env: &Env, id: &str, host: Option<&str>) -> CmdResult<HostKeyCheck> {
+    let config = store::load(env)?;
+    let profile = config.profile(id)?;
+    Ok(hostkeys::check(env, &config.settings, profile, host_of(profile, host)?)?)
+}
+
+/// Stores the host keys the user confirmed.
+pub fn trust_host_key(env: &Env, id: &str, host: Option<&str>, fingerprints: &[String]) -> CmdResult<()> {
+    let config = store::load(env)?;
+    let profile = config.profile(id)?;
+    hostkeys::trust(env, &config.settings, profile, host_of(profile, host)?, fingerprints)?;
+    Ok(())
+}
+
 pub fn settings(env: &Env) -> CmdResult<Settings> {
     Ok(store::load(env)?.settings)
 }
@@ -394,7 +421,7 @@ pub fn generated_config(env: &Env, id: &str) -> CmdResult<Vec<GeneratedFile>> {
             excerpt: true,
         });
     }
-    let ssh = keybund_core::render::ssh_host_blocks(p);
+    let ssh = keybund_core::render::ssh_host_blocks(&config.settings, p);
     if !ssh.is_empty() {
         files.push(GeneratedFile { path: env.contract(&env.ssh_keybund_conf()), content: ssh, excerpt: true });
     }
@@ -450,6 +477,15 @@ mod tests {
             key: KeyChoice::Generate { comment: format!("t@{id}"), passphrase: None },
             make_default: false,
         }
+    }
+
+    #[test]
+    fn host_keys_of_git_hosts_are_pinned() {
+        let (_d, env) = env();
+        create_project(&env, &project("c")).unwrap();
+        assert_eq!(host_key_check(&env, "c", None).unwrap(), HostKeyCheck::Pinned);
+        assert_eq!(host_key_check(&env, "c", Some("github.com")).unwrap(), HostKeyCheck::Known);
+        assert!(host_key_check(&env, "c", Some("nope")).unwrap_err().message.contains("keinen Host nope"));
     }
 
     #[test]

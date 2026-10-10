@@ -151,6 +151,31 @@ pub async fn open_url(url: String) -> CmdResult<()> {
     blocking(move || Ok(keybund_core::desktop::open_url(&url)?)).await
 }
 
+/// Checks the host key before connecting (pinned keys are added).
+#[tauri::command]
+#[specta::specta]
+pub async fn host_key_check(
+    state: State<'_, AppState>,
+    id: String,
+    host: Option<String>,
+) -> CmdResult<keybund_core::hostkeys::HostKeyCheck> {
+    let env = state.env.clone();
+    blocking(move || api::host_key_check(&env, &id, host.as_deref())).await
+}
+
+/// Stores the host keys whose fingerprints the user confirmed.
+#[tauri::command]
+#[specta::specta]
+pub async fn trust_host_key(
+    state: State<'_, AppState>,
+    id: String,
+    host: Option<String>,
+    fingerprints: Vec<String>,
+) -> CmdResult<()> {
+    let env = state.env.clone();
+    blocking(move || api::trust_host_key(&env, &id, host.as_deref(), &fingerprints)).await
+}
+
 /// Tests the connection to `host` (alias or hostname) or the profile's first host.
 #[tauri::command]
 #[specta::specta]

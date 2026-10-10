@@ -96,6 +96,12 @@ impl Env {
     pub fn ssh_keybund_conf(&self) -> PathBuf {
         self.ssh_dir().join("config.d").join("keybund.conf")
     }
+    pub fn known_hosts(&self) -> PathBuf {
+        self.ssh_dir().join("known_hosts")
+    }
+    pub fn known_hosts_dir(&self) -> PathBuf {
+        self.ssh_dir().join("known_hosts.d")
+    }
     pub fn ssh_archive_dir(&self) -> PathBuf {
         self.ssh_dir().join("archive")
     }

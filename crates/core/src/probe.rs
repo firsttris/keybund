@@ -43,7 +43,8 @@ pub fn ssh_args(profile: &Profile, host: &HostEntry) -> Vec<String> {
         "-o",
         "ConnectTimeout=8",
         "-o",
-        "StrictHostKeyChecking=accept-new",
+        // Host keys are confirmed beforehand (hostkeys::check), never silently.
+        "StrictHostKeyChecking=yes",
         "-o",
         "IdentitiesOnly=yes",
         "-o",
@@ -168,9 +169,16 @@ pub fn interpret(host: &HostEntry, output: &str, code: Option<i32>, command: Str
     } else if lower.contains("timed out") || lower.contains("connection refused") || lower.contains("no route to host")
     {
         (false, format!("{} ist nicht erreichbar", host.hostname))
-    } else if lower.contains("host key verification failed") || lower.contains("remote host identification has changed")
-    {
-        (false, "Host-Key stimmt nicht mit known_hosts überein".to_string())
+    } else if lower.contains("remote host identification has changed") {
+        (
+            false,
+            format!(
+                "Der Host-Key von {} hat sich geändert – erst prüfen, dann mit ssh-keygen -R entfernen",
+                host.hostname
+            ),
+        )
+    } else if lower.contains("host key verification failed") {
+        (false, format!("Host-Key von {} ist noch nicht bestätigt", host.hostname))
     } else if lower.contains("no such identity") || lower.contains("no such file") {
         (false, "Key-Datei nicht gefunden".to_string())
     } else {

@@ -199,6 +199,10 @@ pub fn apply(env: &Env, plan: &Plan) -> Result<ApplyReport> {
     fsutil::ensure_dir(&env.ssh_dir(), Some(0o700))?;
     fsutil::ensure_dir(&env.ssh_dir().join("config.d"), Some(0o700))?;
     fsutil::ensure_dir(&env.config_dir, Some(0o700))?;
+    if plan.changes.iter().any(|c| c.new.as_deref().is_some_and(|n| n.contains("known_hosts.d/"))) {
+        // ssh cannot add host keys to a file in a missing folder.
+        fsutil::ensure_dir(&env.known_hosts_dir(), Some(0o700))?;
+    }
 
     let mut report = ApplyReport::default();
     for change in &plan.changes {

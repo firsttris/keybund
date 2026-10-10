@@ -13,5 +13,6 @@ Host meinserver 1.2.3.4
     IdentityFile ~/.ssh/privat_ed25519
     IdentitiesOnly yes
     AddKeysToAgent yes
+    UserKnownHostsFile ~/.ssh/known_hosts.d/privat ~/.ssh/known_hosts
 
 Host *

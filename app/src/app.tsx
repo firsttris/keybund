@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { useState } from "react";
 import { Toaster } from "sonner";
+import { HostKeyPrompt } from "@/components/host-key-prompt";
 import { createAppRouter } from "./router";
 
 export function createQueryClient() {
@@ -25,6 +26,7 @@ export function App({
     <QueryClientProvider client={client}>
       <RouterProvider router={router} />
       <Toaster theme="dark" position="bottom-right" />
+      <HostKeyPrompt />
     </QueryClientProvider>
   );
 }

@@ -42,6 +42,13 @@ pub fn archive(env: &Env, config: &mut Config, id: &str) -> Result<ArchiveResult
         std::fs::rename(&src_pub, &dst_pub).map_err(|e| Error::io(&src_pub, e))?;
     }
 
+    // The host keys of the profile's servers go along.
+    let known_hosts = env.expand(&crate::render::profile_known_hosts(id));
+    if known_hosts.exists() {
+        let target = archive_dir.join(format!("known_hosts-{id}"));
+        std::fs::rename(&known_hosts, &target).map_err(|e| Error::io(&known_hosts, e))?;
+    }
+
     let key_path = env.contract(&dst);
     let was_default = config.default_profile.as_deref() == Some(id);
     let profile = config.profile_mut(id)?;

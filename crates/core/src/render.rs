@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::path::PathBuf;
 
-use crate::model::{Config, Profile};
+use crate::model::{Config, Profile, Provider, Settings};
 use crate::process::shell_quote;
 use crate::Env;
 
@@ -57,6 +57,11 @@ pub fn ssh_config(config: &Config) -> String {
             let _ = writeln!(out, "    IdentityFile {}", ssh_path(&p.key.path));
             let _ = writeln!(out, "    IdentitiesOnly yes");
             let _ = writeln!(out, "    AddKeysToAgent yes");
+            if config.settings.known_hosts_per_profile && h.provider == Provider::Generic {
+                // New host keys go into the profile's own file, known ones
+                // from the shared file still count.
+                let _ = writeln!(out, "    UserKnownHostsFile {} ~/.ssh/known_hosts", profile_known_hosts(&p.id));
+            }
         }
     }
     // Leave the parser in a global context again so options that follow
@@ -94,9 +99,18 @@ pub fn include_if_blocks(profile: &Profile, env: &Env) -> String {
         .join("\n")
 }
 
+/// `~/.ssh/known_hosts.d/<id>`: host keys of a profile's servers.
+pub fn profile_known_hosts(id: &str) -> String {
+    format!("~/.ssh/known_hosts.d/{id}")
+}
+
 /// The `Host` blocks of one profile in `keybund.conf` (empty without aliases).
-pub fn ssh_host_blocks(profile: &Profile) -> String {
-    let single = Config { profiles: vec![Profile { archived: false, ..profile.clone() }], ..Default::default() };
+pub fn ssh_host_blocks(settings: &Settings, profile: &Profile) -> String {
+    let single = Config {
+        profiles: vec![Profile { archived: false, ..profile.clone() }],
+        settings: settings.clone(),
+        ..Default::default()
+    };
     let full = ssh_config(&single);
     let start = full.find("\n# Profil:").map(|i| i + 1).unwrap_or(full.len());
     let end = full.rfind("\nHost *").unwrap_or(full.len());
@@ -286,10 +300,10 @@ mod tests {
             include_if_blocks(&cfg.profiles[1], &env),
             "[includeIf \"gitdir:~/dev/kunde-a/\"]\n\tpath = ~/.config/keybund/git/kunde-a.gitconfig\n"
         );
-        let blocks = ssh_host_blocks(&cfg.profiles[0]);
+        let blocks = ssh_host_blocks(&cfg.settings, &cfg.profiles[0]);
         assert!(blocks.starts_with("# Profil: Privat\nHost meinserver 1.2.3.4\n"));
         assert!(!blocks.contains("Host *"));
-        assert_eq!(ssh_host_blocks(&cfg.profiles[1]), "");
+        assert_eq!(ssh_host_blocks(&cfg.settings, &cfg.profiles[1]), "");
     }
 
     #[test]

@@ -84,6 +84,9 @@ test("adds a server and installs the key", async ({ app }) => {
   await form.getByRole("button", { name: "Server speichern" }).click();
   await expect(card.getByText("kundenserver", { exact: true })).toBeVisible();
   await card.getByRole("button", { name: "Key eintragen" }).click();
+  const dialog = app.getByRole("alertdialog");
+  await expect(dialog).toContainText("Erste Verbindung zu 10.0.0.7");
+  await dialog.getByRole("button", { name: "Fingerprint stimmt" }).click();
   await expect(card.getByText("Key auf kundenserver eingetragen")).toBeVisible();
   const sidebarServers = app.getByRole("navigation", { name: "Profile" }).getByRole("group", { name: "Server" });
   await expect(sidebarServers.getByRole("link")).toHaveCount(2);

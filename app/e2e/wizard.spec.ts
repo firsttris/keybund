@@ -95,6 +95,7 @@ test("creates a server with an existing key from settings", async ({ app }) => {
 
   await expect(app.getByRole("heading", { name: "Key auf dem Server eintragen" })).toBeVisible();
   await app.getByRole("button", { name: "Key auf backup eintragen" }).click();
+  await app.getByRole("alertdialog").getByRole("button", { name: "Fingerprint stimmt" }).click();
   await expect(app.getByText("Key auf backup eingetragen")).toBeVisible();
   await app.getByRole("button", { name: "Verbindung testen" }).click();
   await expect(app.getByText("Anmeldung erfolgreich")).toBeVisible();
@@ -121,6 +122,7 @@ test("adds a server to the private profile", async ({ app }) => {
   await expect(app.getByText("+Host pi 10.9.9.9")).toBeVisible();
   await app.getByRole("button", { name: "Anwenden", exact: true }).click();
   await app.getByRole("button", { name: "Key auf pi eintragen" }).click();
+  await app.getByRole("alertdialog").getByRole("button", { name: "Fingerprint stimmt" }).click();
   await expect(app.getByText("Key auf pi eingetragen")).toBeVisible();
   await app.getByRole("link", { name: "Zum Profil" }).click();
 

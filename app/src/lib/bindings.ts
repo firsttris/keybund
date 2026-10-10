@@ -22,6 +22,10 @@ export const commands = {
 	copyPublicKey: (id: string) => typedError<string, CmdError>(__TAURI_INVOKE("copy_public_key", { id })),
 	/**  Opens an https link in the browser, also from a toolbox or an AppImage. */
 	openUrl: (url: string) => typedError<null, CmdError>(__TAURI_INVOKE("open_url", { url })),
+	/**  Checks the host key before connecting (pinned keys are added). */
+	hostKeyCheck: (id: string, host: string | null) => typedError<HostKeyCheck, CmdError>(__TAURI_INVOKE("host_key_check", { id, host })),
+	/**  Stores the host keys whose fingerprints the user confirmed. */
+	trustHostKey: (id: string, host: string | null, fingerprints: string[]) => typedError<null, CmdError>(__TAURI_INVOKE("trust_host_key", { id, host, fingerprints })),
 	/**  Tests the connection to `host` (alias or hostname) or the profile's first host. */
 	testConnection: (id: string, host: string | null) => typedError<ProbeResult, CmdError>(__TAURI_INVOKE("test_connection", { id, host })),
 	/**  Puts the profile's key on a server (`host` = alias or hostname). */
@@ -181,6 +185,21 @@ export type HostEntry = {
 	port: number | null,
 	provider: Provider,
 };
+
+export type HostKey = {
+	key_type: string,
+	fingerprint: string,
+};
+
+export type HostKeyCheck = 
+/**  In a known_hosts file already. */
+{ state: "known" } | 
+/**  A published key of GitHub/GitLab/Bitbucket, added just now. */
+{ state: "pinned" } | 
+/**  First contact: the user has to confirm one of these. */
+{ state: "unknown"; host: string; file: string; keys: HostKey[] } | 
+/**  No answer from the host; the connection will tell why. */
+{ state: "unreachable"; host: string };
 
 export type HostLink = {
 	host: string,

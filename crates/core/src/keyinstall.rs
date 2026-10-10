@@ -49,7 +49,7 @@ pub fn ssh_args(host: &HostEntry) -> Vec<String> {
         "-o",
         "ConnectTimeout=10",
         "-o",
-        "StrictHostKeyChecking=accept-new",
+        "StrictHostKeyChecking=yes",
     ]
     .iter()
     .map(|s| s.to_string())

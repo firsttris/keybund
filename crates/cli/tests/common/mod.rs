@@ -19,7 +19,11 @@ impl Sandbox {
         let bin = dir.path().canonicalize().unwrap().join("bin");
         fs::create_dir_all(&home).unwrap();
         fs::create_dir_all(&bin).unwrap();
-        Sandbox { dir, home, bin }
+        let sb = Sandbox { dir, home, bin };
+        // No network in tests: hosts answer no keys unless a test says so.
+        #[cfg(unix)]
+        sb.fake_keyscan("");
+        sb
     }
 
     pub fn cmd(&self) -> Command {
@@ -93,6 +97,15 @@ impl Sandbox {
     }
 
     /// Creates a profile non-interactively.
+    /// A fake `ssh-keyscan` printing `output` (known_hosts lines).
+    #[cfg(unix)]
+    pub fn fake_keyscan(&self, output: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        let script = self.bin.join("ssh-keyscan");
+        fs::write(&script, format!("#!/bin/sh\ncat <<'EOF'\n{output}\nEOF\n")).unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
     /// A fake `secret-tool` keeping one secret in a file; returns the file.
     /// Every call is logged next to it (`secrets.log`).
     #[cfg(unix)]

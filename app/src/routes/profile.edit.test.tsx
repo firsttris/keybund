@@ -25,8 +25,21 @@ describe("profile editing", () => {
     });
     expect(screen.getByText(/Gilt für/)).toHaveTextContent("Server srv");
 
+    // First contact: the host key is shown; declining stops everything.
     await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
+    let dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Erste Verbindung zu [10.0.0.7]:2200");
+    expect(dialog).toHaveTextContent(/SHA256:/);
+    expect(dialog).toHaveTextContent("Wird gespeichert in ~/.ssh/known_hosts.d/kunde-b");
+    await user.click(within(dialog).getByRole("button", { name: "Abbrechen" }));
+    expect(await within(card).findByText("Host-Key nicht bestätigt – keine Verbindung aufgebaut.")).toBeInTheDocument();
+    expect(backend.state.installedKeys).toEqual([]);
+
+    await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
+    dialog = await screen.findByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: "Fingerprint stimmt" }));
     expect(await within(card).findByText("Key auf srv eingetragen")).toBeInTheDocument();
+    expect(backend.state.knownHosts).toContain("[10.0.0.7]:2200");
     expect(backend.state.installedKeys).toEqual(["10.0.0.7:~/.ssh/kunde-b_ed25519"]);
     await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
     expect(await within(card).findByText("Der Key war auf srv schon eingetragen")).toBeInTheDocument();

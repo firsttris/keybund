@@ -9,7 +9,7 @@ use dialoguer::{theme::ColorfulTheme, Confirm, Input, MultiSelect, Password, Sel
 use keybund_core::apply::{self, ChangeKind, Plan};
 use keybund_core::doctor::{self, Status};
 use keybund_core::keygen::{self, GenerateOptions};
-use keybund_core::model::{Config, GitIdentity, HostEntry, KeyRef, Profile, Provider};
+use keybund_core::model::{Config, GitIdentity, HostEntry, KeyRef, Profile, Provider, Settings};
 use keybund_core::{
     archive as archive_mod, clone as clone_mod, history, import as import_mod, keyinstall, probe, provider, store,
     tokens, uninstall as uninstall_mod, upload, which as which_mod, Env,
@@ -445,7 +445,9 @@ fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCod
     }
     let mut ok = true;
     let mut remembered = None;
+    let settings = store::load(env)?.settings;
     for host in hosts {
+        host_key_ok(env, &settings, profile, host, false)?;
         let r = probe::probe(env, profile, host)?;
         // The profile's result: the first failure, else the first success.
         if only.is_none() && (remembered.is_none() || (!r.success && ok)) {
@@ -941,6 +943,70 @@ pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
     let plan = apply::plan(env, &config)?;
     if !confirm_and_apply(env, &plan, args.yes || !interactive())? {
         ui::warn("Configs nicht geschrieben – später mit `keybund apply`.");
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Makes sure the host key is known before ssh connects: pinned keys are
+/// added, unknown ones are shown and confirmed (or `keybund trust` is
+/// suggested without a terminal).
+fn host_key_ok(env: &Env, settings: &Settings, profile: &Profile, host: &HostEntry, yes: bool) -> Result<()> {
+    use keybund_core::hostkeys::{self, HostKeyCheck};
+    match hostkeys::check(env, settings, profile, host)? {
+        HostKeyCheck::Known | HostKeyCheck::Unreachable { .. } => Ok(()),
+        HostKeyCheck::Pinned => {
+            ui::hint(&format!("Veröffentlichten Host-Key von {} in ~/.ssh/known_hosts eingetragen", host.hostname));
+            Ok(())
+        }
+        HostKeyCheck::Unknown { host: name, file, keys } => {
+            println!("Erste Verbindung zu {name}. Host-Key laut Server:");
+            for k in &keys {
+                println!("  {} {}", k.key_type, style(&k.fingerprint).bold());
+            }
+            ui::hint("Vergleiche mit dem Server (ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub) oder dem Hoster.");
+            let confirmed = yes
+                || (interactive()
+                    && Confirm::with_theme(&theme())
+                        .with_prompt("Stimmt der Fingerprint?")
+                        .default(false)
+                        .interact()?);
+            if !confirmed {
+                bail!(
+                    "Host-Key von {name} ist nicht bestätigt. Prüfen und bestätigen mit: keybund trust {} --host {}",
+                    profile.id,
+                    host.target_name()
+                );
+            }
+            let fingerprints: Vec<String> = keys.iter().map(|k| k.fingerprint.clone()).collect();
+            hostkeys::trust(env, settings, profile, host, &fingerprints)?;
+            ui::success(&format!("Host-Key von {name} in {file} gespeichert"));
+            Ok(())
+        }
+    }
+}
+
+/// `keybund trust`: confirms the host keys of a profile's hosts.
+pub fn trust(env: &Env, id: &str, host: Option<&str>, yes: bool) -> Result<ExitCode> {
+    let config = store::load(env)?;
+    let p = config.profile(id)?;
+    let targets: Vec<&HostEntry> = p
+        .hosts
+        .iter()
+        .filter(|h| {
+            host.map_or(true, |name| {
+                h.target_name().eq_ignore_ascii_case(name) || h.hostname.eq_ignore_ascii_case(name)
+            })
+        })
+        .collect();
+    if targets.is_empty() {
+        bail!("Profil „{id}“ hat keinen Host {}", host.unwrap_or_default());
+    }
+    for target in targets {
+        if keybund_core::hostkeys::is_known(env, &config.settings, p, target) {
+            ui::success(&format!("{}: Host-Key ist bekannt", target.target_name()));
+            continue;
+        }
+        host_key_ok(env, &config.settings, p, target, yes)?;
     }
     Ok(ExitCode::SUCCESS)
 }

@@ -22,6 +22,8 @@ macro_rules! keybund_commands {
             add_host,
             copy_public_key::<$r>,
             open_url,
+            host_key_check,
+            trust_host_key,
             test_connection,
             install_key,
             upload_target,

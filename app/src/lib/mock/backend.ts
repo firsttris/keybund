@@ -13,6 +13,7 @@ import type {
   DeviceFlowStart,
   DeviceFlowStatus,
   FileChange,
+  HostKeyCheck,
   Fix,
   GeneratedFile,
   HostEntry,
@@ -135,6 +136,8 @@ export interface MockState {
   uploadedKeys: string[];
   flows: Map<string, { id: string; host: string; polls: number }>;
   settings: Settings;
+  /** known_hosts names (`host` or `[host]:port`) whose key is stored. */
+  knownHosts: string[];
 }
 
 export interface SshBlock {
@@ -226,6 +229,7 @@ export function seedState(): MockState {
     storedTokens: new Map(),
     uploadedKeys: [],
     flows: new Map(),
+    knownHosts: ["1.2.3.4", "gitlab.kunde.de"],
     settings: { projects_dir: "~/dev", keys_dir: "~/.ssh", inline_ssh_config: false, known_hosts_per_profile: true },
     unreachable: [],
   };
@@ -265,14 +269,18 @@ export function sshPatterns(h: HostEntry): string[] {
   return patterns;
 }
 
-function sshHostBlocks(p: Profile): string {
+function sshHostBlocks(p: Profile, settings?: Settings): string {
   return p.hosts
     .filter((h) => sshPatterns(h).length > 0)
     .map((h) => {
       let block = `# Profil: ${p.name}\nHost ${sshPatterns(h).join(" ")}\n    HostName ${h.hostname}\n`;
       if (h.user) block += `    User ${h.user}\n`;
       if (h.port != null) block += `    Port ${h.port}\n`;
-      return `${block}    IdentityFile ${p.key.path}\n    IdentitiesOnly yes\n    AddKeysToAgent yes\n`;
+      block += `    IdentityFile ${p.key.path}\n    IdentitiesOnly yes\n    AddKeysToAgent yes\n`;
+      if (settings?.known_hosts_per_profile && h.provider === "generic") {
+        block += `    UserKnownHostsFile ~/.ssh/known_hosts.d/${p.id} ~/.ssh/known_hosts\n`;
+      }
+      return block;
     })
     .join("\n");
 }
@@ -280,7 +288,7 @@ function sshHostBlocks(p: Profile): string {
 function renderAll(state: MockState, profiles = state.profiles, def = state.defaultProfile): Map<string, string> {
   const active = profiles.filter((p) => !p.archived);
   const files = new Map<string, string>();
-  const ssh = active.map(sshHostBlocks).filter(Boolean);
+  const ssh = active.map((p) => sshHostBlocks(p, state.settings)).filter(Boolean);
   files.set("~/.ssh/config.d/keybund.conf", `${MANAGED}\n${ssh.map((b) => `\n${b}`).join("")}\nHost *\n`);
   let index = `${MANAGED}\n# Included from ~/.gitconfig.\n`;
   const defProfile = active.find((p) => p.id === def);
@@ -428,6 +436,27 @@ function keyInfo(state: MockState, path: string): KeyInfo {
 }
 
 const API_PROVIDERS: Provider[] = ["github", "gitlab"];
+const PINNED_HOSTS = ["github.com", "gitlab.com", "bitbucket.org"];
+
+function knownName(h: HostEntry): string {
+  return h.port && h.port !== 22 ? `[${h.hostname}]:${h.port}` : h.hostname;
+}
+
+/** A stable fake fingerprint per host. */
+function hostFingerprint(h: HostEntry): string {
+  return `SHA256:${fakeKey(`hostkey-${knownName(h)}`).fingerprint.slice(7)}`;
+}
+
+function hostOf(state: MockState, id: string, host: string | null | undefined): { p: Profile; h: HostEntry } {
+  const p = find(state, id);
+  const h = host ? p.hosts.find((x) => x.alias === host || x.hostname === host) : p.hosts[0];
+  if (!h) throw new MockError("other", host ? `Profil „${p.id}“ hat keinen Host ${host}` : `Profil „${p.id}“ hat keinen Host`);
+  return { p, h };
+}
+
+function hostKeyKnown(state: MockState, h: HostEntry): boolean {
+  return state.knownHosts.includes(knownName(h));
+}
 
 function gitHost(state: MockState, id: string, host: string): { p: Profile; h: HostEntry } {
   const p = find(state, id);
@@ -737,6 +766,20 @@ export function createMockBackend(state: MockState = seedState()) {
         const wanted = args.host as string | null | undefined;
         const h = wanted ? p.hosts.find((x) => x.alias === wanted || x.hostname === wanted) : p.hosts[0];
         if (!h) throw new MockError("no_host", wanted ? `Profil „${p.id}“ hat keinen Host ${wanted}` : `Profil „${p.id}“ hat keinen Host`);
+        // Like StrictHostKeyChecking=yes: no connection to an unconfirmed host.
+        const unconfirmed = !hostKeyKnown(state, h) && !PINNED_HOSTS.includes(h.hostname) && !state.unreachable.includes(h.hostname);
+        if (unconfirmed) {
+          return {
+            success: false,
+            host: h.alias ?? h.hostname,
+            account: null,
+            message: `Host-Key von ${h.hostname} ist noch nicht bestätigt`,
+            output: "Host key verification failed.",
+            command: `ssh -T -o StrictHostKeyChecking=yes ${h.alias ?? h.hostname}`,
+            used_key: null,
+            other_key: false,
+          } satisfies ProbeResult;
+        }
         const ok = p.id !== "kunde-b" && !state.unreachable.includes(h.hostname);
         const result: ProbeResult = {
           success: ok,
@@ -773,6 +816,9 @@ export function createMockBackend(state: MockState = seedState()) {
         const h = p.hosts.find((x) => x.alias === name || x.hostname === name);
         if (!h) throw new MockError("other", `Profil „${p.id}“ hat keinen Server ${name}`);
         const key = `${h.hostname}:${p.key.path}`;
+        if (!hostKeyKnown(state, h) && !state.unreachable.includes(h.hostname)) {
+          return { success: false, already_present: false, message: `Host-Key von ${h.hostname} ist noch nicht bestätigt`, output: "Host key verification failed." } satisfies InstallResult;
+        }
         if (state.unreachable.includes(h.hostname)) {
           return { success: false, already_present: false, message: `${name} ist nicht erreichbar`, output: "ssh: connect to host … Connection timed out" } satisfies InstallResult;
         }
@@ -784,6 +830,29 @@ export function createMockBackend(state: MockState = seedState()) {
           message: already ? `Der Key war auf ${name} schon eingetragen` : `Key auf ${name} eingetragen`,
           output: "",
         } satisfies InstallResult;
+      }
+      case "host_key_check": {
+        const { p, h } = hostOf(state, String(args.id), args.host as string | null);
+        if (hostKeyKnown(state, h)) return { state: "known" } satisfies HostKeyCheck;
+        if (PINNED_HOSTS.includes(h.hostname) && (!h.port || h.port === 22)) {
+          state.knownHosts.push(knownName(h));
+          return { state: "pinned" } satisfies HostKeyCheck;
+        }
+        if (state.unreachable.includes(h.hostname)) return { state: "unreachable", host: h.hostname } satisfies HostKeyCheck;
+        return {
+          state: "unknown",
+          host: knownName(h),
+          file: h.provider === "generic" && state.settings.known_hosts_per_profile ? `~/.ssh/known_hosts.d/${p.id}` : "~/.ssh/known_hosts",
+          keys: [{ key_type: "ssh-ed25519", fingerprint: hostFingerprint(h) }],
+        } satisfies HostKeyCheck;
+      }
+      case "trust_host_key": {
+        const { h } = hostOf(state, String(args.id), args.host as string | null);
+        if (!(args.fingerprints as string[]).includes(hostFingerprint(h))) {
+          throw new MockError("host_key_changed", `Der Host-Key von ${h.hostname} ist nicht der bestätigte – Verbindung abgebrochen.`);
+        }
+        state.knownHosts.push(knownName(h));
+        return null;
       }
       case "upload_target": {
         const { p, h } = gitHost(state, String(args.id), String(args.host));
@@ -959,7 +1028,7 @@ export function createMockBackend(state: MockState = seedState()) {
           { path: `~/.config/keybund/git/${p.id}.gitconfig`, content: renderProfileGitconfig(p), excerpt: false },
         ];
         if (p.folders.length) files.push({ path: "~/.config/keybund/git/index.gitconfig", content: includeIfBlocks(p), excerpt: true });
-        const ssh = sshHostBlocks(p);
+        const ssh = sshHostBlocks(p, state.settings);
         if (ssh) files.push({ path: "~/.ssh/config.d/keybund.conf", content: ssh, excerpt: true });
         return files;
       }

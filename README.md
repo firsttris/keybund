@@ -38,6 +38,18 @@ welchem Konto der Key gelandet ist. Bitbucket hat keine passende API, dort öffn
 
 Die Anmeldung im Browser braucht registrierte OAuth-Apps: [docs/oauth-apps.md](docs/oauth-apps.md).
 
+## Host-Keys
+
+Keybund vertraut keinem Server stillschweigend. Die veröffentlichten Host-Keys von GitHub, GitLab.com und
+Bitbucket sind eingebaut und werden ohne Rückfrage nach `~/.ssh/known_hosts` geschrieben. Bei jedem anderen Host
+zeigt Keybund vor der ersten Verbindung den Fingerprint (App: Dialog, CLI: Rückfrage oder `keybund trust`), und
+erst nach der Bestätigung verbindet sich ssh – mit `StrictHostKeyChecking=yes`.
+
+Die Host-Keys der Server eines Profils landen in einer eigenen Datei `~/.ssh/known_hosts.d/<profil>` (der
+`Host`-Block bekommt `UserKnownHostsFile ~/.ssh/known_hosts.d/<profil> ~/.ssh/known_hosts`) und wandern beim
+Archivieren mit nach `~/.ssh/archive/`. Abschaltbar in den Einstellungen bzw. mit
+`keybund config known-hosts-per-profile false`.
+
 ## Wie es funktioniert
 
 `~/.config/keybund/profiles.toml` ist die einzige Quelle der Wahrheit:
@@ -104,6 +116,8 @@ keybund copy <profil> [--print]  Pubkey in die Zwischenablage (wl-copy, xclip od
 keybund test <profil> [--host h] Verbindungstest, Exit-Code 0 bei Erfolg
 keybund install-key <profil> [--host h] [--token-stdin] [--remember]
                                  Pubkey eintragen: Server wie ssh-copy-id, GitHub/GitLab per API
+keybund trust <profil> [--host h] Host-Keys prüfen und bestätigen (Fingerprint)
+keybund config [key] [wert]      Einstellungen: projects-dir, keys-dir, known-hosts-per-profile, …
 keybund which [pfad|host]        Welcher Key wird hier benutzt – und warum?
 keybund clone <url> [-p id]      Klont ins richtige Profil, mit dem richtigen Key
 keybund apply [--dry-run] [-y]   Diff zeigen bzw. schreiben
@@ -209,7 +223,8 @@ Die Workflows kommen aus [firsttris/workflows](https://github.com/firsttris/work
 - [x] Phase 2 – GUI-MVP
 - [x] Phase 3 – Clone-Helfer, „Welcher Key?“, Archivieren, SSH-Signing, Warnung bei alten Keys
 - [x] Key-Upload per API (GitHub, GitLab; Device Flow und Token), Key auf Server eintragen
-- [ ] Phase 4 – KRunner, Flatpak, known_hosts pro Profil
+- [x] Host-Keys bestätigen, known_hosts pro Profil, letzter Test bleibt gespeichert, Ordner einstellbar
+- [ ] Phase 4 – KRunner, Flatpak
 - [ ] Phase 5/6 – macOS und Windows
 
 ## Stolperfallen, die Keybund abfängt

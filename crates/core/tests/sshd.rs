@@ -8,8 +8,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::time::Duration;
 
+use keybund_core::hostkeys::{self, HostKeyCheck};
 use keybund_core::keygen::{self, GenerateOptions};
-use keybund_core::model::{HostEntry, KeyRef, Profile, Provider};
+use keybund_core::model::{HostEntry, KeyRef, Profile, Provider, Settings};
 use keybund_core::{keyinstall, probe, render, Env};
 
 const PASSPHRASE: &str = "geheim";
@@ -149,7 +150,7 @@ fn passphrase_is_asked_once_then_the_agent_holds_the_key() {
     };
     let probe_cmd = |args: &[String]| {
         let mut cmd = Command::new("ssh");
-        cmd.args(["-F", "/dev/null", "-o", &known_hosts]);
+        cmd.args(["-F", "/dev/null", "-o", &known_hosts, "-o", "StrictHostKeyChecking=accept-new"]);
         cmd.args(
             args.iter().map(|a| if a.starts_with("~/") { env.expand(a).display().to_string() } else { a.clone() }),
         );
@@ -272,6 +273,7 @@ fn connection_test_detects_a_login_with_another_key() {
         let mut cmd = Command::new("ssh");
         cmd.arg("-v").args(["-F"]).arg(&user_config);
         cmd.args(["-o", &format!("UserKnownHostsFile={}", dir.join("known_hosts").display())]);
+        cmd.args(["-o", "StrictHostKeyChecking=accept-new"]);
         cmd.args(probe::ssh_args(&profile, &host).into_iter().map(|a| {
             if a.starts_with("~/") {
                 env.expand(&a).display().to_string()
@@ -323,12 +325,6 @@ fn installs_the_profile_key_on_a_server() {
         format!("Host 127.0.0.1\n    IdentityFile {}\n", env.expand("~/.ssh/privat_ed25519").display()),
     )
     .unwrap();
-    let extra: Vec<String> = vec![
-        "-F".into(),
-        user_config.display().to_string(),
-        "-o".into(),
-        format!("UserKnownHostsFile={}", dir.join("known_hosts").display()),
-    ];
     let host = HostEntry {
         alias: Some("nas".into()),
         hostname: "127.0.0.1".into(),
@@ -344,6 +340,31 @@ fn installs_the_profile_key_on_a_server() {
         ..Default::default()
     };
 
+    // First contact: the user confirms the fingerprint, the key goes into
+    // the profile's own known_hosts file. ssh then checks strictly.
+    let settings = Settings::default();
+    let HostKeyCheck::Unknown { host: name, file, keys } = hostkeys::check(&env, &settings, &profile, &host).unwrap()
+    else {
+        panic!("expected an unknown host key")
+    };
+    assert_eq!(name, format!("[127.0.0.1]:{port}"));
+    assert_eq!(file, "~/.ssh/known_hosts.d/nas");
+    assert!(keys.iter().all(|k| k.fingerprint.starts_with("SHA256:")));
+    let err = hostkeys::trust(&env, &settings, &profile, &host, &["SHA256:falsch".into()]).unwrap_err();
+    assert_eq!(err.kind(), "host_key_changed");
+    let fingerprints: Vec<String> = keys.iter().map(|k| k.fingerprint.clone()).collect();
+    assert_eq!(hostkeys::trust(&env, &settings, &profile, &host, &fingerprints).unwrap(), keys.len());
+    assert_eq!(hostkeys::check(&env, &settings, &profile, &host).unwrap(), HostKeyCheck::Known);
+    let known_hosts = env.expand("~/.ssh/known_hosts.d/nas");
+    assert!(fs::read_to_string(&known_hosts).unwrap().starts_with(&format!("[127.0.0.1]:{port} ")));
+
+    let extra: Vec<String> = vec![
+        "-F".into(),
+        user_config.display().to_string(),
+        "-o".into(),
+        format!("UserKnownHostsFile={}", known_hosts.display()),
+    ];
+
     let r = keyinstall::install_with(&env, &profile, &host, &extra).unwrap();
     assert!(r.success && !r.already_present, "{} / {}", r.message, r.output);
     let authorized = fs::read_to_string(dir.join("authorized_keys")).unwrap();
@@ -357,7 +378,7 @@ fn installs_the_profile_key_on_a_server() {
 
     // Now the profile key alone gets in.
     let mut cmd = Command::new("ssh");
-    cmd.arg("-v").args(["-F", "/dev/null", "-o", &format!("UserKnownHostsFile={}", dir.join("known_hosts").display())]);
+    cmd.arg("-v").args(["-F", "/dev/null", "-o", &format!("UserKnownHostsFile={}", known_hosts.display())]);
     cmd.args(probe::ssh_args(&profile, &HostEntry { alias: None, ..host.clone() }).into_iter().map(|a| {
         if a.starts_with("~/") {
             env.expand(&a).display().to_string()

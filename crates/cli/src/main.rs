@@ -53,6 +53,16 @@ enum Command {
         #[arg(long)]
         remember: bool,
     },
+    /// Host-Keys der Server eines Profils prüfen und bestätigen
+    Trust {
+        profile: String,
+        /// Nur dieser Host (Alias oder Hostname/IP)
+        #[arg(long)]
+        host: Option<String>,
+        /// Ohne Rückfrage übernehmen (nur wenn der Fingerprint anders geprüft wurde)
+        #[arg(long, short)]
+        yes: bool,
+    },
     /// Verbindung testen (Exit-Code 0 bei Erfolg)
     Test {
         profile: String,
@@ -143,6 +153,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Edit(args) => commands::edit(&env, *args),
         Command::Copy { profile, print } => commands::copy(&env, &profile, print),
         Command::Test { profile, host } => commands::test(&env, &profile, host.as_deref()),
+        Command::Trust { profile, host, yes } => commands::trust(&env, &profile, host.as_deref(), yes),
         Command::InstallKey { profile, host, token_stdin, remember } => commands::install_key(
             &env,
             &profile,

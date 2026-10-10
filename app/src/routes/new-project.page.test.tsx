@@ -54,6 +54,8 @@ describe("wizard", () => {
     await user.click(screen.getByRole("button", { name: "GitLab-Seite öffnen" }));
     expect(backend.state.openedUrls).toEqual(["https://gitlab.kunde-c.de/-/user_settings/ssh_keys"]);
     await user.click(screen.getByRole("button", { name: "Ich hab ihn eingetragen" }));
+    // A self-hosted GitLab has no published host key: confirm it first.
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Fingerprint stimmt" }));
     expect(await screen.findByText("Verbunden als @tristan")).toBeInTheDocument();
 
     const created = backend.state.profiles.find((p) => p.id === "kunde-c")!;
@@ -190,6 +192,7 @@ describe("wizard", () => {
     expect(await screen.findByRole("heading", { name: "Key auf dem Server eintragen" })).toBeInTheDocument();
     expect(backend.state.openedUrls).toEqual([]);
     await user.click(screen.getByRole("button", { name: "Key auf nas eintragen" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Fingerprint stimmt" }));
     expect(await screen.findByText("Key auf nas eingetragen")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Verbindung testen" }));
     expect(await screen.findByText("Fertig – ssh nas nimmt jetzt diesen Key.")).toBeInTheDocument();
