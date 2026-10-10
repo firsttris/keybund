@@ -1,0 +1,37 @@
+[package]
+name = "keybund-app"
+description = "Keybund desktop app (Tauri)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "keybund_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "keybund-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+keybund-core = { workspace = true, features = ["specta"] }
+serde.workspace = true
+serde_json.workspace = true
+specta.workspace = true
+specta-typescript = "0.0.12"
+tauri = { version = "2", features = [] }
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+
+[dev-dependencies]
+tempfile = "3"
+tauri = { version = "2", features = ["test"] }
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+specta.workspace = true

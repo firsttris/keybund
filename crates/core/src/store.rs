@@ -5,7 +5,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::fsutil;
-use crate::model::{Config, GitIdentity, HostEntry, KeyRef, Profile};
+use crate::model::{Config, GitIdentity, HostEntry, KeyRef, Profile, Provider};
 use crate::{Env, Error, Result};
 
 // The on-disk layout uses TOML-friendly singular names (`[[profile]]`,
@@ -25,15 +25,43 @@ struct TomlProfile {
     name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     color: Option<String>,
-    key: KeyRef,
+    key: TomlKey,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    git: Option<GitIdentity>,
+    git: Option<TomlGit>,
     #[serde(default)]
     folders: Vec<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     archived: bool,
     #[serde(default, rename = "host", skip_serializing_if = "Vec::is_empty")]
-    hosts: Vec<HostEntry>,
+    hosts: Vec<TomlHost>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TomlKey {
+    path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    comment: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TomlGit {
+    name: String,
+    email: String,
+    #[serde(default)]
+    sign: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TomlHost {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    alias: Option<String>,
+    hostname: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    user: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    port: Option<u16>,
+    #[serde(default)]
+    provider: Provider,
 }
 
 impl From<TomlProfile> for Profile {
@@ -42,11 +70,21 @@ impl From<TomlProfile> for Profile {
             id: p.id,
             name: p.name,
             color: p.color,
-            key: p.key,
-            git: p.git,
+            key: KeyRef { path: p.key.path, comment: p.key.comment },
+            git: p.git.map(|g| GitIdentity { name: g.name, email: g.email, sign: g.sign }),
             folders: p.folders,
             archived: p.archived,
-            hosts: p.hosts,
+            hosts: p
+                .hosts
+                .into_iter()
+                .map(|h| HostEntry {
+                    alias: h.alias,
+                    hostname: h.hostname,
+                    user: h.user,
+                    port: h.port,
+                    provider: h.provider,
+                })
+                .collect(),
         }
     }
 }
@@ -57,11 +95,21 @@ impl From<Profile> for TomlProfile {
             id: p.id,
             name: p.name,
             color: p.color,
-            key: p.key,
-            git: p.git,
+            key: TomlKey { path: p.key.path, comment: p.key.comment },
+            git: p.git.map(|g| TomlGit { name: g.name, email: g.email, sign: g.sign }),
             folders: p.folders,
             archived: p.archived,
-            hosts: p.hosts,
+            hosts: p
+                .hosts
+                .into_iter()
+                .map(|h| TomlHost {
+                    alias: h.alias,
+                    hostname: h.hostname,
+                    user: h.user,
+                    port: h.port,
+                    provider: h.provider,
+                })
+                .collect(),
         }
     }
 }
@@ -192,7 +240,6 @@ pub fn normalize_folder(env: &Env, input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Provider;
 
     const SAMPLE: &str = r#"
 default_profile = "privat"

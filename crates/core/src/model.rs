@@ -34,7 +34,6 @@ pub struct Profile {
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct KeyRef {
     pub path: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
 }
 
@@ -50,7 +49,6 @@ pub struct GitIdentity {
     pub name: String,
     pub email: String,
     /// Sign commits and tags with the profile's SSH key.
-    #[serde(default)]
     pub sign: bool,
 }
 
@@ -59,14 +57,10 @@ pub struct GitIdentity {
 pub struct HostEntry {
     /// SSH alias (e.g. `meinserver`). Hosts with an alias get their own
     /// `Host` block in the SSH config.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
     pub hostname: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
-    #[serde(default)]
     pub provider: Provider,
 }
 
