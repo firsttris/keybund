@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::Config;
-use crate::{apply, fsutil, import, keygen, process, render, store, which, Env, Result};
+use crate::{apply, fsutil, gitenv, import, keygen, process, render, store, which, Env, Result};
 
 /// Keys older than this get a rotation hint.
 pub const OLD_KEY_DAYS: u32 = 2 * 365;
@@ -99,6 +99,7 @@ pub fn run(env: &Env) -> Report {
     checks.extend(permission_checks(env, &config));
     checks.extend(include_checks(env));
     checks.push(up_to_date_check(env, &config));
+    checks.push(git_env_check(env));
     checks.push(agent_check(env));
     checks.extend(add_keys_check(env, &config));
     checks.extend(ssh_config_checks(env, &config));
@@ -191,6 +192,30 @@ fn up_to_date_check(env: &Env, config: &Config) -> Check {
             .fix(Fix::Apply),
         Err(e) => Check::new("configs", Status::Error, "Configs können nicht berechnet werden").detail(e.to_string()),
     }
+}
+
+/// Variables that switch Keybund off for git, wherever they are set.
+fn git_env_check(env: &Env) -> Check {
+    let found = gitenv::detect(env);
+    let Some(first) = found.first() else {
+        return Check::new("git-env", Status::Ok, "Keine Umgebungsvariable übersteuert Git");
+    };
+    let detail = found
+        .iter()
+        .map(|o| match o.name.as_str() {
+            "GIT_SSH_COMMAND" => format!(
+                "GIT_SSH_COMMAND ist in {} gesetzt („{}“). Git benutzt dann in jedem Repo diesen Befehl statt des Profil-Keys.",
+                o.origin, o.value
+            ),
+            _ => format!(
+                "{} zeigt in {} auf {} – Git liest dann ~/.gitconfig mit dem Keybund-Include nicht.",
+                o.name, o.origin, o.value
+            ),
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    Check::new("git-env", Status::Error, format!("{} übersteuert Keybund", first.name))
+        .detail(format!("{detail} Zeile entfernen und neu anmelden bzw. ein neues Terminal öffnen."))
 }
 
 fn agent_check(env: &Env) -> Check {

@@ -456,3 +456,33 @@ fn import_existing_ssh_config_and_clean_up() {
     let out = git(&env, &other, &["config", "--get", "core.sshCommand"]);
     assert!(String::from_utf8_lossy(&out.stdout).contains("privat2_ed25519"));
 }
+
+#[test]
+fn git_ssh_command_in_the_shell_config_is_reported() {
+    if !has("git") || !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    apply::apply_config(&env, &config).unwrap();
+    let report = doctor::run(&env);
+    assert_eq!(report.checks.iter().find(|c| c.id == "git-env").unwrap().status, doctor::Status::Ok);
+
+    fs::create_dir_all(env.home.join(".config/fish")).unwrap();
+    fs::write(
+        env.home.join(".config/fish/config.fish"),
+        "fish_add_path ~/bin\nset -gx GIT_SSH_COMMAND \"ssh -i ~/.ssh/old_key\"\n",
+    )
+    .unwrap();
+
+    let report = doctor::run(&env);
+    let check = report.checks.iter().find(|c| c.id == "git-env").unwrap();
+    assert_eq!(check.status, doctor::Status::Error);
+    assert_eq!(check.title, "GIT_SSH_COMMAND übersteuert Keybund");
+    assert!(check.detail.as_deref().unwrap().contains("~/.config/fish/config.fish:2"), "{:?}", check.detail);
+
+    let r = which::which(&env, &config, "~/dev/kunde-a").unwrap();
+    assert_eq!(r.key_path.as_deref(), Some("~/.ssh/old_key"));
+    assert_eq!(r.via.as_deref(), Some("GIT_SSH_COMMAND"));
+    assert_eq!(r.source.as_deref(), Some("~/.config/fish/config.fish:2"));
+    assert!(r.notes[0].starts_with("GIT_SSH_COMMAND ist gesetzt"));
+}

@@ -12,6 +12,9 @@ pub struct Env {
     pub home: PathBuf,
     /// `~/.config/keybund` (respects `XDG_CONFIG_HOME`).
     pub config_dir: PathBuf,
+    /// The user's login shell (`$SHELL`), asked for variables like
+    /// `GIT_SSH_COMMAND` that a GUI process does not inherit.
+    pub login_shell: Option<PathBuf>,
 }
 
 impl Env {
@@ -23,14 +26,15 @@ impl Env {
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
             .unwrap_or_else(|| home.join(".config"));
-        Ok(Env { home, config_dir: config_base.join("keybund") })
+        let login_shell = std::env::var_os("SHELL").filter(|s| !s.is_empty()).map(PathBuf::from);
+        Ok(Env { home, config_dir: config_base.join("keybund"), login_shell })
     }
 
     /// Locations below an arbitrary home directory (used by tests).
     pub fn with_home(home: impl Into<PathBuf>) -> Self {
         let home = home.into();
         let config_dir = home.join(".config").join("keybund");
-        Env { home, config_dir }
+        Env { home, config_dir, login_shell: None }
     }
 
     /// Expands a leading `~` to the home directory.

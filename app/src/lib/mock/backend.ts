@@ -439,6 +439,7 @@ function doctorReport(state: MockState): Report {
         },
     { id: "ssh-dir-perms", status: "ok", title: "~/.ssh hat Rechte 700", detail: null, fix: null },
     { id: "key-perms", status: "ok", title: "Private Keys haben Rechte 600", detail: null, fix: null },
+    { id: "git-env", status: "ok", title: "Keine Umgebungsvariable übersteuert Git", detail: null, fix: null },
     { id: "agent", status: "ok", title: "ssh-agent läuft", detail: "3 Keys geladen", fix: null },
     { id: "add-keys", status: "ok", title: "AddKeysToAgent aktiv", detail: null, fix: null },
     plan.changes.length === 0

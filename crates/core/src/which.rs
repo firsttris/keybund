@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::model::{Config, KeyRef, Profile};
-use crate::{keygen, process, Env, Result};
+use crate::{gitenv, keygen, process, Env, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -138,6 +138,28 @@ fn which_folder(env: &Env, config: &Config, query: &str) -> Result<WhichResult> 
         result.notes.push("Ordner gehört zu keinem Profil, es gilt das Default-Profil.".into());
     } else {
         result.notes.push("Ordner gehört zu keinem Profil und es gibt kein Default-Profil.".into());
+    }
+
+    // GIT_SSH_COMMAND beats every core.sshCommand, including Keybund's.
+    let overrides = gitenv::detect(env);
+    if let Some(o) = overrides.iter().find(|o| o.name == "GIT_SSH_COMMAND") {
+        result.key_path = identity_from_ssh_command(&o.value).map(|k| contract_str(env, &k));
+        result.identities_only = Some(o.value.contains("IdentitiesOnly=yes"));
+        result.source = Some(o.origin.clone());
+        result.via = Some("GIT_SSH_COMMAND".into());
+        result.notes.insert(
+            0,
+            format!("GIT_SSH_COMMAND ist gesetzt ({}) und übersteuert Keybund: git benutzt „{}“.", o.origin, o.value),
+        );
+    }
+    if let Some(o) = overrides.iter().find(|o| o.name == "GIT_CONFIG_GLOBAL") {
+        result.notes.insert(
+            0,
+            format!(
+                "GIT_CONFIG_GLOBAL zeigt auf {} ({}) – ~/.gitconfig mit Keybund wird nicht gelesen.",
+                o.value, o.origin
+            ),
+        );
     }
 
     result.profile_id = result
