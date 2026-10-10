@@ -65,6 +65,7 @@ function ProfileDetail({ view }: { view: ProfileView }) {
   const serverOnly = isServerOnly(profile);
   const account = gitAccounts(profile)[0];
   const serverNames = servers(profile).map((h) => h.alias ?? h.hostname);
+  const aliasNames = gitAccounts(profile).flatMap((h) => (h.alias ? [h.alias] : []));
   const scope = [
     profile.folders.length > 0 && (
       <span key="f">
@@ -72,6 +73,11 @@ function ProfileDetail({ view }: { view: ProfileView }) {
       </span>
     ),
     view.is_default && <span key="d">Git außerhalb aller Projektordner</span>,
+    aliasNames.length > 0 && (
+      <span key="a">
+        Repos über <span className="font-mono text-secondary-foreground">{aliasNames.map((a) => `git@${a}:…`).join(", ")}</span>
+      </span>
+    ),
     serverNames.length > 0 && (
       <span key="s">
         Server <span className="font-mono text-secondary-foreground">{serverNames.join(", ")}</span>

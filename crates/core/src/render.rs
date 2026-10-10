@@ -62,7 +62,8 @@ pub fn ssh_config(config: &Config) -> String {
             let _ = writeln!(out, "\n# Profil: {}", p.name);
             let _ = writeln!(out, "Host {}", patterns.join(" "));
             let _ = writeln!(out, "    HostName {}", h.hostname);
-            if let Some(user) = &h.user {
+            // `ssh -T github-kunde` must log in as git, not as the local user.
+            if let Some(user) = h.user.as_deref().or(h.provider.git_user()) {
                 let _ = writeln!(out, "    User {user}");
             }
             if let Some(port) = h.port {
@@ -324,5 +325,18 @@ mod tests {
     fn quotes_paths_with_spaces() {
         assert_eq!(ssh_command("~/my keys/a"), "ssh -i ~/'my keys/a' -o IdentitiesOnly=yes -o AddKeysToAgent=yes");
         assert_eq!(git_value("a # b"), "\"a # b\"");
+    }
+
+    #[test]
+    fn git_alias_block_sets_the_git_user() {
+        let mut p = profile("pflege", "Pflege", "~/dev/pflege/", false);
+        p.hosts = vec![HostEntry {
+            alias: Some("pflegeabc".into()),
+            hostname: "github.com".into(),
+            provider: Provider::Github,
+            ..Default::default()
+        }];
+        let conf = ssh_config(&Config { profiles: vec![p], ..Default::default() });
+        assert!(conf.contains("Host pflegeabc\n    HostName github.com\n    User git\n"), "{conf}");
     }
 }

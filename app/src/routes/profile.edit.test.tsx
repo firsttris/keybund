@@ -93,6 +93,22 @@ describe("profile editing", () => {
     expect(screen.queryByRole("form", { name: "Server hinzufügen" })).not.toBeInTheDocument();
   });
 
+  it("explains a git account behind an alias", async () => {
+    await renderApp("/profile/pflege", (b) => {
+      b.state.profiles.push({
+        id: "pflege",
+        name: "Pflegeabc",
+        color: "rose",
+        key: { path: "~/.ssh/pflegeabc/id_ed25519", comment: null },
+        git: null,
+        folders: [],
+        archived: false,
+        hosts: [{ provider: "github", hostname: "github.com", alias: "pflegeabc", user: null, port: null }],
+      });
+    });
+    expect(await screen.findByText(/Gilt für/)).toHaveTextContent("Repos über git@pflegeabc:…");
+  });
+
   it("shows a server-only profile without git cards", async () => {
     await renderApp("/profile/hetzner", (b) => {
       b.state.profiles.push({

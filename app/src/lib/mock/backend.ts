@@ -283,7 +283,8 @@ function sshHostBlocks(p: Profile, settings?: Settings): string {
     .filter((h) => sshPatterns(h).length > 0)
     .map((h) => {
       let block = `# Profil: ${p.name}\nHost ${sshPatterns(h).join(" ")}\n    HostName ${h.hostname}\n`;
-      if (h.user) block += `    User ${h.user}\n`;
+      const user = h.user ?? (h.provider === "generic" ? null : "git");
+      if (user) block += `    User ${user}\n`;
       if (h.port != null) block += `    Port ${h.port}\n`;
       block += `    IdentityFile ${p.key.path}\n    IdentitiesOnly yes\n    AddKeysToAgent yes\n`;
       if (settings?.known_hosts_per_profile && h.provider === "generic") {

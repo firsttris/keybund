@@ -61,11 +61,13 @@ pub fn ssh_args(profile: &Profile, host: &HostEntry) -> Vec<String> {
             args.push(port.to_string());
         }
     }
+    // Git hosts only accept their own user ("git"); without it ssh would
+    // log in with the local user name, also through an alias.
     let user = host.user.as_deref().or(host.provider.git_user());
-    let target = match (host.alias.as_deref(), user) {
-        (Some(alias), _) => alias.to_string(),
-        (None, Some(u)) => format!("{u}@{}", host.hostname),
-        (None, None) => host.hostname.clone(),
+    let name = host.alias.as_deref().unwrap_or(&host.hostname);
+    let target = match user {
+        Some(u) => format!("{u}@{name}"),
+        None => name.to_string(),
     };
     args.push(target);
     if host.provider == Provider::Generic {
@@ -334,5 +336,21 @@ mod tests {
         let args = ssh_args(&p, &server);
         assert_eq!(&args[args.len() - 2..], ["meinserver", "true"]);
         assert!(!args.contains(&"-p".to_string()));
+    }
+
+    /// A git account behind an alias (`Host pflegeabc` → github.com): without
+    /// `git@` ssh would log in with the local user name and fail.
+    #[test]
+    fn git_alias_logs_in_as_git() {
+        let p = Profile { key: crate::model::KeyRef { path: "~/.ssh/a".into(), comment: None }, ..Default::default() };
+        let aliased = HostEntry { alias: Some("pflegeabc".into()), ..host(Provider::Github, "github.com") };
+        assert_eq!(ssh_args(&p, &aliased).last().unwrap(), "git@pflegeabc");
+        let server = HostEntry {
+            alias: Some("nas".into()),
+            user: Some("admin".into()),
+            hostname: "10.0.0.2".into(),
+            ..Default::default()
+        };
+        assert_eq!(&ssh_args(&p, &server)[ssh_args(&p, &server).len() - 2..], ["admin@nas", "true"]);
     }
 }
