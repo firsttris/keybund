@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Keybund
+GenericName=SSH-Key-Verwaltung
+Comment=SSH-Keys pro Projekt
+Exec=@BIN_DIR@/Keybund.AppImage
+Icon=keybund
+Terminal=false
+Categories=Development;Utility;
+Keywords=ssh;git;key;gitlab;github;

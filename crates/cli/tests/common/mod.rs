@@ -76,6 +76,15 @@ impl Sandbox {
         fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
     }
 
+    /// A fake `ssh` that answers `ssh -G` with the given lines on stdout.
+    #[cfg(unix)]
+    pub fn fake_ssh_g(&self, lines: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        let script = self.bin.join("ssh");
+        fs::write(&script, format!("#!/bin/sh\ncat <<'EOF'\n{lines}\nEOF\n")).unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
     pub fn ssh_log(&self) -> String {
         fs::read_to_string(self.dir.path().join("ssh-args.log")).unwrap_or_default()
     }

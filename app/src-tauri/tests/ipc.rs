@@ -120,3 +120,69 @@ fn fix_is_tagged_like_the_typescript_type() {
     let report = invoke(&webview, "fix_doctor", json!({ "fix": { "type": "permissions" } })).unwrap();
     assert!(report["checks"].is_array());
 }
+
+#[test]
+fn profile_commands_over_ipc() {
+    if std::process::Command::new("ssh-keygen").arg("-?").output().is_err() {
+        assert!(std::env::var_os("CI").is_none(), "ssh-keygen is required in CI");
+        return;
+    }
+    let (_d, _app, webview) = app();
+    let state = webview.state::<AppState>();
+    let env = state.env.clone();
+    for id in ["a", "b"] {
+        let project: keybund_app_lib::api::NewProject = serde_json::from_value(new_project(id)).unwrap();
+        keybund_app_lib::api::create_project(&env, &project).unwrap();
+    }
+
+    let normalized = invoke(&webview, "normalize_folder", json!({ "folder": "~/dev/x" })).unwrap();
+    assert_eq!(normalized, "~/dev/x/");
+    let paths = invoke(&webview, "paths", json!({})).unwrap();
+    assert_eq!(paths["profiles_file"], "~/.config/keybund/profiles.toml");
+
+    let files = invoke(&webview, "generated_config", json!({ "id": "b" })).unwrap();
+    assert_eq!(files[0]["path"], "~/.config/keybund/git/b.gitconfig");
+
+    let keys = invoke(&webview, "scan_keys", json!({})).unwrap();
+    assert_eq!(keys.as_array().unwrap().len(), 2);
+
+    // Edit → plan → stale apply → apply.
+    let mut profile = invoke(&webview, "load_profiles", json!({})).unwrap()["profiles"][1]["profile"].clone();
+    profile["git"]["sign"] = json!(true);
+    let saved = invoke(&webview, "update_profile", json!({ "profile": profile })).unwrap();
+    assert_eq!(saved["profile"]["git"]["sign"], true);
+    let plan = invoke(&webview, "plan_changes", json!({})).unwrap();
+    let diffs: Vec<Value> = plan["changes"].as_array().unwrap().iter().map(|c| c["diff"].clone()).collect();
+    assert!(!diffs.is_empty());
+    let err = invoke(&webview, "apply_changes", json!({ "expectedDiffs": [] })).unwrap_err();
+    assert_eq!(err["kind"], "stale_plan");
+    let report = invoke(&webview, "apply_changes", json!({ "expectedDiffs": diffs })).unwrap();
+    assert!(!report["written"].as_array().unwrap().is_empty());
+
+    invoke(&webview, "set_default_profile", json!({ "id": "b" })).unwrap();
+    assert_eq!(invoke(&webview, "load_profiles", json!({})).unwrap()["default_profile"], "b");
+
+    assert_eq!(invoke(&webview, "last_test", json!({ "id": "a" })).unwrap(), Value::Null);
+    let err = invoke(&webview, "clone_repo", json!({ "url": "git@x:y/z.git", "profileId": "nope", "target": null }))
+        .unwrap_err();
+    assert_eq!(err["kind"], "profile_not_found");
+    let err = invoke(&webview, "open_url", json!({ "url": "file:///etc/passwd" })).unwrap_err();
+    assert!(err["message"].as_str().unwrap().contains("https"));
+}
+
+#[test]
+fn test_connection_without_host_is_an_error() {
+    if std::process::Command::new("ssh-keygen").arg("-?").output().is_err() {
+        return;
+    }
+    let (_d, _app, webview) = app();
+    let env = webview.state::<AppState>().env.clone();
+    let mut project = new_project("s");
+    project["profile"]["hosts"] = json!([]);
+    let project: keybund_app_lib::api::NewProject = serde_json::from_value(project).unwrap();
+    keybund_app_lib::api::create_project(&env, &project).unwrap();
+    let err = invoke(&webview, "test_connection", json!({ "id": "s" })).unwrap_err();
+    assert_eq!(err["kind"], "no_host");
+    let which = invoke(&webview, "which", json!({ "query": "~/dev/s/repo" })).unwrap();
+    assert_eq!(which["profile_id"], "s");
+}

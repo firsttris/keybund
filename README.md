@@ -1,0 +1,154 @@
+# Keybund
+
+**SSH-Keys pro Projekt.** Keybund ordnet jedem Projekt ein Profil zu – Key, Hosts, Ordner, Git-Identität – und schreibt
+daraus Standard-Configs für OpenSSH und Git. Danach nehmen Terminal, Git und Dolphin automatisch den richtigen Key,
+ohne dass Keybund läuft.
+
+- **Kein eigener Agent, kein eigenes Protokoll.** Keybund erzeugt nur `~/.ssh/config`-Blöcke und Gitconfig-Snippets.
+- **Eigene Dateien statt Fremdeingriff.** In deine Configs kommt genau je eine Include-Zeile, mit einmaligem Backup.
+- **Private Keys werden nie gelesen.** Keybund kennt nur Pfade, Fingerprints und Public Keys; erzeugt wird per `ssh-keygen`.
+- **Vorschau vor jedem Schreiben.** Jede Änderung wird als Diff gezeigt und erst nach Bestätigung atomar geschrieben.
+- **Ein Rust-Core, zwei Oberflächen:** CLI und GUI (Tauri). KRunner folgt.
+
+## Wie es funktioniert
+
+`~/.config/keybund/profiles.toml` ist die einzige Quelle der Wahrheit:
+
+```toml
+default_profile = "privat"
+
+[[profile]]
+id = "privat"
+name = "Privat"
+color = "emerald"
+key = { path = "~/.ssh/privat_ed25519", comment = "tristan@zentrale" }
+git = { name = "Tristan", email = "tristan@privat.de", sign = true }
+folders = ["~/dev/privat/"]
+
+[[profile.host]]
+alias = "meinserver"
+hostname = "1.2.3.4"
+user = "tristan"
+provider = "generic"
+
+[[profile]]
+id = "sparkasse"
+name = "Sparkasse"
+key = { path = "~/.ssh/sparkasse_ed25519" }
+git = { name = "Tristan", email = "tristan@kunde.de" }
+folders = ["~/dev/sparkasse/"]
+
+[[profile.host]]
+hostname = "gitlab.kunde.de"
+provider = "gitlab"
+```
+
+Daraus schreibt Keybund:
+
+| Datei | Inhalt | eingebunden über |
+| --- | --- | --- |
+| `~/.ssh/config.d/keybund.conf` | `Host`-Blöcke für Server mit Alias, je `IdentityFile` + `IdentitiesOnly yes` | `Include` ganz oben in `~/.ssh/config` |
+| `~/.config/keybund/git/index.gitconfig` | `core.sshCommand` des Default-Profils, ein `includeIf "gitdir:…/"` pro Ordner | `[include]` in `~/.gitconfig` |
+| `~/.config/keybund/git/<id>.gitconfig` | `user.name`, `user.email`, `core.sshCommand = ssh -i <key> -o IdentitiesOnly=yes`, Signing | `index.gitconfig` |
+| `~/.config/keybund/allowed_signers` | E-Mail + Pubkey je signierendem Profil | `gpg.ssh.allowedSignersFile` |
+
+## CLI
+
+```text
+keybund list                     Profile mit Fingerprint, Ordnern, Hosts
+keybund show <profil>            Details und Pubkey
+keybund new                      Wizard im Terminal (oder komplett über Optionen, siehe --help)
+keybund copy <profil> [--print]  Pubkey in die Zwischenablage (wl-copy, xclip oder xsel)
+keybund test <profil>            Verbindungstest, Exit-Code 0 bei Erfolg
+keybund which [pfad|host]        Welcher Key wird hier benutzt – und warum?
+keybund clone <url> [-p id]      Klont ins richtige Profil, mit dem richtigen Key
+keybund apply [--dry-run] [-y]   Diff zeigen bzw. schreiben
+keybund doctor [--fix]           Alle Checks, Exit-Code ≠ 0 bei Problemen
+keybund keys                     Vorhandene Keys in ~/.ssh
+keybund default <profil>         Default-Profil setzen
+keybund archive <profil>         Key nach ~/.ssh/archive, Configs entfernen
+```
+
+Beispiel ohne Rückfragen:
+
+```sh
+keybund new --name "Kunde C" --provider github --folder ~/dev/kunde-c \
+  --git-name Tristan --git-email tristan@kunde-c.de --yes
+```
+
+## GUI
+
+Profilliste mit Detailseite (Key, Verbindungstest, Hosts, Ordner, Git-Identität, generierte Config), Wizard „Neues
+Projekt“ (Pubkey landet in der Zwischenablage, die Provider-Seite öffnet sich, danach Verbindungstest), „Welcher Key?“
+mit Doctor, Clone-Helfer, Diff-Ansicht zum Anwenden und Einstellungen mit Import vorhandener Keys.
+
+## Aufbau
+
+```text
+crates/core/        keybund-core: store, keygen, render, apply, doctor, which, probe, clone, provider, archive
+crates/cli/         keybund (clap) – dünne Schicht über dem Core
+app/src-tauri/      Tauri-Commands (api.rs testbar, commands.rs dünne Wrapper)
+app/src/            React + TanStack Router/Query + shadcn/ui (Zinc)
+app/src/lib/bindings.ts   von tauri-specta generiert (`just bindings`)
+app/src/lib/mock/   In-Memory-Backend mit allen Commands (Browser-Vorschau, Tests)
+packaging/          .desktop-Datei, Fedora-Toolbox-Setup
+```
+
+## Entwickeln
+
+Unter Bazzite/Fedora am besten in einer Toolbox, damit das Host-System sauber bleibt:
+
+```sh
+packaging/toolbox.sh            # einmalig: Toolbox mit webkit2gtk, Rust, Node, pnpm, just
+toolbox enter keybund-dev
+just setup                      # Frontend-Abhängigkeiten
+just dev                        # App mit Hot Reload
+just dev-mock                   # nur das Frontend im Browser, gegen das Mock-Backend
+just install                    # CLI + AppImage nach ~/.local/bin, .desktop-Datei
+```
+
+## Tests
+
+Jede Schicht hat eigene Tests, alle laufen in der CI (`.github/workflows/ci.yml`):
+
+| Schicht | Was | Wo |
+| --- | --- | --- |
+| Unit (Rust) | Parsing, Validierung, Diff, Include-Logik, Provider-Ausgaben, URL-Parsing | `crates/*/src/**` |
+| Snapshot | `render` ist rein funktional, jede Profil-Kombination hat eine Golden-File (insta) | `crates/core/src/snapshots/` |
+| Integration (Rust) | `apply` gegen ein temporäres HOME, Auflösung mit echtem `git` und `ssh -G`, Doctor, Archiv | `crates/core/tests/` |
+| Integration (CLI) | Jeder Befehl gegen ein temporäres HOME, Fake-`ssh` für Provider-Antworten | `crates/cli/tests/cli.rs` |
+| E2E (CLI) | Kompletter Lebenszyklus: zwei Kunden auf github.com, Server, Clone, Doctor, Archiv | `crates/cli/tests/e2e.rs` |
+| IPC (Tauri) | Commands über die Tauri-IPC mit Mock-Runtime und echten Capabilities | `app/src-tauri/tests/ipc.rs` |
+| Vertrag | `bindings.ts` muss zu den Rust-Commands passen; Mock-Backend verhält sich wie der Core | `app/src-tauri/tests/bindings.rs`, `app/src/lib/mock/*.test.ts` |
+| Unit/Komponenten (Frontend) | Vitest + Testing Library, ganze App gegen das Mock-Backend, Coverage-Schwellen | `app/src/**/*.test.ts(x)` |
+| E2E (Frontend) | Playwright, alle Flows auf Desktop- und schmalem Viewport | `app/e2e/` |
+
+```sh
+just            # lint + alle Tests
+just test-rust  # nur Rust
+just e2e        # nur Playwright
+just coverage   # Rust-Coverage (cargo-llvm-cov)
+```
+
+Vor jedem Release zusätzlich von Hand: `ssh meinserver`, `sftp://meinserver` in Dolphin, Push in zwei Kundenordnern,
+Clone über den Helfer, `keybund doctor` grün.
+
+## Stand
+
+- [x] Phase 0 – Gerüst (Workspace, Tauri 2, React, TanStack, shadcn, tauri-specta, CI)
+- [x] Phase 1 – Core + CLI
+- [x] Phase 2 – GUI-MVP
+- [x] Phase 3 – Clone-Helfer, „Welcher Key?“, Archivieren, SSH-Signing, Warnung bei alten Keys
+- [ ] Phase 4 – KRunner, Key-Upload per API, Flatpak, known_hosts pro Profil
+- [ ] Phase 5/6 – macOS und Windows
+
+## Stolperfallen, die Keybund abfängt
+
+- `Include` unter einem `Host`-Block gilt nur für diesen Host → Keybund setzt es als erste Zeile, `doctor` prüft die Position.
+- „Too many authentication failures“ → `IdentitiesOnly yes` überall.
+- `includeIf` greift beim ersten `git clone` nicht → `keybund clone` übergibt `core.sshCommand` direkt.
+- `gitdir:` ohne abschließenden `/` matcht keine Unterordner → Ordner werden normalisiert (Slash, Symlinks aufgelöst).
+- `ssh -T` bei GitHub endet auch bei Erfolg mit Exit-Code 1 → Erfolg wird an der Ausgabe erkannt.
+- Erster Kontakt blockiert im BatchMode → Test mit `StrictHostKeyChecking=accept-new`.
+- Zu offene Rechte → `doctor --fix` setzt 700/600.
+- Ein globaler `Host github.com` mit `IdentityFile` mischt sich ein → `doctor` warnt.

@@ -86,3 +86,42 @@ impl Error {
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[cfg(test)]
+mod tests {
+    use super::Error;
+
+    #[test]
+    fn kinds_are_unique_and_messages_readable() {
+        let io = || std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
+        let all = [
+            Error::NoHome,
+            Error::ProfileNotFound("a".into()),
+            Error::DuplicateId("a".into()),
+            Error::InvalidId("a".into()),
+            Error::MissingName("a".into()),
+            Error::DefaultProfileMissing("a".into()),
+            Error::NestedFolders("a".into(), "b".into()),
+            Error::DuplicateAlias("a".into()),
+            Error::KeyMissing("a".into()),
+            Error::KeyExists("a".into()),
+            Error::InvalidPublicKey("a".into()),
+            Error::ToolMissing("a".into()),
+            Error::ToolFailed { tool: "a".into(), message: "b".into() },
+            Error::ConfigParse("a".into()),
+            Error::InvalidUrl("a".into()),
+            Error::TargetExists("a".into()),
+            Error::NoFolder("a".into()),
+            Error::NoHost("a".into()),
+            Error::Archived("a".into()),
+            Error::StalePlan("a".into()),
+            Error::io("/x", io()),
+        ];
+        let mut kinds: Vec<&str> = all.iter().map(Error::kind).collect();
+        kinds.sort();
+        kinds.dedup();
+        assert_eq!(kinds.len(), all.len());
+        assert!(all.iter().all(|e| !e.to_string().is_empty()));
+        assert_eq!(Error::io("/x", io()).to_string(), "Dateizugriff auf /x fehlgeschlagen: denied");
+    }
+}

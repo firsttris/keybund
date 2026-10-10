@@ -235,3 +235,95 @@ fn archive_moves_key_and_drops_configs() {
     apply::apply(&env, &plan).unwrap();
     assert!(!env.profile_gitconfig("kunde-a").exists());
 }
+
+#[test]
+fn which_outside_profiles_and_with_local_override() {
+    if !has("git") || !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, mut config) = setup();
+    apply::apply_config(&env, &config).unwrap();
+
+    // A folder outside of all profiles falls back to the default profile.
+    let r = which::which(&env, &config, &env.home.join("tmp").display().to_string()).unwrap();
+    assert_eq!(r.profile_id.as_deref(), Some("privat"));
+    assert_eq!(r.via.as_deref(), Some("Default-Profil"));
+
+    // A repo with its own core.sshCommand is reported as a mismatch.
+    let repo = env.home.join("dev/kunde-a/special");
+    fs::create_dir_all(&repo).unwrap();
+    git(&env, &repo, &["init", "-q"]);
+    git(&env, &repo, &["config", "core.sshCommand", "ssh -i ~/.ssh/kunde-b_ed25519"]);
+    let r = which::which(&env, &config, &repo.display().to_string()).unwrap();
+    assert_eq!(r.key_path.as_deref(), Some("~/.ssh/kunde-b_ed25519"));
+    assert_eq!(r.identities_only, Some(false));
+    assert!(r.notes.iter().any(|n| n.contains("anderen Key")), "{:?}", r.notes);
+
+    // Without a default profile, a repo outside of all folders has no key.
+    config.default_profile = None;
+    store::save(&env, &config).unwrap();
+    apply::apply_config(&env, &config).unwrap();
+    let elsewhere = env.home.join("elsewhere");
+    fs::create_dir_all(&elsewhere).unwrap();
+    git(&env, &elsewhere, &["init", "-q"]);
+    let r = which::which(&env, &config, &elsewhere.display().to_string()).unwrap();
+    assert_eq!(r.key_path, None);
+    assert!(r.notes.iter().any(|n| n.contains("kein core.sshCommand")));
+    let r = which::which(&env, &config, &env.home.join("plain").display().to_string()).unwrap();
+    assert!(r.notes.iter().any(|n| n.contains("kein Default-Profil")));
+}
+
+#[test]
+fn which_host_lists_profiles_sharing_it() {
+    if !has("ssh") || !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    let r = which::which(&env, &config, "github.com").unwrap();
+    assert_eq!(r.mode, which::WhichMode::Host);
+    assert_eq!(r.hostname.as_deref(), Some("github.com"));
+    assert_eq!(r.source.as_deref(), Some("ssh -G"));
+    assert!(r.notes.iter().any(|n| n.contains("kunde-a, kunde-b")), "{:?}", r.notes);
+}
+
+#[test]
+fn doctor_reports_missing_keys_bad_permissions_and_old_folders() {
+    if !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    apply::apply_config(&env, &config).unwrap();
+    fs::remove_file(env.expand("~/.ssh/kunde-b_ed25519.pub")).unwrap();
+    fs::remove_dir_all(env.home.join("dev/kunde-a")).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(env.ssh_dir(), fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    fs::write(
+        env.ssh_config(),
+        fs::read_to_string(env.ssh_config()).unwrap() + "Host github.com\n  IdentityFile ~/.ssh/id_rsa\n",
+    )
+    .unwrap();
+
+    let report = doctor::run(&env);
+    let by_id = |id: &str| report.checks.iter().find(|c| c.id == id).unwrap_or_else(|| panic!("no check {id}"));
+    assert_eq!(by_id("keys-missing").status, doctor::Status::Error);
+    assert!(by_id("keys-missing").detail.as_deref().unwrap().contains("kunde-b_ed25519.pub"));
+    assert_eq!(by_id("folders").status, doctor::Status::Warn);
+    assert_eq!(by_id("global-host-github.com").status, doctor::Status::Warn);
+    #[cfg(unix)]
+    {
+        assert_eq!(by_id("ssh-dir-perms").status, doctor::Status::Error);
+        doctor::fix(&env, &doctor::Fix::Permissions).unwrap();
+        let report = doctor::run(&env);
+        assert_eq!(report.checks.iter().find(|c| c.id == "ssh-dir-perms").unwrap().status, doctor::Status::Ok);
+    }
+    assert!(report.problems() > 0);
+    assert!(report.has_errors());
+
+    // A broken profiles.toml is reported, not a crash.
+    fs::write(env.profiles_file(), "this is = = not toml").unwrap();
+    let report = doctor::run(&env);
+    assert_eq!(report.checks[0].status, doctor::Status::Error);
+}

@@ -215,3 +215,147 @@ fn default_and_keys() {
         .stdout(predicate::str::contains("~/.ssh/a_ed25519").and(predicate::str::contains("[b]")));
     sb.cmd().arg("list").assert().success().stdout(predicate::str::contains("B (b) default"));
 }
+
+#[test]
+fn show_prints_details_and_public_key() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile(
+        "P",
+        &[
+            "--provider",
+            "gitlab",
+            "--host",
+            "gitlab.kunde.de",
+            "--folder",
+            "~/dev/p",
+            "--git-name",
+            "T",
+            "--git-email",
+            "t@p.de",
+            "--sign",
+        ],
+    );
+    sb.cmd().args(["show", "p"]).assert().success().stdout(
+        predicate::str::contains("ssh-ed25519")
+            .and(predicate::str::contains("SHA256:"))
+            .and(predicate::str::contains("T <t@p.de>"))
+            .and(predicate::str::contains("Signieren      ja"))
+            .and(predicate::str::contains("gitlab.kunde.de (GitLab)")),
+    );
+}
+
+#[test]
+fn which_host_uses_ssh_g() {
+    if !has_tools() || cfg!(not(unix)) {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile("Server", &["--provider", "generic", "--host", "1.2.3.4", "--alias", "meinserver", "--user", "t"]);
+    #[cfg(unix)]
+    {
+        let key = sb.path(".ssh/server_ed25519");
+        sb.fake_ssh_g(&format!(
+            "hostname 1.2.3.4\nuser t\nport 22\nidentitiesonly yes\nidentityfile ~/.ssh/id_rsa\nidentityfile {}",
+            key.display()
+        ));
+        sb.cmd().args(["which", "meinserver"]).assert().success().stdout(
+            predicate::str::contains("~/.ssh/server_ed25519")
+                .and(predicate::str::contains("Profil         Server"))
+                .and(predicate::str::contains("t@1.2.3.4:22"))
+                .and(predicate::str::contains("keybund.conf · via Host meinserver"))
+                .and(predicate::str::contains("ja, nur dieser Key wird angeboten")),
+        );
+
+        // Unknown host: ssh tries several default keys.
+        std::fs::write(sb.path(".ssh/id_rsa"), "x").unwrap();
+        std::fs::write(sb.path(".ssh/id_ecdsa"), "x").unwrap();
+        sb.fake_ssh_g(&format!(
+            "hostname example.org\nport 22\nidentitiesonly no\nidentityfile {}\nidentityfile {}",
+            sb.path(".ssh/id_rsa").display(),
+            sb.path(".ssh/id_ecdsa").display()
+        ));
+        sb.cmd().args(["which", "example.org"]).assert().success().stdout(
+            predicate::str::contains("ssh probiert 2 Keys nacheinander durch")
+                .and(predicate::str::contains("~/.ssh/id_rsa")),
+        );
+    }
+}
+
+#[test]
+fn test_generic_server_and_missing_host() {
+    if !has_tools() || cfg!(not(unix)) {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile("Server", &["--provider", "generic", "--host", "1.2.3.4", "--alias", "srv"]);
+    #[cfg(unix)]
+    {
+        sb.fake_ssh("", 0);
+        sb.cmd()
+            .args(["test", "server"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("srv: Anmeldung erfolgreich"));
+        assert!(sb.ssh_log().contains("srv true"));
+    }
+}
+
+#[test]
+fn clone_errors_are_explained() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile("P", &["--provider", "github", "--folder", "~/dev/p", "--git-name", "T", "--git-email", "t@p.de"]);
+    sb.cmd()
+        .args(["clone", "git@codeberg.org:a/b.git"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("Kein Profil hat den Host codeberg.org"));
+    sb.cmd().args(["clone", "kaputt"]).assert().code(2).stderr(predicate::str::contains("Ungültige Repo-URL"));
+    std::fs::create_dir_all(sb.path("dev/p/b")).unwrap();
+    sb.cmd()
+        .args(["clone", "git@github.com:a/b.git"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("Zielordner existiert bereits: ~/dev/p/b"));
+}
+
+#[test]
+fn keys_and_list_without_data() {
+    let sb = Sandbox::new();
+    sb.cmd().arg("keys").assert().success().stdout(predicate::str::contains("Keine Keys"));
+    sb.cmd().args(["doctor"]).assert().code(1).stdout(predicate::str::contains("Include fehlt in ~/.ssh/config"));
+}
+
+#[test]
+fn invalid_id_and_existing_key_errors() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    let args = ["--provider", "github", "--folder", "~/dev/x", "--git-name", "T", "--git-email", "t@x.de"];
+    sb.cmd()
+        .args(["new", "--name", "!!!", "--yes"])
+        .args(args)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("Ungültige Profil-ID"));
+    sb.cmd()
+        .args(["new", "--name", "X", "--key", "~/.ssh/missing", "--yes"])
+        .args(args)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("Key fehlt"));
+    std::fs::create_dir_all(sb.path(".ssh")).unwrap();
+    std::fs::write(sb.path(".ssh/x_ed25519"), "x").unwrap();
+    sb.cmd()
+        .args(["new", "--name", "X", "--yes"])
+        .args(args)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("Key existiert bereits"));
+}
