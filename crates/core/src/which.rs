@@ -373,11 +373,11 @@ mod tests {
     fn folder_matching_uses_longest_prefix() {
         let env = Env::with_home("/home/t");
         let cfg = Config {
-            default_profile: None,
             profiles: vec![
                 Profile { id: "a".into(), folders: vec!["~/dev/a/".into()], ..Default::default() },
                 Profile { id: "b".into(), folders: vec!["~/dev/ab/".into()], ..Default::default() },
             ],
+            ..Default::default()
         };
         let (p, f) = profile_for_folder(&env, &cfg, Path::new("/home/t/dev/ab/repo")).unwrap();
         assert_eq!((p.id.as_str(), f.as_str()), ("b", "~/dev/ab/"));

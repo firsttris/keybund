@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, errorMessage } from "./api";
-import type { Fix, HostEntry, ImportProposal, NewProject, Profile } from "./bindings";
+import type { Fix, HostEntry, ImportProposal, NewProject, Profile, Settings } from "./bindings";
 
 export const keys = {
   profiles: ["profiles"] as const,
@@ -14,6 +14,7 @@ export const keys = {
   importProposals: ["import-proposals"] as const,
   cleanup: ["cleanup"] as const,
   uploadTarget: (id: string, host: string) => ["upload-target", id, host] as const,
+  settings: ["settings"] as const,
 };
 
 export function useProfiles() {
@@ -147,6 +148,19 @@ export function useCleanupApply() {
 export function useInstallKey() {
   return useMutation({
     mutationFn: ({ id, host }: { id: string; host: string }) => api.installKey(id, host),
+  });
+}
+
+export function useSettings() {
+  return useQuery({ queryKey: keys.settings, queryFn: () => api.settings() });
+}
+
+export function useUpdateSettings() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: Settings) => api.updateSettings(settings),
+    // Paths change the defaults of new profiles, the switches the generated configs.
+    onSuccess: () => client.invalidateQueries(),
   });
 }
 

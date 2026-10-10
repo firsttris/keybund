@@ -10,6 +10,7 @@ pub struct Config {
     /// Profile whose key is used outside of all project folders.
     pub default_profile: Option<String>,
     pub profiles: Vec<Profile>,
+    pub settings: Settings,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -93,6 +94,45 @@ pub enum Provider {
     Bitbucket,
     #[default]
     Generic,
+}
+
+/// User preferences (`[settings]` in `profiles.toml`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct Settings {
+    /// Parent folder of new projects (`~/dev`).
+    pub projects_dir: String,
+    /// Folder for new keys (`~/.ssh`).
+    pub keys_dir: String,
+    /// Write the Host blocks into `~/.ssh/config` itself instead of an
+    /// `Include` (for SSH clients that ignore `Include`, e.g. old libssh).
+    pub inline_ssh_config: bool,
+    /// Keep the host keys of each profile's servers in its own known_hosts
+    /// file (removed with the profile).
+    pub known_hosts_per_profile: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            projects_dir: "~/dev".into(),
+            keys_dir: "~/.ssh".into(),
+            inline_ssh_config: false,
+            known_hosts_per_profile: true,
+        }
+    }
+}
+
+impl Settings {
+    /// Folder of a new project, with a trailing `/`.
+    pub fn project_folder(&self, id: &str) -> String {
+        format!("{}/{id}/", self.projects_dir.trim_end_matches('/'))
+    }
+
+    /// Path of a new key.
+    pub fn key_path(&self, id: &str) -> String {
+        format!("{}/{id}_ed25519", self.keys_dir.trim_end_matches('/'))
+    }
 }
 
 impl Config {

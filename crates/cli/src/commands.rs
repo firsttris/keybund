@@ -229,7 +229,7 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
     // 3. Projektordner
     let mut folders = args.folder.clone();
     if folders.is_empty() && tty && provider.is_git_host() {
-        folders.push(ask("Projektordner", Some(format!("~/dev/{id}/")))?);
+        folders.push(ask("Projektordner", Some(config.settings.project_folder(&id)))?);
     }
     let folders: Vec<String> = folders
         .iter()
@@ -271,7 +271,7 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
             KeyRef { path, comment: None }
         }
         None => {
-            let path = keygen::default_key_path(&id);
+            let path = config.settings.key_path(&id);
             let comment = args.comment.clone().unwrap_or_else(|| default_comment(&id));
             let passphrase = if tty {
                 Password::with_theme(&theme())
@@ -475,6 +475,43 @@ fn format_millis(ms: f64) -> String {
     format!("{} {:02}:{:02} UTC", keygen::format_date(secs), time / 3600, time % 3600 / 60)
 }
 
+/// Shows or changes a setting (`[settings]` in profiles.toml).
+pub fn config(env: &Env, key: Option<&str>, value: Option<&str>) -> Result<ExitCode> {
+    let mut config = store::load(env)?;
+    let Some(key) = key else {
+        let s = &config.settings;
+        ui::row("projects-dir", &s.projects_dir);
+        ui::row("keys-dir", &s.keys_dir);
+        ui::row("inline-ssh-config", &s.inline_ssh_config.to_string());
+        ui::row("known-hosts-per-profile", &s.known_hosts_per_profile.to_string());
+        return Ok(ExitCode::SUCCESS);
+    };
+    let Some(value) = value else {
+        bail!("Wert fehlt: keybund config {key} <wert>");
+    };
+    let flag = |v: &str| match v {
+        "true" | "ja" | "an" | "on" | "1" => Ok(true),
+        "false" | "nein" | "aus" | "off" | "0" => Ok(false),
+        _ => bail!("„{v}“ ist kein Ja/Nein-Wert (true/false)"),
+    };
+    let s = &mut config.settings;
+    match key {
+        "projects-dir" => s.projects_dir = store::normalize_dir(env, value)?,
+        "keys-dir" => s.keys_dir = store::normalize_dir(env, value)?,
+        "inline-ssh-config" => s.inline_ssh_config = flag(value)?,
+        "known-hosts-per-profile" => s.known_hosts_per_profile = flag(value)?,
+        _ => {
+            bail!("Unbekannte Einstellung „{key}“ (projects-dir, keys-dir, inline-ssh-config, known-hosts-per-profile)")
+        }
+    }
+    store::save(env, &config)?;
+    ui::success(&format!("{key} gespeichert"));
+    if matches!(key, "inline-ssh-config" | "known-hosts-per-profile") {
+        ui::hint("Mit `keybund apply` übernehmen.");
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
 pub fn which(env: &Env, target: Option<&str>) -> Result<ExitCode> {
     let config = store::load(env)?;
     let r = which_mod::which(env, &config, target.unwrap_or(""))?;
@@ -617,7 +654,7 @@ pub fn set_default(env: &Env, id: &str) -> Result<ExitCode> {
     config.profile(id)?;
     config.default_profile = Some(id.to_string());
     store::save(env, &config)?;
-    ui::success(&format!("Default-Profil: {id}"));
+    ui::success(&format!("Standard-Profil: {id}"));
     ui::hint("Mit `keybund apply` übernehmen.");
     Ok(ExitCode::SUCCESS)
 }

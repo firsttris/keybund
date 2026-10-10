@@ -60,7 +60,7 @@ fn setup() -> (tempfile::TempDir, Env, Config) {
         port: Some(2222),
         provider: Provider::Generic,
     }];
-    let config = Config { default_profile: Some("privat".into()), profiles };
+    let config = Config { default_profile: Some("privat".into()), profiles, ..Default::default() };
     store::save(&env, &config).unwrap();
     (dir, env, config)
 }
@@ -406,7 +406,7 @@ fn import_existing_ssh_config_and_clean_up() {
         hosts: vec![HostEntry { hostname: "github.com".into(), provider: Provider::Github, ..Default::default() }],
         ..Default::default()
     };
-    store::save(&env, &Config { default_profile: None, profiles: vec![test] }).unwrap();
+    store::save(&env, &Config { profiles: vec![test], ..Default::default() }).unwrap();
     apply::apply_config(&env, &store::load(&env).unwrap()).unwrap();
     let report = doctor::run(&env);
     let check = report.checks.iter().find(|c| c.id == "ssh-config-github.com").unwrap();

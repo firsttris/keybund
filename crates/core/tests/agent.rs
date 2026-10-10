@@ -48,7 +48,7 @@ fn setup() -> (tempfile::TempDir, Env, Config) {
         port: Some(2222),
         provider: Provider::Generic,
     }];
-    let config = Config { default_profile: Some("privat".into()), profiles };
+    let config = Config { default_profile: Some("privat".into()), profiles, ..Default::default() };
     store::save(&env, &config).unwrap();
     (dir, env, config)
 }

@@ -9,7 +9,7 @@ use keybund_core::apply::{self, ApplyReport, Plan};
 use keybund_core::clone::{self, RepoUrl};
 use keybund_core::import::{self, ImportProposal};
 use keybund_core::keygen::{self, GenerateOptions, ImportCandidate, KeyInfo};
-use keybund_core::model::{Config, HostEntry, KeyRef, Profile, Provider};
+use keybund_core::model::{Config, HostEntry, KeyRef, Profile, Provider, Settings};
 use keybund_core::uninstall::{self, UninstallOptions, UninstallPreview};
 use keybund_core::{archive, provider, store, Env, Error};
 
@@ -110,12 +110,12 @@ pub struct ProfileDefaults {
 pub fn profile_defaults(env: &Env, name: &str, user: &str, hostname: &str) -> CmdResult<ProfileDefaults> {
     let config = store::load(env)?;
     let id = store::slugify(name);
-    let key_path = keygen::default_key_path(&id);
+    let key_path = config.settings.key_path(&id);
     let comment = if hostname.is_empty() { format!("{user}-{id}") } else { format!("{user}@{hostname}-{id}") };
     Ok(ProfileDefaults {
         key_exists: env.expand(&key_path).exists(),
         id_taken: config.profiles.iter().any(|p| p.id == id),
-        folder: format!("~/dev/{id}/"),
+        folder: config.settings.project_folder(&id),
         key_comment: comment,
         key_path,
         id,
@@ -239,6 +239,22 @@ pub fn add_host(env: &Env, id: &str, host: HostEntry) -> CmdResult<ProfileView> 
     apply::apply_config(env, &config)?;
     let profile = config.profile(id)?;
     Ok(profile_view(env, &config, profile, None))
+}
+
+pub fn settings(env: &Env) -> CmdResult<Settings> {
+    Ok(store::load(env)?.settings)
+}
+
+/// Saves the settings; changes to the generated configs show up as pending.
+pub fn update_settings(env: &Env, settings: Settings) -> CmdResult<Settings> {
+    let mut config = store::load(env)?;
+    config.settings = Settings {
+        projects_dir: store::normalize_dir(env, &settings.projects_dir)?,
+        keys_dir: store::normalize_dir(env, &settings.keys_dir)?,
+        ..settings
+    };
+    store::save(env, &config)?;
+    Ok(config.settings)
 }
 
 pub fn set_default_profile(env: &Env, id: Option<String>) -> CmdResult<()> {
@@ -434,6 +450,21 @@ mod tests {
             key: KeyChoice::Generate { comment: format!("t@{id}"), passphrase: None },
             make_default: false,
         }
+    }
+
+    #[test]
+    fn settings_change_the_defaults() {
+        let (_d, env) = env();
+        let mut s = settings(&env).unwrap();
+        assert_eq!(s.projects_dir, "~/dev");
+        s.projects_dir = format!("{}/work/", env.home.display());
+        s.keys_dir = "~/.ssh/k/".into();
+        let saved = update_settings(&env, s.clone()).unwrap();
+        assert_eq!((saved.projects_dir.as_str(), saved.keys_dir.as_str()), ("~/work", "~/.ssh/k"));
+        let d = profile_defaults(&env, "Kunde C", "t", "h").unwrap();
+        assert_eq!((d.folder.as_str(), d.key_path.as_str()), ("~/work/kunde-c/", "~/.ssh/k/kunde-c_ed25519"));
+        s.keys_dir = "relativ".into();
+        assert_eq!(update_settings(&env, s).unwrap_err().kind, "invalid_path");
     }
 
     #[test]

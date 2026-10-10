@@ -111,8 +111,10 @@ enum Command {
         #[arg(long, short)]
         yes: bool,
     },
-    /// Default-Profil setzen (Key außerhalb aller Projektordner)
+    /// Standard-Profil setzen (Key außerhalb aller Projektordner)
     Default { profile: String },
+    /// Einstellungen zeigen oder ändern, z. B. `keybund config projects-dir ~/work`
+    Config { key: Option<String>, value: Option<String> },
     /// Profil archivieren: Key nach ~/.ssh/archive, Configs entfernen
     Archive {
         profile: String,
@@ -154,6 +156,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Keys => commands::keys(&env),
         Command::Import { all, yes, keep_old } => commands::import(&env, all, yes, keep_old),
         Command::Default { profile } => commands::set_default(&env, &profile),
+        Command::Config { key, value } => commands::config(&env, key.as_deref(), value.as_deref()),
         Command::Uninstall { restore_backups, purge, yes } => commands::uninstall(&env, restore_backups, purge, yes),
         Command::Archive { profile, yes } => commands::archive(&env, &profile, yes),
     }

@@ -5,7 +5,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::fsutil;
-use crate::model::{Config, GitIdentity, HostEntry, KeyRef, Profile, Provider};
+use crate::model::{Config, GitIdentity, HostEntry, KeyRef, Profile, Provider, Settings};
 use crate::{Env, Error, Result};
 
 // The on-disk layout uses TOML-friendly singular names (`[[profile]]`,
@@ -15,8 +15,57 @@ use crate::{Env, Error, Result};
 struct TomlConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     default_profile: Option<String>,
+    #[serde(default, skip_serializing_if = "TomlSettings::is_empty")]
+    settings: TomlSettings,
     #[serde(default, rename = "profile")]
     profiles: Vec<TomlProfile>,
+}
+
+/// Only values that differ from the defaults are written.
+#[derive(Serialize, Deserialize, Default)]
+struct TomlSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    projects_dir: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    keys_dir: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    inline_ssh_config: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    known_hosts_per_profile: Option<bool>,
+}
+
+impl TomlSettings {
+    fn is_empty(&self) -> bool {
+        self.projects_dir.is_none()
+            && self.keys_dir.is_none()
+            && self.inline_ssh_config.is_none()
+            && self.known_hosts_per_profile.is_none()
+    }
+}
+
+impl From<TomlSettings> for Settings {
+    fn from(t: TomlSettings) -> Self {
+        let d = Settings::default();
+        Settings {
+            projects_dir: t.projects_dir.unwrap_or(d.projects_dir),
+            keys_dir: t.keys_dir.unwrap_or(d.keys_dir),
+            inline_ssh_config: t.inline_ssh_config.unwrap_or(d.inline_ssh_config),
+            known_hosts_per_profile: t.known_hosts_per_profile.unwrap_or(d.known_hosts_per_profile),
+        }
+    }
+}
+
+impl From<&Settings> for TomlSettings {
+    fn from(s: &Settings) -> Self {
+        let d = Settings::default();
+        TomlSettings {
+            projects_dir: (s.projects_dir != d.projects_dir).then(|| s.projects_dir.clone()),
+            keys_dir: (s.keys_dir != d.keys_dir).then(|| s.keys_dir.clone()),
+            inline_ssh_config: (s.inline_ssh_config != d.inline_ssh_config).then_some(s.inline_ssh_config),
+            known_hosts_per_profile: (s.known_hosts_per_profile != d.known_hosts_per_profile)
+                .then_some(s.known_hosts_per_profile),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -116,12 +165,17 @@ impl From<Profile> for TomlProfile {
 
 pub fn parse(text: &str) -> Result<Config> {
     let raw: TomlConfig = toml::from_str(text).map_err(|e| Error::ConfigParse(e.to_string()))?;
-    Ok(Config { default_profile: raw.default_profile, profiles: raw.profiles.into_iter().map(Into::into).collect() })
+    Ok(Config {
+        default_profile: raw.default_profile,
+        profiles: raw.profiles.into_iter().map(Into::into).collect(),
+        settings: raw.settings.into(),
+    })
 }
 
 pub fn to_toml(config: &Config) -> String {
     let raw = TomlConfig {
         default_profile: config.default_profile.clone(),
+        settings: (&config.settings).into(),
         profiles: config.profiles.iter().cloned().map(Into::into).collect(),
     };
     toml::to_string_pretty(&raw).expect("profile data is always serializable")
@@ -226,6 +280,17 @@ fn folder_contains(outer: &str, inner: &str) -> bool {
 /// Normalizes a project folder for `includeIf "gitdir:…"`: resolves
 /// symlinks if the folder exists, writes it relative to `~` and appends the
 /// trailing slash without which subfolders would not match.
+/// A folder setting: absolute or below `~`, written with `~` and without a
+/// trailing `/`.
+pub fn normalize_dir(env: &Env, input: &str) -> Result<String> {
+    let trimmed = input.trim();
+    if !(trimmed.starts_with('/') || trimmed == "~" || trimmed.starts_with("~/")) {
+        return Err(Error::InvalidPath(trimmed.to_string()));
+    }
+    let s = env.contract(&env.expand(trimmed));
+    Ok(if s.len() > 1 { s.trim_end_matches('/').to_string() } else { s })
+}
+
 pub fn normalize_folder(env: &Env, input: &str) -> String {
     let trimmed = input.trim();
     let expanded = env.expand(trimmed);
@@ -240,6 +305,20 @@ pub fn normalize_folder(env: &Env, input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_are_written_only_when_changed() {
+        let mut cfg = Config::default();
+        assert!(!to_toml(&cfg).contains("[settings]"));
+        cfg.settings.projects_dir = "~/work".into();
+        cfg.settings.known_hosts_per_profile = false;
+        let text = to_toml(&cfg);
+        assert!(text.contains("[settings]\nprojects_dir = \"~/work\"\nknown_hosts_per_profile = false"), "{text}");
+        let back = parse(&text).unwrap();
+        assert_eq!(back.settings, cfg.settings);
+        assert_eq!(back.settings.key_path("x"), "~/.ssh/x_ed25519");
+        assert_eq!(back.settings.project_folder("x"), "~/work/x/");
+    }
 
     const SAMPLE: &str = r#"
 default_profile = "privat"
@@ -355,6 +434,10 @@ provider = "gitlab"
         #[cfg(unix)]
         std::os::unix::fs::symlink(env.home.join("dev/real"), env.home.join("dev/link")).unwrap();
         assert_eq!(normalize_folder(&env, "~/dev/missing"), "~/dev/missing/");
+        assert_eq!(normalize_dir(&env, " ~/work/ ").unwrap(), "~/work");
+        assert_eq!(normalize_dir(&env, &format!("{}/x", env.home.display())).unwrap(), "~/x");
+        assert_eq!(normalize_dir(&env, "/srv/").unwrap(), "/srv");
+        assert!(normalize_dir(&env, "work").is_err());
         assert_eq!(normalize_folder(&env, "~/dev/real/"), "~/dev/real/");
         #[cfg(unix)]
         assert_eq!(normalize_folder(&env, "~/dev/link"), "~/dev/real/");

@@ -1,15 +1,22 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { getVersion } from "@tauri-apps/api/app";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
-import { FieldHint, Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { ErrorSlot, FieldHint, Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { useQuery } from "@tanstack/react-query";
-import { getVersion } from "@tauri-apps/api/app";
+import { Switch } from "@/components/ui/switch";
+import { errorMessage } from "@/lib/api";
+import type { Settings } from "@/lib/bindings";
 import { openExternal } from "@/lib/open";
-import { usePaths, useProfiles, useScanKeys, useSetDefault } from "@/lib/queries";
+import { usePaths, useProfiles, useScanKeys, useSetDefault, useSettings, useUpdateSettings } from "@/lib/queries";
+import { formatAge } from "@/lib/utils";
 
 const REPO_URL = "https://github.com/firsttris/keybund";
-import { formatAge } from "@/lib/utils";
 
 export function SettingsPage() {
   const profiles = useProfiles();
@@ -25,7 +32,7 @@ export function SettingsPage() {
       <h1 className="m-0 text-[22px] font-semibold tracking-tight">Einstellungen</h1>
       <div className="grid max-w-[960px] grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
         <Card aria-labelledby="default-title">
-          <CardTitle id="default-title">Default-Profil</CardTitle>
+          <CardTitle id="default-title">Standard-Profil</CardTitle>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="default-profile">Key außerhalb aller Projektordner</Label>
             <Select
@@ -43,6 +50,8 @@ export function SettingsPage() {
             <FieldHint>Wird nach dem Anwenden als core.sshCommand in index.gitconfig gesetzt.</FieldHint>
           </div>
         </Card>
+
+        <SettingsCard />
 
         <Card aria-labelledby="paths-title">
           <CardTitle id="paths-title">Pfade</CardTitle>
@@ -121,5 +130,68 @@ export function SettingsPage() {
         </Card>
       </div>
     </>
+  );
+}
+
+function SettingsCard() {
+  const settings = useSettings();
+  if (!settings.data) return <Spinner />;
+  // Remounts with fresh values after saving.
+  return <SettingsForm key={JSON.stringify(settings.data)} saved={settings.data} />;
+}
+
+function SettingsForm({ saved }: { saved: Settings }) {
+  const update = useUpdateSettings();
+  const [draft, setDraft] = useState(saved);
+  const set = (patch: Partial<Settings>) => setDraft((d) => ({ ...d, ...patch }));
+  const changed = JSON.stringify(draft) !== JSON.stringify(saved);
+  const mono = "font-mono text-[13px]";
+  return (
+    <Card aria-labelledby="settings-title">
+      <CardTitle id="settings-title">Neue Profile & Configs</CardTitle>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          update.mutate(draft, { onSuccess: () => toast.success("Einstellungen gespeichert") });
+        }}
+      >
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="projects-dir">Ordner für Projekte</Label>
+          <Input id="projects-dir" className={mono} value={draft.projects_dir} onChange={(e) => set({ projects_dir: e.target.value })} />
+          <FieldHint>Neue Projekte schlägt der Wizard hier vor, z. B. {draft.projects_dir.replace(/\/+$/, "")}/kunde-c/.</FieldHint>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="keys-dir">Ordner für Keys</Label>
+          <Input id="keys-dir" className={mono} value={draft.keys_dir} onChange={(e) => set({ keys_dir: e.target.value })} />
+        </div>
+        <label className="flex items-start justify-between gap-4">
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-medium">known_hosts pro Profil</span>
+            <span className="text-xs text-muted-foreground">Host-Keys der Server eines Profils liegen in einer eigenen Datei und gehen beim Archivieren mit.</span>
+          </span>
+          <Switch
+            aria-label="known_hosts pro Profil"
+            checked={draft.known_hosts_per_profile}
+            onCheckedChange={(v) => set({ known_hosts_per_profile: v })}
+          />
+        </label>
+        <label className="flex items-start justify-between gap-4">
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-medium">Host-Blöcke direkt in ~/.ssh/config</span>
+            <span className="text-xs text-muted-foreground">Statt einer Include-Zeile – nur für Programme, die Include nicht kennen (z. B. Dolphin mit altem libssh).</span>
+          </span>
+          <Switch
+            aria-label="Host-Blöcke direkt in ~/.ssh/config"
+            checked={draft.inline_ssh_config}
+            onCheckedChange={(v) => set({ inline_ssh_config: v })}
+          />
+        </label>
+        <ErrorSlot message={update.isError && errorMessage(update.error)} />
+        <Button type="submit" className="self-end" disabled={!changed || update.isPending}>
+          Einstellungen speichern
+        </Button>
+      </form>
+    </Card>
   );
 }

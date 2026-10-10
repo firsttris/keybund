@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { renderApp } from "@/test/render";
 
@@ -71,5 +71,46 @@ describe("settings", () => {
     expect(await screen.findByText(/Keybund 0\.1\.0 by Tristan Teufel/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Quellcode auf GitHub" }));
     expect(backend.state.openedUrls).toEqual(["https://github.com/firsttris/keybund"]);
+  });
+
+  it("changes the folders for new profiles", async () => {
+    const { user, backend, router } = await renderApp("/settings");
+    const dir = await screen.findByLabelText("Ordner für Projekte");
+    const save = screen.getByRole("button", { name: "Einstellungen speichern" });
+    expect(save).toBeDisabled();
+    await user.clear(dir);
+    await user.type(dir, "work");
+    await user.click(save);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ungültiger Ordner „work“");
+    await user.clear(dir);
+    await user.type(dir, "~/work/");
+    await user.clear(screen.getByLabelText("Ordner für Keys"));
+    await user.type(screen.getByLabelText("Ordner für Keys"), "~/.ssh/keybund");
+    await user.click(screen.getByRole("switch", { name: "known_hosts pro Profil" }));
+    await user.click(screen.getByRole("switch", { name: "Host-Blöcke direkt in ~/.ssh/config" }));
+    await user.click(save);
+    await waitFor(() => expect(backend.state.settings.projects_dir).toBe("~/work"));
+    expect(backend.state.settings).toEqual({
+      projects_dir: "~/work",
+      keys_dir: "~/.ssh/keybund",
+      inline_ssh_config: true,
+      known_hosts_per_profile: false,
+    });
+    expect(await screen.findByLabelText("Ordner für Projekte")).toHaveValue("~/work");
+
+    // The wizard proposes the new folders.
+    await router.navigate({ to: "/new" });
+    await user.click(await screen.findByRole("radio", { name: /^Git-Projekt/ }));
+    await user.click(screen.getByRole("button", { name: /Weiter/ }));
+    await user.type(await screen.findByLabelText("Projektname"), "Kunde W");
+    await screen.findByText("kunde-w");
+    await user.click(screen.getByRole("button", { name: /Weiter/ }));
+    await user.click(screen.getByRole("button", { name: /Weiter/ }));
+    expect(screen.getByLabelText("Ordner")).toHaveValue("~/work/kunde-w/");
+    await user.click(screen.getByRole("button", { name: /Weiter/ }));
+    await user.type(screen.getByLabelText("Name"), "T");
+    await user.type(screen.getByLabelText("E-Mail"), "t@w.de");
+    await user.click(screen.getByRole("button", { name: /Weiter/ }));
+    expect(await screen.findByText("ed25519 · ~/.ssh/keybund/kunde-w_ed25519")).toBeInTheDocument();
   });
 });

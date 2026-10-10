@@ -726,3 +726,44 @@ fn install_key_explains_hosts_without_api_login() {
         .stderr(predicate::str::contains("Bitbucket kann Keybund nicht automatisch eintragen"))
         .stdout(predicate::str::contains("bitbucket.org/account/settings/ssh-keys"));
 }
+
+#[test]
+fn config_changes_the_defaults_for_new_profiles() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.cmd()
+        .args(["config"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("projects-dir").and(predicate::str::contains("~/dev")));
+    sb.cmd().args(["config", "projects-dir", "~/work/"]).assert().success();
+    sb.cmd().args(["config", "keys-dir", "~/.ssh/keybund"]).assert().success();
+    sb.cmd()
+        .args(["config", "known-hosts-per-profile", "nein"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("keybund apply"));
+    sb.cmd()
+        .args(["config", "projects-dir", "relativ"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("Ungültiger Ordner"));
+    sb.cmd()
+        .args(["config", "inline-ssh-config", "vielleicht"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("kein Ja/Nein-Wert"));
+    sb.cmd().args(["config", "farbe", "x"]).assert().code(2).stderr(predicate::str::contains("Unbekannte Einstellung"));
+    sb.cmd().args(["config", "keys-dir"]).assert().code(2).stderr(predicate::str::contains("Wert fehlt"));
+    let toml = sb.read(".config/keybund/profiles.toml");
+    assert!(toml.contains("projects_dir = \"~/work\""), "{toml}");
+    assert!(toml.contains("known_hosts_per_profile = false"), "{toml}");
+
+    sb.new_profile(
+        "Kunde X",
+        &["--provider", "github", "--git-name", "T", "--git-email", "t@x.de", "--folder", "~/work/kunde-x"],
+    );
+    assert!(sb.path(".ssh/keybund/kunde-x_ed25519").exists());
+}

@@ -44,6 +44,8 @@ pub enum Error {
     Archived(String),
     #[error("Die Konfiguration hat sich seit der Vorschau geändert: {0}")]
     StalePlan(String),
+    #[error("Ungültiger Ordner „{0}“ – bitte mit / oder ~/ angeben")]
+    InvalidPath(String),
     #[error("Keine Verbindung zu {host}: {message}")]
     Network { host: String, message: String },
     #[error("{0}")]
@@ -84,6 +86,7 @@ impl Error {
             Error::NoHost(_) => "no_host",
             Error::Archived(_) => "archived",
             Error::StalePlan(_) => "stale_plan",
+            Error::InvalidPath(_) => "invalid_path",
             Error::Network { .. } => "network",
             Error::Api(_) => "api",
             Error::Io { .. } => "io",
@@ -121,6 +124,7 @@ mod tests {
             Error::NoHost("a".into()),
             Error::Archived("a".into()),
             Error::StalePlan("a".into()),
+            Error::InvalidPath("a".into()),
             Error::Network { host: "a".into(), message: "b".into() },
             Error::Api("a".into()),
             Error::io("/x", io()),

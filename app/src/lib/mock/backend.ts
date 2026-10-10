@@ -30,6 +30,7 @@ import type {
   ProfileView,
   ProfilesView,
   Provider,
+  Settings,
   UploadResult,
   UploadTarget,
   Report,
@@ -133,6 +134,7 @@ export interface MockState {
   /** `hostname:keypath` pairs added to git accounts via the API. */
   uploadedKeys: string[];
   flows: Map<string, { id: string; host: string; polls: number }>;
+  settings: Settings;
 }
 
 export interface SshBlock {
@@ -224,6 +226,7 @@ export function seedState(): MockState {
     storedTokens: new Map(),
     uploadedKeys: [],
     flows: new Map(),
+    settings: { projects_dir: "~/dev", keys_dir: "~/.ssh", inline_ssh_config: false, known_hosts_per_profile: true },
     unreachable: [],
   };
   state.applied = renderAll(state);
@@ -638,15 +641,30 @@ export function createMockBackend(state: MockState = seedState()) {
       }
       case "profile_defaults": {
         const id = slugify(String(args.name ?? ""));
+        const keyPath = `${state.settings.keys_dir}/${id}_ed25519`;
         const result: ProfileDefaults = {
           id,
-          key_path: `~/.ssh/${id}_ed25519`,
-          folder: `~/dev/${id}/`,
+          key_path: keyPath,
+          folder: `${state.settings.projects_dir}/${id}/`,
           key_comment: `tristan@zentrale-${id}`,
-          key_exists: state.keys.has(`~/.ssh/${id}_ed25519`),
+          key_exists: state.keys.has(keyPath),
           id_taken: state.profiles.some((p) => p.id === id),
         };
         return result;
+      }
+      case "settings":
+        return structuredClone(state.settings);
+      case "update_settings": {
+        const next = structuredClone(args.settings as Settings);
+        for (const key of ["projects_dir", "keys_dir"] as const) {
+          const v = next[key].trim();
+          if (!(v.startsWith("/") || v === "~" || v.startsWith("~/"))) {
+            throw new MockError("invalid_path", `Ungültiger Ordner „${v}“ – bitte mit / oder ~/ angeben`);
+          }
+          next[key] = v.length > 1 ? v.replace(/\/+$/, "") : v;
+        }
+        state.settings = next;
+        return structuredClone(next);
       }
       case "normalize_folder":
         return normalizeFolder(String(args.folder));

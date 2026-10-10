@@ -60,6 +60,8 @@ export const commands = {
 	uninstallPreview: (opts: UninstallOptions) => typedError<UninstallPreview, CmdError>(__TAURI_INVOKE("uninstall_preview", { opts })),
 	uninstallApply: (opts: UninstallOptions, expectedDiffs: string[]) => typedError<ApplyReport, CmdError>(__TAURI_INVOKE("uninstall_apply", { opts, expectedDiffs })),
 	paths: () => __TAURI_INVOKE<Paths>("paths"),
+	settings: () => typedError<Settings, CmdError>(__TAURI_INVOKE("settings")),
+	updateSettings: (settings: Settings) => typedError<Settings, CmdError>(__TAURI_INVOKE("update_settings", { settings })),
 };
 
 /* Types */
@@ -343,6 +345,24 @@ export type RepoUrl = {
 
 export type Report = {
 	checks: Check[],
+};
+
+/**  User preferences (`[settings]` in `profiles.toml`). */
+export type Settings = {
+	/**  Parent folder of new projects (`~/dev`). */
+	projects_dir: string,
+	/**  Folder for new keys (`~/.ssh`). */
+	keys_dir: string,
+	/**
+	 *  Write the Host blocks into `~/.ssh/config` itself instead of an
+	 *  `Include` (for SSH clients that ignore `Include`, e.g. old libssh).
+	 */
+	inline_ssh_config: boolean,
+	/**
+	 *  Keep the host keys of each profile's servers in its own known_hosts
+	 *  file (removed with the profile).
+	 */
+	known_hosts_per_profile: boolean,
 };
 
 export type Status = "ok" | "warn" | "error";

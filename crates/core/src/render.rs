@@ -96,7 +96,7 @@ pub fn include_if_blocks(profile: &Profile, env: &Env) -> String {
 
 /// The `Host` blocks of one profile in `keybund.conf` (empty without aliases).
 pub fn ssh_host_blocks(profile: &Profile) -> String {
-    let single = Config { default_profile: None, profiles: vec![Profile { archived: false, ..profile.clone() }] };
+    let single = Config { profiles: vec![Profile { archived: false, ..profile.clone() }], ..Default::default() };
     let full = ssh_config(&single);
     let start = full.find("\n# Profil:").map(|i| i + 1).unwrap_or(full.len());
     let end = full.rfind("\nHost *").unwrap_or(full.len());
@@ -205,7 +205,7 @@ mod tests {
         b.hosts.push(HostEntry { hostname: "github.com".into(), provider: Provider::Github, ..Default::default() });
         let mut old = profile("alt", "Alt", "~/dev/alt/", false);
         old.archived = true;
-        Config { default_profile: Some("privat".into()), profiles: vec![privat, a, b, old] }
+        Config { default_profile: Some("privat".into()), profiles: vec![privat, a, b, old], ..Default::default() }
     }
 
     #[test]
@@ -249,7 +249,7 @@ mod tests {
             },
             HostEntry { hostname: "github.com".into(), provider: Provider::Github, ..Default::default() },
         ];
-        let conf = ssh_config(&Config { default_profile: None, profiles: vec![p] });
+        let conf = ssh_config(&Config { profiles: vec![p], ..Default::default() });
         assert!(conf.contains("Host nas 192.168.1.5\n"));
         assert!(conf.contains("Host 10.0.0.7\n    HostName 10.0.0.7\n    User root\n"));
         assert!(conf.contains("Host pflegeabc\n    HostName github.com\n"));

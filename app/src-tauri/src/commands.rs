@@ -129,6 +129,21 @@ pub fn copy_public_key<R: Runtime>(app: AppHandle<R>, state: State<'_, AppState>
     Ok(key)
 }
 
+#[tauri::command]
+#[specta::specta]
+pub fn settings(state: State<'_, AppState>) -> CmdResult<keybund_core::model::Settings> {
+    api::settings(&state.env)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_settings(
+    state: State<'_, AppState>,
+    settings: keybund_core::model::Settings,
+) -> CmdResult<keybund_core::model::Settings> {
+    api::update_settings(&state.env, settings)
+}
+
 /// Opens an https link in the browser, also from a toolbox or an AppImage.
 #[tauri::command]
 #[specta::specta]

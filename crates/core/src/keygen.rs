@@ -128,7 +128,7 @@ pub fn generate(env: &Env, opts: &GenerateOptions) -> Result<KeyInfo> {
         return Err(Error::KeyExists(opts.path.clone()));
     }
     if let Some(dir) = path.parent() {
-        let mode = if dir == env.ssh_dir() { Some(0o700) } else { None };
+        let mode = if dir.starts_with(env.ssh_dir()) { Some(0o700) } else { None };
         fsutil::ensure_dir(dir, mode)?;
     }
     let mut cmd = env.command("ssh-keygen");
@@ -142,7 +142,7 @@ pub fn generate(env: &Env, opts: &GenerateOptions) -> Result<KeyInfo> {
 
 /// Default file name for a profile key: `~/.ssh/<id>_ed25519`.
 pub fn default_key_path(id: &str) -> String {
-    format!("~/.ssh/{id}_ed25519")
+    crate::model::Settings::default().key_path(id)
 }
 
 /// A key pair found in `~/.ssh` that could be imported.

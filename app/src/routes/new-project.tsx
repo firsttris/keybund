@@ -68,6 +68,8 @@ export interface Draft {
   comment: string;
   /** Set once the user changed the key comment; until then it follows the name. */
   commentEdited: boolean;
+  /** Where a new key goes (from the settings). */
+  keyPath: string;
   passphrase: string;
 }
 
@@ -92,6 +94,7 @@ export function emptyDraft(existingKey?: string): Draft {
     profileId: "",
     comment: "",
     commentEdited: false,
+    keyPath: "",
     passphrase: "",
   };
 }
@@ -112,6 +115,7 @@ export function withDefaults(d: Draft, defaults?: ProfileDefaults | null): Draft
     ...d,
     folder: d.kind === "server" ? "" : d.folderEdited ? d.folder : id ? (fresh?.folder ?? `~/dev/${id}/`) : "",
     comment: d.commentEdited ? d.comment : (fresh?.key_comment ?? ""),
+    keyPath: fresh?.key_path ?? (id ? `~/.ssh/${id}_ed25519` : ""),
   };
 }
 
@@ -132,7 +136,7 @@ export function toProject(d: Draft): NewProject {
   const name = profileName(d);
   const id = slugify(name);
   const server = d.kind === "server";
-  const keyPath = d.keyMode === "existing" ? d.existingPath : `~/.ssh/${id}_ed25519`;
+  const keyPath = d.keyMode === "existing" ? d.existingPath : d.keyPath || `~/.ssh/${id}_ed25519`;
   return {
     profile: {
       id,

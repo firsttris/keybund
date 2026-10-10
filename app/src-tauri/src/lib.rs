@@ -48,6 +48,8 @@ macro_rules! keybund_commands {
             uninstall_preview,
             uninstall_apply,
             paths,
+            settings,
+            update_settings,
         ]
     };
 }
