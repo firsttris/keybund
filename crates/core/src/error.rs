@@ -18,7 +18,7 @@ pub enum Error {
     DefaultProfileMissing(String),
     #[error("Projektordner überschneiden sich: {0} und {1}")]
     NestedFolders(String, String),
-    #[error("Host-Alias „{0}“ ist doppelt vergeben")]
+    #[error("Host „{0}“ ist mehreren Profilen zugeordnet")]
     DuplicateAlias(String),
     #[error("Key fehlt: {0}")]
     KeyMissing(String),

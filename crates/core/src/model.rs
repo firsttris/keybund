@@ -69,6 +69,19 @@ impl HostEntry {
     pub fn target_name(&self) -> &str {
         self.alias.as_deref().unwrap_or(&self.hostname)
     }
+
+    /// Patterns of the `Host` block Keybund writes for this host, empty if it
+    /// gets none. A server matches by alias and by its hostname/IP, so
+    /// `ssh meinserver` and `ssh 1.2.3.4` use the same key. Git hosting
+    /// providers only get a block for an alias: a block for `github.com`
+    /// would apply to every profile on github.com.
+    pub fn ssh_patterns(&self) -> Vec<String> {
+        let mut patterns: Vec<String> = self.alias.iter().cloned().collect();
+        if self.provider == Provider::Generic && !patterns.iter().any(|p| p.eq_ignore_ascii_case(&self.hostname)) {
+            patterns.push(self.hostname.clone());
+        }
+        patterns
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]

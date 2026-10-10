@@ -123,7 +123,6 @@ export function stepError(step: number, d: Draft, idTaken = false): string | nul
       return null;
     case 1:
       if (!d.hostname.trim()) return "Bitte einen Hostnamen eingeben.";
-      if (generic && !d.alias.trim()) return "Server brauchen einen Alias, z. B. meinserver.";
       if (d.port && !/^\d+$/.test(d.port)) return "Der Port muss eine Zahl sein.";
       return null;
     case 2:

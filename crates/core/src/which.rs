@@ -196,7 +196,7 @@ fn which_host(env: &Env, config: &Config, host: &str) -> Result<WhichResult> {
     if let Some((identity, p)) = by_profile {
         result.key_path = Some(contract_str(env, identity));
         result.profile_id = Some(p.id.clone());
-        if p.hosts.iter().any(|h| h.alias.as_deref() == Some(host)) {
+        if p.hosts.iter().any(|h| h.ssh_patterns().iter().any(|s| s.eq_ignore_ascii_case(host))) {
             result.source = Some(env.contract(&env.ssh_keybund_conf()));
             result.via = Some(format!("Host {host}"));
         }

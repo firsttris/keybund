@@ -476,7 +476,7 @@ fn edit_changes_folders_hosts_identity_and_key() {
         .args(["edit", "kunde", "--add-host", "10.0.0.5", "--alias", "kundenserver", "--user", "admin", "--yes"])
         .assert()
         .success();
-    assert!(sb.read(".ssh/config.d/keybund.conf").contains("Host kundenserver\n    HostName 10.0.0.5\n    User admin"));
+    assert!(sb.read(".ssh/config.d/keybund.conf").contains("Host kundenserver 10.0.0.5\n    HostName 10.0.0.5\n    User admin"));
     sb.cmd().args(["edit", "kunde", "--remove-host", "kundenserver", "--yes"]).assert().success();
     assert!(!sb.read(".ssh/config.d/keybund.conf").contains("kundenserver"));
 

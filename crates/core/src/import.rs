@@ -178,6 +178,9 @@ pub fn proposals(env: &Env, config: &Config, ssh_config: &str) -> Vec<ImportProp
                     default_given = true;
                     make_default = true;
                     None
+                } else if same_name && !provider.is_git_host() {
+                    // A server without alias: Keybund's block matches its hostname anyway.
+                    None
                 } else {
                     Some(b.pattern.clone())
                 };
@@ -255,7 +258,7 @@ pub fn migrated_blocks<'a>(env: &Env, config: &Config, blocks: &'a [HostBlock]) 
             config.active_profiles().any(|p| {
                 env.expand(&p.key.path) == env.expand(identity)
                     && p.hosts.iter().any(|h| {
-                        h.alias.as_deref().is_some_and(|a| a.eq_ignore_ascii_case(&b.pattern))
+                        h.ssh_patterns().iter().any(|s| s.eq_ignore_ascii_case(&b.pattern))
                             || (h.alias.is_none() && h.hostname.eq_ignore_ascii_case(&b.pattern))
                     })
             })

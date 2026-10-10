@@ -179,6 +179,12 @@ fn ssh_resolves_server_alias() {
     assert!(text.lines().any(|l| l == "port 2222"));
     assert!(text.lines().any(|l| l == "identitiesonly yes"));
     assert!(text.lines().any(|l| l.starts_with("identityfile ") && l.ends_with("/.ssh/privat_ed25519")));
+
+    // The same server by its IP uses the same key and settings.
+    let out = Command::new("ssh").arg("-G").arg("-F").arg(env.ssh_keybund_conf()).arg("1.2.3.4").output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.lines().any(|l| l == "port 2222"), "{text}");
+    assert!(text.lines().any(|l| l.starts_with("identityfile ") && l.ends_with("/.ssh/privat_ed25519")));
 }
 
 #[test]

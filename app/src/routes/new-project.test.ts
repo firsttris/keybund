@@ -58,7 +58,7 @@ describe("stepError", () => {
 
   it("validates hosts", () => {
     expect(stepError(1, { ...github, hostname: " " })).toMatch(/Hostnamen/);
-    expect(stepError(1, { ...github, provider: "generic", hostname: "1.2.3.4" })).toMatch(/Alias/);
+    expect(stepError(1, { ...github, provider: "generic", hostname: "1.2.3.4" })).toBeNull();
     expect(stepError(1, { ...github, port: "abc" })).toMatch(/Zahl/);
     expect(stepError(1, github)).toBeNull();
   });

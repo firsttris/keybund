@@ -151,7 +151,7 @@ pub fn save(env: &Env, config: &Config) -> Result<()> {
 /// Structural checks that do not touch the file system.
 pub fn validate(config: &Config) -> Result<()> {
     let mut ids = std::collections::HashSet::new();
-    let mut aliases = std::collections::HashSet::new();
+    let mut aliases: std::collections::HashSet<String> = std::collections::HashSet::new();
     for p in &config.profiles {
         if !is_valid_id(&p.id) {
             return Err(Error::InvalidId(p.id.clone()));
@@ -166,9 +166,9 @@ pub fn validate(config: &Config) -> Result<()> {
             continue;
         }
         for h in &p.hosts {
-            if let Some(alias) = &h.alias {
-                if !aliases.insert(alias.as_str()) {
-                    return Err(Error::DuplicateAlias(alias.clone()));
+            for pattern in h.ssh_patterns() {
+                if !aliases.insert(pattern.to_lowercase()) {
+                    return Err(Error::DuplicateAlias(pattern));
                 }
             }
         }
@@ -317,6 +317,27 @@ provider = "gitlab"
         let mut cfg = parse(SAMPLE).unwrap();
         cfg.profiles[0].id = "Mit Leerzeichen".into();
         assert!(matches!(validate(&cfg), Err(Error::InvalidId(_))));
+    }
+
+    #[test]
+    fn a_server_belongs_to_one_profile() {
+        let mut cfg = parse(SAMPLE).unwrap();
+        // meinserver is 1.2.3.4 in "privat"; the same IP in another profile is ambiguous.
+        cfg.profiles[1].hosts.push(HostEntry { hostname: "1.2.3.4".into(), ..Default::default() });
+        assert!(matches!(validate(&cfg), Err(Error::DuplicateAlias(h)) if h == "1.2.3.4"));
+        // Two profiles on github.com are fine: no Host block for it.
+        let mut cfg = parse(SAMPLE).unwrap();
+        cfg.profiles[0].hosts.push(HostEntry {
+            hostname: "github.com".into(),
+            provider: Provider::Github,
+            ..Default::default()
+        });
+        cfg.profiles[1].hosts.push(HostEntry {
+            hostname: "github.com".into(),
+            provider: Provider::Github,
+            ..Default::default()
+        });
+        validate(&cfg).unwrap();
     }
 
     #[test]

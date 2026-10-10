@@ -65,8 +65,6 @@ test("creates a server with an existing key from settings", async ({ app }) => {
   await app.getByRole("button", { name: "Weiter" }).click();
   await app.getByRole("radio", { name: "Server" }).click();
   await app.getByLabel("Hostname").fill("192.168.1.20");
-  await app.getByRole("button", { name: "Weiter" }).click();
-  await expect(app.getByRole("alert")).toHaveText("Server brauchen einen Alias, z. B. meinserver.");
   await app.getByLabel("SSH-Alias").fill("backup");
   await app.getByLabel("Benutzer").fill("root");
   await app.getByRole("button", { name: "Weiter" }).click();
@@ -77,7 +75,7 @@ test("creates a server with an existing key from settings", async ({ app }) => {
 
   await expect(app.getByRole("radio", { name: /Vorhandenen Key verwenden/ })).toHaveAttribute("aria-checked", "true");
   await expect(app.getByRole("radio", { name: /^~\/.ssh\/id_ed25519 SHA256/ })).toBeChecked();
-  await expect(app.getByText("+Host backup")).toBeVisible();
+  await expect(app.getByText("+Host backup 192.168.1.20")).toBeVisible();
   await expect(app.getByText("+    IdentityFile ~/.ssh/id_ed25519")).toBeVisible();
   await app.getByRole("button", { name: "Anwenden & Pubkey kopieren" }).click();
 

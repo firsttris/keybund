@@ -6,7 +6,7 @@ expression: ssh_config(&sample())
 # Included from the top of ~/.ssh/config.
 
 # Profil: Privat
-Host meinserver
+Host meinserver 1.2.3.4
     HostName 1.2.3.4
     User tristan
     Port 22

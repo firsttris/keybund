@@ -34,15 +34,19 @@ pub fn adds_keys_to_agent(command: &str) -> bool {
     ["addkeystoagent=yes", "addkeystoagent=confirm", "addkeystoagent yes"].iter().any(|o| lower.contains(o))
 }
 
-/// `~/.ssh/config.d/keybund.conf`: a `Host` block for every host that has
-/// an alias (servers), each pinned to the profile's key.
+/// `~/.ssh/config.d/keybund.conf`: a `Host` block for every server (by
+/// alias and hostname/IP) and every aliased git host, each pinned to the
+/// profile's key.
 pub fn ssh_config(config: &Config) -> String {
     let mut out = format!("{MANAGED}\n# Included from the top of ~/.ssh/config.\n");
     for p in config.active_profiles() {
-        for h in p.hosts.iter().filter(|h| h.alias.is_some()) {
-            let alias = h.alias.as_deref().unwrap_or_default();
+        for h in p.hosts.iter() {
+            let patterns = h.ssh_patterns();
+            if patterns.is_empty() {
+                continue;
+            }
             let _ = writeln!(out, "\n# Profil: {}", p.name);
-            let _ = writeln!(out, "Host {alias}");
+            let _ = writeln!(out, "Host {}", patterns.join(" "));
             let _ = writeln!(out, "    HostName {}", h.hostname);
             if let Some(user) = &h.user {
                 let _ = writeln!(out, "    User {user}");
@@ -232,6 +236,28 @@ mod tests {
     }
 
     #[test]
+    fn servers_match_by_alias_and_ip_git_hosts_only_by_alias() {
+        let mut p = profile("p", "P", "~/dev/p/", false);
+        p.hosts = vec![
+            HostEntry { alias: Some("nas".into()), hostname: "192.168.1.5".into(), ..Default::default() },
+            HostEntry { hostname: "10.0.0.7".into(), user: Some("root".into()), ..Default::default() },
+            HostEntry {
+                alias: Some("pflegeabc".into()),
+                hostname: "github.com".into(),
+                provider: Provider::Github,
+                ..Default::default()
+            },
+            HostEntry { hostname: "github.com".into(), provider: Provider::Github, ..Default::default() },
+        ];
+        let conf = ssh_config(&Config { default_profile: None, profiles: vec![p] });
+        assert!(conf.contains("Host nas 192.168.1.5\n"));
+        assert!(conf.contains("Host 10.0.0.7\n    HostName 10.0.0.7\n    User root\n"));
+        assert!(conf.contains("Host pflegeabc\n    HostName github.com\n"));
+        assert!(!conf.contains("Host github.com"));
+        assert!(!conf.contains("Host pflegeabc github.com"));
+    }
+
+    #[test]
     fn archived_profiles_are_skipped() {
         let files = render_all(&sample(), &Env::with_home("/home/t"), &BTreeMap::new());
         assert!(files.iter().all(|f| !f.path.ends_with("alt.gitconfig")));
@@ -261,7 +287,7 @@ mod tests {
             "[includeIf \"gitdir:~/dev/kunde-a/\"]\n\tpath = ~/.config/keybund/git/kunde-a.gitconfig\n"
         );
         let blocks = ssh_host_blocks(&cfg.profiles[0]);
-        assert!(blocks.starts_with("# Profil: Privat\nHost meinserver\n"));
+        assert!(blocks.starts_with("# Profil: Privat\nHost meinserver 1.2.3.4\n"));
         assert!(!blocks.contains("Host *"));
         assert_eq!(ssh_host_blocks(&cfg.profiles[1]), "");
     }

@@ -222,11 +222,18 @@ function includeIfBlocks(p: Profile): string {
     .join("\n");
 }
 
+/** Mirrors HostEntry::ssh_patterns: servers by alias and hostname, git hosts only by alias. */
+export function sshPatterns(h: HostEntry): string[] {
+  const patterns = h.alias ? [h.alias] : [];
+  if (h.provider === "generic" && !patterns.includes(h.hostname)) patterns.push(h.hostname);
+  return patterns;
+}
+
 function sshHostBlocks(p: Profile): string {
   return p.hosts
-    .filter((h) => h.alias)
+    .filter((h) => sshPatterns(h).length > 0)
     .map((h) => {
-      let block = `# Profil: ${p.name}\nHost ${h.alias}\n    HostName ${h.hostname}\n`;
+      let block = `# Profil: ${p.name}\nHost ${sshPatterns(h).join(" ")}\n    HostName ${h.hostname}\n`;
       if (h.user) block += `    User ${h.user}\n`;
       if (h.port != null) block += `    Port ${h.port}\n`;
       return `${block}    IdentityFile ${p.key.path}\n    IdentitiesOnly yes\n    AddKeysToAgent yes\n`;
