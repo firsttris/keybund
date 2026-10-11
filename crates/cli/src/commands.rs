@@ -296,11 +296,7 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
         hosts: vec![host.clone()],
         ..Default::default()
     });
-    store::validate(&candidate)?;
-    for f in &folders {
-        let path = env.expand(f);
-        std::fs::create_dir_all(&path).with_context(|| format!("Ordner {f} kann nicht angelegt werden"))?;
-    }
+    store::validate_in(env, &candidate)?;
 
     // 5. Key
     let key = match args.key.clone() {
@@ -330,6 +326,11 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
             KeyRef { path, comment: Some(comment) }
         }
     };
+    // Folders only once the key is there: a refused key leaves nothing behind.
+    for f in &folders {
+        let path = env.expand(f);
+        std::fs::create_dir_all(&path).with_context(|| format!("Ordner {f} kann nicht angelegt werden"))?;
+    }
 
     let profile = Profile {
         id: id.clone(),
@@ -352,7 +353,7 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
     // 6. Diff anzeigen und anwenden
     if !args.no_apply {
         let plan = apply::plan(env, &config)?;
-        if !confirm_and_apply(env, &plan, args.yes || !tty)? {
+        if !confirm_and_apply(env, &plan, args.yes)? {
             ui::warn("Configs nicht geschrieben – später mit `keybund apply`.");
             return Ok(ExitCode::SUCCESS);
         }
@@ -419,6 +420,11 @@ fn confirm_and_apply(env: &Env, plan: &Plan, yes: bool) -> Result<bool> {
         return Ok(true);
     }
     print_plan(plan);
+    // A script or a pipe cannot answer: the files are only written with --yes.
+    if !yes && !interactive() {
+        ui::warn("Ohne Terminal nur mit --yes – Configs nicht geschrieben.");
+        return Ok(false);
+    }
     if !yes
         && !Confirm::with_theme(&theme())
             .with_prompt(format!("{} Datei(en) schreiben?", plan.changes.len()))
@@ -777,7 +783,11 @@ pub fn import(env: &Env, all: bool, yes: bool, keep_old: bool) -> Result<ExitCod
                 ui::hint("Mit `keybund import --all` übernehmen.");
                 return Ok(ExitCode::SUCCESS);
             }
-            proposals.clone()
+            // A block whose key file is gone cannot become a key; the others still can.
+            for p in proposals.iter().filter(|p| !p.key_exists) {
+                ui::warn(&format!("{} übersprungen: Key-Datei {} fehlt", p.profile.name, p.profile.key.path));
+            }
+            proposals.iter().filter(|p| p.key_exists).cloned().collect()
         } else {
             let labels: Vec<String> =
                 proposals.iter().map(|p| format!("{} ({})", p.profile.name, p.profile.key.path)).collect();
@@ -794,7 +804,7 @@ pub fn import(env: &Env, all: bool, yes: bool, keep_old: bool) -> Result<ExitCod
         let ids = import_mod::import(env, &chosen)?;
         ui::success(&format!("{} Key(s) übernommen: {}", ids.len(), ids.join(", ")));
         let config = store::load(env)?;
-        if !confirm_and_apply(env, &apply::plan(env, &config)?, !tty)? {
+        if !confirm_and_apply(env, &apply::plan(env, &config)?, yes)? {
             ui::warn("Configs nicht geschrieben – später mit `keybund apply`.");
             return Ok(ExitCode::SUCCESS);
         }
@@ -1025,7 +1035,7 @@ pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
     let plan = apply::plan(env, &config)?;
-    if !confirm_and_apply(env, &plan, args.yes || !interactive())? {
+    if !confirm_and_apply(env, &plan, args.yes)? {
         ui::warn("Configs nicht geschrieben – später mit `keybund apply`.");
     }
     Ok(ExitCode::SUCCESS)

@@ -222,7 +222,7 @@ fn with_new_profile(env: &Env, project: &NewProject) -> CmdResult<Config> {
     if project.make_default {
         config.default_profile = Some(project.profile.id.clone());
     }
-    store::validate(&config)?;
+    store::validate_in(env, &config)?;
     Ok(config)
 }
 
@@ -247,16 +247,30 @@ pub fn create_project(env: &Env, project: &NewProject) -> CmdResult<CreatedProje
     let _write = writing(env)?;
     let mut config = with_new_profile(env, project)?;
     let id = project.profile.id.clone();
+    let mut generated = None;
     if let KeyChoice::Generate { comment, passphrase } = &project.key {
         let path = config.profile(&id)?.key.path.clone();
-        keygen::generate(env, &GenerateOptions { path, comment: comment.clone(), passphrase: passphrase.clone() })?;
+        keygen::generate(
+            env,
+            &GenerateOptions { path: path.clone(), comment: comment.clone(), passphrase: passphrase.clone() },
+        )?;
         config.profile_mut(&id)?.key.comment = Some(comment.clone());
+        generated = Some(path);
+    }
+    // Saved before any folder is created; a refused save takes a key just
+    // generated away again, so nothing is left behind.
+    if let Err(e) = store::save(env, &config) {
+        if let Some(path) = generated {
+            let private = env.expand(&path);
+            let _ = std::fs::remove_file(&private);
+            let _ = std::fs::remove_file(format!("{}.pub", private.display()));
+        }
+        return Err(e.into());
     }
     for folder in &config.profile(&id)?.folders {
         let path = env.expand(folder);
         std::fs::create_dir_all(&path).map_err(|e| CmdError::other(format!("{folder}: {e}")))?;
     }
-    store::save(env, &config)?;
     let report = apply::apply_config(env, &config)?;
     let profile = config.profile(&id)?;
     Ok(CreatedProject {
@@ -330,7 +344,8 @@ pub fn host_key_check(env: &Env, id: &str, host: Option<&str>) -> CmdResult<Host
 
 /// Stores the host keys the user confirmed.
 pub fn trust_host_key(env: &Env, id: &str, host: Option<&str>, fingerprints: &[String]) -> CmdResult<()> {
-    let _write = writing(env)?;
+    // No write lock: this touches known_hosts only, and the scan inside
+    // can take seconds – nothing else should wait for it.
     let config = store::load(env)?;
     let profile = config.profile(id)?;
     hostkeys::trust(env, &config.settings, profile, host_of(profile, host)?, fingerprints)?;
@@ -379,7 +394,7 @@ pub fn apply_changes(env: &Env, expected_diffs: &[String]) -> CmdResult<ApplyRep
     let plan = plan_changes(env)?;
     let current: Vec<&str> = plan.changes.iter().map(|c| c.diff.as_str()).collect();
     if current != expected_diffs.iter().map(String::as_str).collect::<Vec<_>>() {
-        return Err(Error::StalePlan("Bitte Vorschau neu laden".into()).into());
+        return Err(CmdError { kind: "stale_plan".into(), message: msg!("error_stalePreview") });
     }
     Ok(apply::apply(env, &plan)?)
 }
@@ -472,7 +487,7 @@ pub fn cleanup_apply(env: &Env, expected_diffs: &[String]) -> CmdResult<ApplyRep
     let plan = import::plan_cleanup(env)?;
     let current: Vec<&str> = plan.changes.iter().map(|c| c.diff.as_str()).collect();
     if current != expected_diffs.iter().map(String::as_str).collect::<Vec<_>>() {
-        return Err(Error::StalePlan("Bitte Vorschau neu laden".into()).into());
+        return Err(CmdError { kind: "stale_plan".into(), message: msg!("error_stalePreview") });
     }
     Ok(apply::apply(env, &plan)?)
 }
@@ -487,7 +502,7 @@ pub fn uninstall_apply(env: &Env, opts: UninstallOptions, expected_diffs: &[Stri
     let plan = uninstall::preview(env, opts)?.plan;
     let current: Vec<&str> = plan.changes.iter().map(|c| c.diff.as_str()).collect();
     if current != expected_diffs.iter().map(String::as_str).collect::<Vec<_>>() {
-        return Err(Error::StalePlan("Bitte Vorschau neu laden".into()).into());
+        return Err(CmdError { kind: "stale_plan".into(), message: msg!("error_stalePreview") });
     }
     Ok(uninstall::uninstall(env, &plan)?)
 }

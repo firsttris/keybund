@@ -2,6 +2,8 @@
 
 mod common;
 
+use std::fs;
+
 use common::{has_tools, Sandbox};
 use predicates::prelude::*;
 
@@ -747,4 +749,86 @@ fn unknown_host_keys_are_confirmed_first() {
         assert!(!sb.path(".ssh/known_hosts.d/server").exists());
         assert!(sb.path(".ssh/archive/known_hosts-server").exists());
     }
+}
+
+/// A script or a pipe cannot answer a question: without --yes nothing of the
+/// user's files is written, as the documentation promises.
+#[test]
+fn without_a_terminal_the_users_files_need_yes() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.cmd()
+        .args(["new", "--name", "Foo", "--provider", "github", "--host", "github.com", "--no-browser"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Ohne Terminal nur mit --yes"));
+    assert!(sb.path(".ssh/foo_ed25519").exists(), "the key and the profile are created");
+    assert!(sb.read(".config/keybund/profiles.toml").contains("id = \"foo\""));
+    assert!(!sb.read(".ssh/config").contains("keybund"), "but nothing of the user's files is touched");
+    assert!(!sb.path(".gitconfig").exists());
+    sb.cmd().args(["edit", "foo", "--add-folder", "~/dev/foo"]).assert().success();
+    assert!(!sb.path(".gitconfig").exists());
+    sb.cmd().args(["apply", "--yes"]).assert().success();
+    assert!(sb.read(".ssh/config").starts_with("Include ~/.ssh/config.d/keybund.conf\n"));
+}
+
+/// A refused key leaves nothing behind – no folder, no profile.
+#[test]
+fn a_refused_key_creates_no_folders() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    fs::create_dir_all(sb.path(".ssh")).unwrap();
+    fs::write(sb.path(".ssh/foo_ed25519"), "not really a key").unwrap();
+    sb.cmd()
+        .args([
+            "new",
+            "--name",
+            "Foo",
+            "--provider",
+            "github",
+            "--host",
+            "github.com",
+            "--folder",
+            "~/dev/foo",
+            "--yes",
+            "--no-browser",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("existiert bereits"));
+    assert!(!sb.path("dev/foo").exists());
+    assert!(!sb.path(".config/keybund/profiles.toml").exists());
+}
+
+/// `import --all` takes what it can: a block whose key file is gone is
+/// skipped with a word, the others become keys.
+#[test]
+fn import_all_skips_blocks_without_a_key_file() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    fs::create_dir_all(sb.path(".ssh")).unwrap();
+    assert!(std::process::Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", "", "-f"])
+        .arg(sb.path(".ssh/work_ed25519"))
+        .status()
+        .unwrap()
+        .success());
+    fs::write(
+        sb.path(".ssh/config"),
+        "Host work\n    HostName gitlab.example.com\n    User git\n    IdentityFile ~/.ssh/work_ed25519\n\nHost old\n    HostName old.example.com\n    IdentityFile ~/.ssh/gone_ed25519\n",
+    )
+    .unwrap();
+    sb.cmd()
+        .args(["import", "--all", "--yes", "--keep-old"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("übersprungen").and(predicate::str::contains("gone_ed25519")))
+        .stdout(predicate::str::contains("1 Key(s) übernommen"));
+    assert!(sb.read(".config/keybund/profiles.toml").contains("work_ed25519"));
 }

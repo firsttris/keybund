@@ -126,17 +126,19 @@ pub fn copy_public_key<R: Runtime>(app: AppHandle<R>, state: State<'_, AppState>
 
 #[tauri::command]
 #[specta::specta]
-pub fn settings(state: State<'_, AppState>) -> CmdResult<keybund_core::model::Settings> {
-    api::settings(&state.env)
+pub async fn settings(state: State<'_, AppState>) -> CmdResult<keybund_core::model::Settings> {
+    let env = state.env.clone();
+    blocking(move || api::settings(&env)).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn update_settings(
+pub async fn update_settings(
     state: State<'_, AppState>,
     settings: keybund_core::model::Settings,
 ) -> CmdResult<keybund_core::model::Settings> {
-    api::update_settings(&state.env, settings)
+    let env = state.env.clone();
+    blocking(move || api::update_settings(&env, settings)).await
 }
 
 /// Opens an https link in the browser, also from a toolbox or an AppImage.
@@ -186,13 +188,14 @@ pub async fn test_connection(state: State<'_, AppState>, id: String, host: Optio
                     .iter()
                     .find(|h| h.target_name() == name || h.hostname == name)
                     .ok_or_else(|| CmdError::no_such_host(&id, &name))?;
-                let result = probe::probe(&env, profile, h)?;
+                let result = probe::probe_detached(&env, profile, h)?;
                 // The key's latest test is remembered (sidebar, start page).
                 history::record(&env, &id, &result)?;
                 Ok(result)
             }
             None => {
-                let result = probe::probe_profile(&env, profile)?;
+                let h = profile.hosts.first().ok_or_else(|| keybund_core::Error::NoHost(profile.id.clone()))?;
+                let result = probe::probe_detached(&env, profile, h)?;
                 history::record(&env, &id, &result)?;
                 Ok(result)
             }
@@ -218,7 +221,7 @@ pub async fn install_key(
             .iter()
             .find(|h| h.target_name() == host || h.hostname == host)
             .ok_or_else(|| CmdError::no_such_host(&id, &host))?;
-        Ok(keybund_core::keyinstall::install(&env, profile, server)?)
+        Ok(keybund_core::keyinstall::install_detached(&env, profile, server)?)
     })
     .await
 }
