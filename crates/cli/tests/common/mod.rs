@@ -186,6 +186,22 @@ pub fn real_tool(name: &str) -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|p| std::env::split_paths(&p).map(|d| d.join(name)).find(|f| f.is_file()))
 }
 
+/// The binary writes the files for the system it runs on
+/// (`Platform::current()`): macOS gets `gitdir/i:` and the Keychain options.
+pub fn platform() -> keybund_core::env::Platform {
+    keybund_core::env::Platform::current()
+}
+
+/// `gitdir:<folder>` as the binary writes it on this system.
+pub fn gitdir(folder: &str) -> String {
+    keybund_core::render::gitdir_condition(folder, platform())
+}
+
+/// `core.sshCommand` as the binary writes it on this system.
+pub fn ssh_command(key: &str) -> String {
+    keybund_core::render::ssh_command(key, platform())
+}
+
 /// Tests that need git and ssh-keygen are skipped locally when they are
 /// missing, but never in CI.
 pub fn has_tools() -> bool {

@@ -66,10 +66,7 @@ fn two_customers_on_github_full_lifecycle() {
         let repo = sb.path(&format!("dev/{id}/repo"));
         fs::create_dir_all(&repo).unwrap();
         sb.git(&repo, &["init", "-q"]);
-        assert_eq!(
-            sb.git(&repo, &["config", "core.sshCommand"]),
-            format!("ssh -i ~/.ssh/{id}_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes")
-        );
+        assert_eq!(sb.git(&repo, &["config", "core.sshCommand"]), common::ssh_command(&format!("~/.ssh/{id}_ed25519")));
         assert_eq!(sb.git(&repo, &["config", "user.email"]), mail);
     }
     assert_eq!(sb.git(&sb.path("dev/privat/repo"), &["config", "commit.gpgsign"]), "true");
@@ -77,7 +74,7 @@ fn two_customers_on_github_full_lifecycle() {
     // 4. which explains the resolution.
     sb.cmd().args(["which", "~/dev/kunde-b/repo"]).assert().success().stdout(
         predicate::str::contains("~/.ssh/kunde-b_ed25519")
-            .and(predicate::str::contains("includeIf \"gitdir:~/dev/kunde-b/\""))
+            .and(predicate::str::contains(format!("includeIf \"{}\"", common::gitdir("~/dev/kunde-b/"))))
             .and(predicate::str::contains("t@kunde-b.de")),
     );
 
@@ -284,7 +281,7 @@ fn a_server_from_first_contact_to_git_over_ssh() {
         .args(["which", "~/work/app"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("includeIf \"gitdir:~/dev/privat/\""));
+        .stdout(predicate::str::contains(format!("includeIf \"{}\"", common::gitdir("~/dev/privat/"))));
     sb.cmd().args(["which", "nas"]).assert().success().stdout(
         predicate::str::contains("nas_ed25519").and(predicate::str::contains(format!("{me}@127.0.0.1:{port}"))),
     );

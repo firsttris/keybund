@@ -27,16 +27,23 @@
     "targets": [
       "appimage",
       "deb",
-      "rpm"
+      "rpm",
+      "app",
+      "dmg"
     ],
     "category": "DeveloperTool",
     "shortDescription": "SSH key manager: the right SSH key and Git identity, automatically",
-    "longDescription": "Keybund manages your SSH keys on Linux: one key per GitHub, GitLab or Bitbucket account, per client and per server, the right Git identity per folder. It writes plain OpenSSH and Git configuration (Include, includeIf, core.sshCommand), so git, ssh and Dolphin pick the right key without Keybund running.",
+    "longDescription": "Keybund manages your SSH keys on Linux and macOS: one key per GitHub, GitLab or Bitbucket account, per client and per server, the right Git identity per folder. It writes plain OpenSSH and Git configuration (Include, includeIf, core.sshCommand), so git, ssh and your other tools pick the right key without Keybund running.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/icon.png"
-    ]
+      "icons/icon.png",
+      "icons/icon.icns"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-"
+    }
   }
 }

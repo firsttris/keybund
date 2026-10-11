@@ -1,7 +1,7 @@
 name: Release
 
 # A tag vX.Y.Z (from the "Bump version" button or pushed from a checkout) runs the checks, builds the
-# CLI binary, the AppImage and the .deb, and creates the GitHub release with these files.
+# CLI binaries, the AppImage, the .deb and the macOS .dmg, and creates the GitHub release with these files.
 # Run by hand on a branch it only checks and builds (no release), e.g. to try the packaging.
 on:
   push:
@@ -54,8 +54,71 @@ jobs:
           mkdir -p dist
           tar -czf "dist/keybund-cli-${version}-x86_64-linux.tar.gz" -C target/release keybund
           cp target/release/bundle/appimage/*.AppImage target/release/bundle/deb/*.deb dist/
-          (cd dist && sha256sum -- * > SHA256SUMS)
           ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux
+          path: dist/
+          if-no-files-found: error
+
+  build-macos:
+    name: Build · macOS CLI and .dmg (Apple Silicon + Intel)
+    needs: checks
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: app/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - name: CLI for both architectures in one binary
+        run: |
+          set -euo pipefail
+          cargo build --release --locked -p keybund-cli --target aarch64-apple-darwin
+          cargo build --release --locked -p keybund-cli --target x86_64-apple-darwin
+          mkdir -p target/universal
+          lipo -create -output target/universal/keybund \
+            target/aarch64-apple-darwin/release/keybund target/x86_64-apple-darwin/release/keybund
+      # Ad-hoc signed ("signingIdentity": "-" in tauri.conf.json), not notarized: Gatekeeper asks
+      # once, see docs/installation.md.
+      - run: pnpm tauri build --target universal-apple-darwin --bundles dmg
+        working-directory: app
+      - name: Collect release files
+        run: |
+          set -euo pipefail
+          version=$(grep -m1 -E '^version *= *"' Cargo.toml | cut -d'"' -f2)
+          mkdir -p dist
+          tar -czf "dist/keybund-cli-${version}-universal-macos.tar.gz" -C target/universal keybund
+          cp target/universal-apple-darwin/release/bundle/dmg/*.dmg dist/
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-macos
+          path: dist/
+          if-no-files-found: error
+
+  collect:
+    name: Collect · all files and checksums
+    needs: [build, build-macos]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - run: (cd dist && sha256sum -- * > SHA256SUMS && ls -l)
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -63,7 +126,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: build
+    needs: collect
     if: startsWith(github.ref, 'refs/tags/v')   # run by hand on a branch: only checks and build
     uses: firsttris/workflows/.github/workflows/github-release.yml@v1
     with:

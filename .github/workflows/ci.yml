@@ -48,6 +48,22 @@ jobs:
       # Includes the bindings check: fails if app/src/lib/bindings.ts is outdated.
       - run: cargo test --workspace
 
+  rust-macos:
+    name: Rust · macOS · clippy, unit + integration + E2E tests
+    # The same tests against Apple's ssh and git: Keychain options, gitdir/i, launchd's agent.
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: mkdir -p app/dist && echo '<!doctype html>' > app/dist/index.html
+      - run: cargo clippy --workspace --all-targets --all-features
+      - run: cargo test --workspace
+
   rust-coverage:
     name: Rust · coverage
     # Draft pull requests do not build; "Ready for review" starts the run

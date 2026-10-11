@@ -80,7 +80,9 @@ fn new_generates_key_and_writes_configs() {
     assert!(!sb.read(".config/keybund/profiles.toml").contains("default_profile"));
     assert!(!sb.read(".config/keybund/git/index.gitconfig").contains("Default key"));
     assert!(sb.read(".ssh/config").starts_with("Include ~/.ssh/config.d/keybund.conf"));
-    assert!(sb.read(".config/keybund/git/index.gitconfig").contains("[includeIf \"gitdir:~/dev/kunde-c/\"]"));
+    assert!(sb
+        .read(".config/keybund/git/index.gitconfig")
+        .contains(&format!("[includeIf \"{}\"]", common::gitdir("~/dev/kunde-c/"))));
     assert!(sb.read(".config/keybund/git/kunde-c.gitconfig").contains("email = t@c.de"));
 }
 
@@ -546,7 +548,7 @@ fn edit_changes_folders_hosts_identity_and_key() {
     assert!(toml.contains("name = \"Kunde GmbH\""));
     assert!(toml.contains("\"~/work/kunde/\"") && !toml.contains("~/dev/kunde/"));
     let index = sb.read(".config/keybund/git/index.gitconfig");
-    assert!(index.contains("gitdir:~/work/kunde/") && !index.contains("gitdir:~/dev/kunde/"));
+    assert!(index.contains(&common::gitdir("~/work/kunde/")) && !index.contains("~/dev/kunde/"));
     let gitconfig = sb.read(".config/keybund/git/kunde.gitconfig");
     assert!(gitconfig.contains("email = neu@k.de") && gitconfig.contains("gpgsign = true"));
 
