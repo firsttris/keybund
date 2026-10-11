@@ -471,6 +471,33 @@ describe("key page", () => {
     expect(within(github).queryByText("Pubkey ist kopiert.")).not.toBeInTheDocument();
   });
 
+  it("closes the add-key hint, a test result and a server message again", async () => {
+    const { user } = await renderApp("/profile/kunde-b", (b) => {
+      b.state.profiles
+        .find((p) => p.id === "kunde-b")!
+        .hosts.push({ provider: "generic", hostname: "1.2.3.4", alias: "nas", user: null, port: null });
+      b.state.knownHosts.push("1.2.3.4");
+    });
+    const github = await row("GitHub-Konto");
+    // "Key eintragen" opens the hint – and the × closes it, without testing.
+    await user.click(within(github).getByRole("button", { name: /Key eintragen/ }));
+    expect(await within(github).findByText("Pubkey ist kopiert.")).toBeInTheDocument();
+    await user.click(within(github).getByRole("button", { name: "Hinweis schließen" }));
+    expect(within(github).queryByText("Pubkey ist kopiert.")).not.toBeInTheDocument();
+    // A test result closes the same way; the stored result stays as one line.
+    await user.click(within(github).getByRole("button", { name: "Testen" }));
+    expect(await within(github).findByTestId("connection-status")).toBeInTheDocument();
+    await user.click(within(github).getByRole("button", { name: "Testergebnis schließen" }));
+    expect(within(github).queryByTestId("connection-status")).not.toBeInTheDocument();
+    expect(await within(github).findByTestId("last-test")).toHaveTextContent("GitHub kennt diesen Key nicht");
+    // And the message of "Key eintragen" on a server.
+    const server = await row("Server nas");
+    await user.click(within(server).getByRole("button", { name: "Key eintragen" }));
+    expect(await within(server).findByText("Key auf nas eingetragen")).toBeInTheDocument();
+    await user.click(within(server).getByRole("button", { name: "Meldung schließen" }));
+    expect(within(server).queryByText("Key auf nas eingetragen")).not.toBeInTheDocument();
+  });
+
   it("offers to install the key on a server when the test fails", async () => {
     const { user, backend } = await renderApp("/profile/kunde-b", (b) => {
       b.state.profiles

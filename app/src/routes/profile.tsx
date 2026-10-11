@@ -370,6 +370,21 @@ function lastTestOf(view: ProfileView, host: HostEntry): LastTest | null {
   return view.host_tests.find((t) => t.host === (host.alias ?? host.hostname)) ?? null;
 }
 
+/** The × of a panel that a click opened: it closes again the same way. */
+function CloseButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="absolute top-1 right-1 size-7 text-muted-foreground"
+      aria-label={label}
+      onClick={onClick}
+    >
+      <X aria-hidden className="size-3.5" />
+    </Button>
+  );
+}
+
 /** The one thing to do when the server does not know the key yet. */
 type Fix = { text: string; label: string; onClick: () => void; busy?: boolean };
 
@@ -386,7 +401,7 @@ function TestResult({
   if (test.isError) return <FieldError>{errorMessage(test.error)}</FieldError>;
   const result = test.data;
   if (!result) {
-    // Not tested in this session: what the last test of this host said.
+    // Not tested in this session (or the result was closed): what the last test of this host said.
     if (!lastTest) return null;
     return (
       <span
@@ -399,7 +414,8 @@ function TestResult({
     );
   }
   return (
-    <div aria-live="polite" className="flex flex-col gap-2">
+    <div aria-live="polite" className="relative flex flex-col gap-2 pr-8">
+      <CloseButton label={m.test_close()} onClick={() => test.reset()} />
       <span
         className={`flex items-center gap-2 text-[13px] ${result.success ? "text-success" : "text-danger"}`}
         data-testid="connection-status"
@@ -504,8 +520,9 @@ function AccountRow({
       {pasting && (
         <div
           role="status"
-          className="flex flex-col gap-2 rounded-[10px] border border-border bg-background p-3.5 text-[13px]"
+          className="relative flex flex-col gap-2 rounded-[10px] border border-border bg-background p-3.5 pr-10 text-[13px]"
         >
+          <CloseButton label={m.account_closeHint()} onClick={() => setPasting(false)} />
           <span>
             <span className="font-medium">{m.account_copied()}</span>{" "}
             <span className="text-muted-foreground">{m.account_pasteHint({ provider, name: profile.name })}</span>
@@ -593,10 +610,11 @@ function ServerRow({
         )
       }
     >
-      <div aria-live="polite" className="flex flex-col gap-1 text-xs empty:hidden">
+      <div aria-live="polite" className="relative flex flex-col gap-1 pr-8 text-xs empty:hidden">
         {install.isPending && <span className="text-muted-foreground">{m.server_installing({ name })}</span>}
         {result && <span className={result.success ? "text-success" : "text-danger"}>{t(result.message)}</span>}
         {install.isError && <span className="text-danger">{errorMessage(install.error)}</span>}
+        {(result || install.isError) && <CloseButton label={m.server_closeResult()} onClick={() => install.reset()} />}
       </div>
       <TestResult
         test={test}
