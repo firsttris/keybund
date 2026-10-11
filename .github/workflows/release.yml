@@ -94,6 +94,30 @@ jobs:
       # once, see docs/installation.md.
       - run: pnpm tauri build --target universal-apple-darwin --bundles dmg
         working-directory: app
+      # Nobody has to find out on their Mac that the app does not start: both architectures are in
+      # it, the CLI answers, and the app opens its window and keeps running (a throw-away HOME,
+      # so the runner's own files stay untouched).
+      - name: Smoke test · CLI and app start on macOS
+        run: |
+          set -euo pipefail
+          app=$(ls -d target/universal-apple-darwin/release/bundle/macos/*.app | head -1)
+          bin=$(find "$app/Contents/MacOS" -type f -perm -u+x | head -1)
+          for b in target/universal/keybund "$bin"; do
+            archs=$(lipo -archs "$b")
+            echo "$b: $archs"
+            [[ "$archs" == *arm64* && "$archs" == *x86_64* ]]
+          done
+          home=$(mktemp -d)
+          HOME="$home" target/universal/keybund --version
+          HOME="$home" target/universal/keybund doctor || true
+          HOME="$home" "$bin" > "$RUNNER_TEMP/app.log" 2>&1 &
+          pid=$!
+          sleep 20
+          if ! kill -0 "$pid" 2>/dev/null; then
+            echo "The app exited during start:"; cat "$RUNNER_TEMP/app.log"; exit 1
+          fi
+          kill "$pid"
+          ! grep -i "panicked" "$RUNNER_TEMP/app.log"
       - name: Collect release files
         run: |
           set -euo pipefail

@@ -155,8 +155,10 @@ Tauri app takes it from Cargo. A release starts only from a tag `vX.Y.Z`:
 1. **Actions → Bump version → Run workflow** and choose `patch`, `minor` or `major`. The workflow
    raises the version, commits `Release vX.Y.Z` to `main`, tags it and starts `release.yml`.
 2. `release.yml` runs the complete CI (`ci.yml` via `workflow_call`), builds the CLI binary, the
-   AppImage and the `.deb` on Ubuntu 22.04 (for an old enough glibc) and creates the GitHub release
-   with generated notes and `SHA256SUMS`. A version with `-` (`0.2.0-rc.1`) becomes a pre-release.
+   AppImage and the `.deb` on Ubuntu 22.04 (for an old enough glibc), and on macOS a universal
+   `.dmg` and CLI (Apple Silicon + Intel). Before they are kept, a smoke test checks both
+   architectures, runs the CLI and starts the app with a throw-away home – it has to keep running.
+   Then it creates the GitHub release with generated notes and `SHA256SUMS`. A version with `-` (`0.2.0-rc.1`) becomes a pre-release.
 
 From a checkout instead: set the version in `Cargo.toml` and `app/package.json`, run `cargo check`
 (updates `Cargo.lock`), commit, then `git tag v0.2.0 && git push --follow-tags`. If tag and
@@ -164,7 +166,9 @@ From a checkout instead: set the version in `Cargo.toml` and `app/package.json`,
 publishing – useful to try the packaging.
 
 Before a release, by hand: `ssh <alias>` to a real server, `sftp://<alias>` in Dolphin, a push in two
-client folders, a clone through the helper, and `keybund doctor` green.
+client folders, a clone through the helper, and `keybund doctor` green. On a Mac, when one is at
+hand: open the `.dmg` (Gatekeeper's “Open Anyway”), test a server with a key that has a passphrase
+(Keybund's dialog asks), restart, test again – the Keychain answers without a dialog.
 
 The shared workflows (`bump-version.yml`, `github-release.yml`, `screenshots.yml`) come from
 [firsttris/workflows](https://github.com/firsttris/workflows) (`@v1`).
