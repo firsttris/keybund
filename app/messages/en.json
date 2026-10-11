@@ -10,6 +10,7 @@
   "error_defaultProfileMissing": "Default key “{id}” does not exist",
   "error_nestedFolders": "Git folders overlap: {a} and {b}",
   "error_duplicateAlias": "Host “{host}” already belongs to another key",
+  "error_duplicateHost": "{hostname} is already part of this key",
   "error_keyMissing": "Key missing: {path}",
   "error_keyExists": "Key already exists: {path}",
   "error_invalidPublicKey": "Invalid public key in {path}",

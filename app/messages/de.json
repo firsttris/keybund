@@ -10,6 +10,7 @@
   "error_defaultProfileMissing": "Standard-Key „{id}“ existiert nicht",
   "error_nestedFolders": "Git-Ordner überschneiden sich: {a} und {b}",
   "error_duplicateAlias": "Host „{host}“ gehört schon zu einem anderen Key",
+  "error_duplicateHost": "{hostname} ist bei diesem Key schon eingetragen",
   "error_keyMissing": "Key fehlt: {path}",
   "error_keyExists": "Key existiert bereits: {path}",
   "error_invalidPublicKey": "Ungültiger Public Key in {path}",

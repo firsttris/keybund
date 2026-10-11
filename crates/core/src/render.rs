@@ -20,12 +20,7 @@ pub fn ssh_include_line(env: &Env, settings: &Settings) -> String {
     if !settings.absolute_ssh_include {
         return SSH_INCLUDE_LINE.to_string();
     }
-    let path = env.ssh_keybund_conf().display().to_string();
-    if path.contains(char::is_whitespace) {
-        format!("Include \"{path}\"")
-    } else {
-        format!("Include {path}")
-    }
+    format!("Include {}", ssh_path(&env.ssh_keybund_conf().display().to_string()))
 }
 
 /// One generated file.
@@ -199,8 +194,13 @@ fn signs(p: &Profile) -> bool {
 }
 
 /// ssh_config takes paths with spaces only when quoted.
+/// A path in an ssh_config value. ssh splits values like a shell (argv_split):
+/// whitespace separates, and a `'` or `"` anywhere – even mid-token – opens a
+/// quote; an unterminated one is a fatal error for the whole config, for
+/// every host. So a path with whitespace or `'` is double-quoted (a `"` in
+/// the path is rejected by the store).
 fn ssh_path(path: &str) -> String {
-    if path.contains(char::is_whitespace) {
+    if path.contains(|c: char| c.is_whitespace() || c == '\'') {
         format!("\"{path}\"")
     } else {
         path.to_string()
@@ -347,6 +347,16 @@ mod tests {
     fn quotes_paths_with_spaces() {
         assert_eq!(ssh_command("~/my keys/a"), "ssh -i ~/'my keys/a' -o IdentitiesOnly=yes -o AddKeysToAgent=yes");
         assert_eq!(git_value("a # b"), "\"a # b\"");
+    }
+
+    #[test]
+    fn an_apostrophe_in_a_path_is_quoted_for_ssh() {
+        // ssh opens a quote on any ' – unquoted, the whole config would be refused.
+        assert_eq!(ssh_path("~/.ssh/o'brien_ed25519"), "\"~/.ssh/o'brien_ed25519\"");
+        assert_eq!(ssh_path("~/.ssh/plain"), "~/.ssh/plain");
+        let env = Env::with_home("/home/o'brien");
+        let settings = Settings { absolute_ssh_include: true, ..Default::default() };
+        assert_eq!(ssh_include_line(&env, &settings), "Include \"/home/o'brien/.ssh/config.d/keybund.conf\"");
     }
 
     #[test]

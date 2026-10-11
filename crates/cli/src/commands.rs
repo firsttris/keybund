@@ -235,7 +235,14 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
         }
         _ => None,
     };
-    let host = HostEntry { alias, hostname, user, port: args.port, provider };
+    // Lower case like the app: ssh matches Host patterns case-sensitively.
+    let host = HostEntry {
+        alias: alias.map(|a| a.to_lowercase()),
+        hostname: hostname.to_lowercase(),
+        user,
+        port: args.port,
+        provider,
+    };
 
     // 3. Projektordner
     let mut folders = args.folder.clone();
@@ -969,9 +976,9 @@ pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
     if let Some(hostname) = &args.add_host {
         let provider: Provider = args.provider.map(Into::into).unwrap_or_else(|| Provider::detect(hostname));
         let host = HostEntry {
-            alias: args.alias.clone(),
-            hostname: hostname.clone(),
-            user: args.user.clone(),
+            alias: args.alias.as_deref().map(|a| a.trim().to_lowercase()).filter(|a| !a.is_empty()),
+            hostname: hostname.trim().to_lowercase(),
+            user: args.user.as_deref().map(|u| u.trim().to_string()).filter(|u| !u.is_empty()),
             port: args.port,
             provider,
         };

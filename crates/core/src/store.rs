@@ -1,6 +1,6 @@
 //! Loading, validating and saving `profiles.toml`.
 
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -191,7 +191,7 @@ pub fn load(env: &Env) -> Result<Config> {
 
 /// Validates and atomically writes `profiles.toml`.
 pub fn save(env: &Env, config: &Config) -> Result<()> {
-    validate(config)?;
+    validate_in(env, config)?;
     // New or changed key paths must exist. A key file that disappeared later
     // must not block every other change (the doctor reports it).
     let previous = load(env).unwrap_or_default();
@@ -282,21 +282,30 @@ fn check_values(p: &Profile) -> Result<()> {
     };
     printable("name", &p.name)?;
     printable("key", &p.key.path)?;
-    // ssh expands % and ${…} in IdentityFile, and a quote would end the quoted path.
-    if p.key.path.contains(['"', '%']) || p.key.path.contains("${") {
+    // ssh expands % and ${…} in IdentityFile, a quote would end the quoted
+    // path, and a backslash is an escape that ssh swallows (\' → ').
+    if p.key.path.contains(['"', '%', '\\']) || p.key.path.contains("${") {
         return Err(invalid("key", &p.key.path));
     }
     if let Some(g) = &p.git {
         printable("gitName", &g.name)?;
         printable("gitEmail", &g.email)?;
+        // The e-mail is the principal in allowed_signers: a pattern line of
+        // its own, where whitespace separates and , * ? ! are pattern syntax.
+        if g.sign && !g.email.trim().is_empty() && g.email.chars().any(|c| c.is_whitespace() || ",*?!".contains(c)) {
+            return Err(invalid("gitEmail", &g.email));
+        }
     }
     for f in &p.folders {
         printable("folder", f)?;
-        // gitdir: patterns are globs: * ? [ \ would match other folders.
-        if f.contains(['"', '*', '?', '[', '\\']) || !(f.starts_with('/') || f.starts_with("~/")) {
+        // gitdir: patterns are globs: * ? [ \ would match other folders; git
+        // compares the real path, so `..` would never match anything.
+        let dotted = f.split('/').any(|part| part == "." || part == "..");
+        if f.contains(['"', '*', '?', '[', '\\']) || !(f.starts_with('/') || f.starts_with("~/")) || dotted {
             return Err(Error::InvalidPath(f.clone()));
         }
     }
+    let mut seen = std::collections::HashSet::new();
     for h in &p.hosts {
         token("hostname", &h.hostname)?;
         if let Some(a) = &h.alias {
@@ -304,6 +313,12 @@ fn check_values(p: &Profile) -> Result<()> {
         }
         if let Some(u) = &h.user {
             token("user", u)?;
+        }
+        // The same account or server twice in one key: ssh would get two
+        // identical blocks, the app two identical rows.
+        let same = (h.hostname.to_lowercase(), h.alias.as_ref().map(|a| a.to_lowercase()));
+        if !seen.insert(same) {
+            return Err(Error::DuplicateHost(h.hostname.clone()));
         }
     }
     Ok(())
@@ -383,10 +398,46 @@ pub fn slugify(name: &str) -> String {
     out.trim_end_matches('-').to_string()
 }
 
-/// `true` if folder `outer` contains (or equals) folder `inner`.
-/// Both are expected with a trailing slash.
+/// `true` if folder `outer` contains (or equals) folder `inner`: a path
+/// test, so `~/dev/a` does not contain `~/dev/ab/`.
 fn folder_contains(outer: &str, inner: &str) -> bool {
-    inner.starts_with(outer)
+    let slashed = |f: &str| if f.ends_with('/') { f.to_string() } else { format!("{f}/") };
+    slashed(inner).starts_with(&slashed(outer))
+}
+
+/// `validate` plus the checks that need the file system: nested folders
+/// are compared as real paths, so `~/dev/a/` and `/home/me/dev/a/sub/`
+/// count as nested too.
+pub fn validate_in(env: &Env, config: &Config) -> Result<()> {
+    validate(config)?;
+    let folders: Vec<(&str, String)> = config
+        .active_profiles()
+        .flat_map(|p| p.folders.iter().map(|f| (f.as_str(), env.expand(f).display().to_string())))
+        .collect();
+    for (i, (a, pa)) in folders.iter().enumerate() {
+        for (b, pb) in &folders[i + 1..] {
+            if folder_contains(pa, pb) || folder_contains(pb, pa) {
+                return Err(Error::NestedFolders(a.to_string(), b.to_string()));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Removes `.` and `..` components without touching the file system, like
+/// a shell would resolve them lexically (`a/../b` → `b`).
+fn lexical(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in path.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 /// Normalizes a project folder for `includeIf "gitdir:…"`: resolves
@@ -405,7 +456,7 @@ pub fn normalize_dir(env: &Env, input: &str) -> Result<String> {
 
 pub fn normalize_folder(env: &Env, input: &str) -> String {
     let trimmed = input.trim();
-    let expanded = env.expand(trimmed);
+    let expanded = lexical(&env.expand(trimmed));
     // Resolve symlinks of the part that exists (e.g. ~/dev -> ~/data/dev),
     // also for a folder that is only created later.
     let mut existing = expanded.as_path();
@@ -583,6 +634,70 @@ provider = "gitlab"
             ..Default::default()
         });
         validate(&cfg).unwrap();
+    }
+
+    #[test]
+    fn values_that_would_break_ssh_or_git_are_refused() {
+        let with = |p: Profile| validate(&Config { profiles: vec![p], ..Default::default() });
+        let base = || Profile { id: "k".into(), name: "K".into(), ..Default::default() };
+        // A backslash is an escape for ssh: `\'` becomes `'`, the path changes silently.
+        let p = Profile { key: KeyRef { path: "~/.ssh/a\\b".into(), comment: None }, ..base() };
+        assert!(matches!(with(p), Err(Error::InvalidValue { field, .. }) if field == "key"));
+        // An apostrophe is fine: the renderer quotes it.
+        let p = Profile { key: KeyRef { path: "~/.ssh/o'brien".into(), comment: None }, ..base() };
+        with(p).unwrap();
+        // The signing e-mail is a principal pattern in allowed_signers.
+        for email in ["a b@x.de", "a,b@x.de", "a*@x.de"] {
+            let p = Profile { git: Some(GitIdentity { name: "T".into(), email: email.into(), sign: true }), ..base() };
+            assert!(matches!(with(p), Err(Error::InvalidValue { field, .. }) if field == "gitEmail"), "{email}");
+        }
+        let p =
+            Profile { git: Some(GitIdentity { name: "T".into(), email: "a b@x.de".into(), sign: false }), ..base() };
+        with(p).unwrap();
+        // git compares real paths: `..` in a gitdir pattern never matches.
+        for folder in ["~/dev/../x/", "~/dev/./x/", "/home/t/.."] {
+            let p = Profile { folders: vec![folder.into()], ..base() };
+            assert!(matches!(with(p), Err(Error::InvalidPath(_))), "{folder}");
+        }
+        // The same account twice in one key.
+        let host = |hostname: &str, alias: Option<&str>| HostEntry {
+            hostname: hostname.into(),
+            alias: alias.map(Into::into),
+            provider: Provider::Github,
+            ..Default::default()
+        };
+        let p = Profile { hosts: vec![host("github.com", None), host("GitHub.com", None)], ..base() };
+        assert!(matches!(with(p), Err(Error::DuplicateHost(h)) if h == "GitHub.com"));
+        let p = Profile { hosts: vec![host("github.com", None), host("github.com", Some("gh-work"))], ..base() };
+        with(p).unwrap();
+    }
+
+    #[test]
+    fn nested_folders_are_compared_as_paths() {
+        // A prefix is not a parent.
+        assert!(!folder_contains("~/dev/a", "~/dev/ab/"));
+        assert!(folder_contains("~/dev/a", "~/dev/a/b/"));
+        let env = Env::with_home("/home/t");
+        let p = |id: &str, folder: &str| Profile {
+            id: id.into(),
+            name: id.into(),
+            folders: vec![folder.into()],
+            ..Default::default()
+        };
+        let cfg = Config { profiles: vec![p("a", "~/dev/a/"), p("b", "/home/t/dev/a/sub/")], ..Default::default() };
+        validate(&cfg).unwrap();
+        assert!(matches!(validate_in(&env, &cfg), Err(Error::NestedFolders(..))));
+        let cfg = Config { profiles: vec![p("a", "~/dev/a/"), p("b", "/home/t/dev/ab/")], ..Default::default() };
+        validate_in(&env, &cfg).unwrap();
+    }
+
+    #[test]
+    fn folders_are_normalized_lexically_before_anything_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = Env::with_home(dir.path().canonicalize().unwrap());
+        assert_eq!(normalize_folder(&env, "~/missing/../x"), "~/x/");
+        assert_eq!(normalize_folder(&env, "~/dev/./y//"), "~/dev/y/");
+        assert_eq!(normalize_folder(&env, "~/dev/z/"), "~/dev/z/");
     }
 
     #[test]

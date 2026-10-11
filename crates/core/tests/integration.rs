@@ -594,3 +594,46 @@ fn which_follows_worktrees_like_git() {
     assert_eq!(r.git_email.as_deref(), Some("kunde-a@example.org"));
     assert!(!r.notes.iter().any(|n| n.to_string().contains("anderen Key")), "{:?}", r.notes);
 }
+
+/// A `'` in a key path: ssh treats it as an opening quote, and an unterminated
+/// one makes it refuse the whole config – for every host. The renderer
+/// quotes such a path; ssh must still resolve it.
+#[test]
+fn a_key_path_with_an_apostrophe_does_not_break_ssh() {
+    if !has("ssh") || !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, mut config) = setup();
+    let path = "~/.ssh/o'brien_ed25519".to_string();
+    keygen::generate(&env, &GenerateOptions { path: path.clone(), comment: "t".into(), passphrase: None }).unwrap();
+    config.profiles[0].key.path = path;
+    store::save(&env, &config).unwrap();
+    apply::apply_config(&env, &config).unwrap();
+    for host in ["meinserver", "github.com"] {
+        let out = Command::new("ssh").arg("-G").arg("-F").arg(env.ssh_keybund_conf()).arg(host).output().unwrap();
+        assert!(out.status.success(), "{host}: {}", String::from_utf8_lossy(&out.stderr));
+    }
+    let out = Command::new("ssh").arg("-G").arg("-F").arg(env.ssh_keybund_conf()).arg("meinserver").output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.lines().any(|l| l.starts_with("identityfile ") && l.ends_with("/.ssh/o'brien_ed25519")), "{text}");
+}
+
+/// profiles.toml edited by hand: whatever would break ssh or git is refused
+/// before anything is written, not only on save.
+#[test]
+fn apply_refuses_an_invalid_profiles_file() {
+    if !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    apply::apply_config(&env, &config).unwrap();
+    let before = fs::read_to_string(env.ssh_keybund_conf()).unwrap();
+    let text = fs::read_to_string(env.profiles_file()).unwrap();
+    for (from, to) in [("alias = \"meinserver\"", "alias = \"mein server\""), ("id = \"privat\"", "id = \"../evil\"")] {
+        fs::write(env.profiles_file(), text.replace(from, to)).unwrap();
+        let config = store::load(&env).unwrap();
+        assert!(apply::plan(&env, &config).is_err(), "{to}");
+        assert!(apply::apply_config(&env, &config).is_err(), "{to}");
+        assert_eq!(fs::read_to_string(env.ssh_keybund_conf()).unwrap(), before);
+    }
+}

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::Config;
 use crate::render;
-use crate::{fsutil, keygen, Env, Error, Result};
+use crate::{fsutil, keygen, store, Env, Error, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -81,6 +81,10 @@ pub fn signing_pubkeys(env: &Env, config: &Config) -> BTreeMap<String, String> {
 
 /// Computes every change without writing anything.
 pub fn plan(env: &Env, config: &Config) -> Result<Plan> {
+    // A hand-edited profiles.toml is validated here too, not only on save:
+    // nothing invalid reaches ssh or git (a `'` in a key path would stop ssh
+    // for every host, an id with `..` would leave the config directory).
+    store::validate_in(env, config)?;
     let mut changes = Vec::new();
     let rendered = render::render_all(config, env, &signing_pubkeys(env, config));
     let owned: Vec<PathBuf> = rendered.iter().map(|f| f.path.clone()).collect();

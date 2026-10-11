@@ -191,8 +191,10 @@ fn normalized(env: &Env, mut profile: Profile) -> Profile {
     profile.folders =
         profile.folders.iter().filter(|f| !f.trim().is_empty()).map(|f| store::normalize_folder(env, f)).collect();
     for h in &mut profile.hosts {
-        h.hostname = h.hostname.trim().to_string();
-        h.alias = h.alias.take().map(|a| a.trim().to_string()).filter(|a| !a.is_empty());
+        // ssh matches `Host` patterns case-sensitively against what was typed;
+        // names are stored in lower case so `ssh nas` and `ssh NAS.local` agree.
+        h.hostname = h.hostname.trim().to_lowercase();
+        h.alias = h.alias.take().map(|a| a.trim().to_lowercase()).filter(|a| !a.is_empty());
         h.user = h.user.take().map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
     }
     profile
