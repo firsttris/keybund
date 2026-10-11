@@ -121,8 +121,10 @@ the doctor reports – anything that could change their meaning:
   such a pattern would never match; the app and the CLI resolve them before saving).
 - Hostnames, aliases and users must not contain spaces, wildcards (`* ? !`), quotes, `# % , [ ]`,
   control characters or a leading `-`.
-- Key paths must not contain `"`, `%`, `${` or `\` (ssh expands or swallows those in
-  `IdentityFile`). A path with a space or `'` is quoted in the generated files.
+- Key paths must be absolute or start with `~/` (ssh resolves a relative `IdentityFile` against
+  the directory it runs in) and must not contain `"`, `%`, `${` or `\` (ssh expands or swallows
+  those). A path with a space or `'` is quoted in the generated files.
+- A port must not be `0` (ssh would silently use 22).
 - No value may contain a line break or another control character.
 - A key that signs commits needs its own e-mail, without spaces or `, * ? !` (it is the principal
   in `allowed_signers`, where those are pattern syntax).

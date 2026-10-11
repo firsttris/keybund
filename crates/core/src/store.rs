@@ -307,6 +307,10 @@ fn check_values(p: &Profile) -> Result<()> {
     if p.key.path.contains(['"', '%', '\\']) || p.key.path.contains("${") {
         return Err(invalid("key", &p.key.path));
     }
+    // ssh resolves a relative IdentityFile against the directory it runs in.
+    if !p.key.path.is_empty() && !(p.key.path.starts_with('/') || p.key.path.starts_with("~/")) {
+        return Err(Error::InvalidPath(p.key.path.clone()));
+    }
     if let Some(g) = &p.git {
         printable("gitName", &g.name)?;
         printable("gitEmail", &g.email)?;
@@ -333,6 +337,10 @@ fn check_values(p: &Profile) -> Result<()> {
         }
         if let Some(u) = &h.user {
             token("user", u)?;
+        }
+        // Port 0 is no port: ssh would silently use 22.
+        if h.port == Some(0) {
+            return Err(invalid("port", "0"));
         }
         // The same account or server twice in one key: ssh would get two
         // identical blocks, the app two identical rows.
@@ -690,6 +698,27 @@ provider = "gitlab"
         assert!(matches!(with(p), Err(Error::DuplicateHost(h)) if h == "GitHub.com"));
         let p = Profile { hosts: vec![host("github.com", None), host("github.com", Some("gh-work"))], ..base() };
         with(p).unwrap();
+    }
+
+    #[test]
+    fn port_zero_and_relative_key_paths_are_refused() {
+        let with = |p: Profile| validate(&Config { profiles: vec![p], ..Default::default() });
+        let p = Profile {
+            id: "k".into(),
+            name: "K".into(),
+            hosts: vec![HostEntry { hostname: "nas".into(), port: Some(0), ..Default::default() }],
+            ..Default::default()
+        };
+        assert!(matches!(with(p), Err(Error::InvalidValue { field, .. }) if field == "port"));
+        for path in ["keys/id_ed25519", "id_ed25519", "./id"] {
+            let p = Profile {
+                id: "k".into(),
+                name: "K".into(),
+                key: KeyRef { path: path.into(), comment: None },
+                ..Default::default()
+            };
+            assert!(matches!(with(p), Err(Error::InvalidPath(_))), "{path}");
+        }
     }
 
     #[test]

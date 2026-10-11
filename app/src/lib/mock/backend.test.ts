@@ -87,6 +87,15 @@ describe("mock backend contract", () => {
     expect(view.last_test).toMatchObject({ host: "meinserver", success: false });
   });
 
+  it("refuses port 0 and a relative key path like the core", async () => {
+    const b = backend();
+    const privat = structuredClone(b.state.profiles[0]);
+    privat.hosts[1] = { ...privat.hosts[1], port: 0 };
+    await expect(b.invoke("update_profile", { profile: privat })).rejects.toMatchObject({ kind: "invalid_value" });
+    const relative = { ...structuredClone(b.state.profiles[0]), key: { path: "keys/id", comment: null } };
+    await expect(b.invoke("update_profile", { profile: relative })).rejects.toMatchObject({ kind: "invalid_path" });
+  });
+
   it("pins provider host keys only on port 22", async () => {
     const b = backend();
     const p = b.state.profiles[0];

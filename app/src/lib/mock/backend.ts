@@ -650,6 +650,9 @@ function checkValues(p: Profile) {
   printable("key", p.key.path);
   // ssh expands % and ${…} in IdentityFile, a quote would end the quoted path, a backslash is swallowed.
   if (/["%\\]/.test(p.key.path) || p.key.path.includes("${")) throw invalidValue("key", p.key.path);
+  // ssh resolves a relative IdentityFile against the directory it runs in.
+  if (p.key.path && !(p.key.path.startsWith("/") || p.key.path.startsWith("~/")))
+    throw new MockError("invalid_path", msg("error_invalidPath", { path: p.key.path }));
   if (p.git) {
     printable("gitName", p.git.name);
     printable("gitEmail", p.git.email);
@@ -669,6 +672,8 @@ function checkValues(p: Profile) {
     token("hostname", h.hostname);
     if (h.alias !== null) token("alias", h.alias);
     if (h.user !== null) token("user", h.user);
+    // Port 0 is no port: ssh would silently use 22.
+    if (h.port === 0) throw invalidValue("port", "0");
     // The same account or server twice in one key: two identical blocks, two identical rows.
     const same = `${h.hostname.toLowerCase()}\u0000${h.alias?.toLowerCase() ?? ""}`;
     if (seen.has(same)) throw new MockError("duplicate_host", msg("error_duplicateHost", { hostname: h.hostname }));

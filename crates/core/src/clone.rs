@@ -20,14 +20,53 @@ pub struct RepoUrl {
     pub name: String,
 }
 
+/// `[2001:db8::1]` at the start of `s`: the address and what follows `]`.
+fn bracketed(s: &str) -> Option<(&str, &str)> {
+    let inner = s.strip_prefix('[')?;
+    let (address, rest) = inner.split_once(']')?;
+    (!address.is_empty() && address.chars().all(|c| c.is_ascii_hexdigit() || c == ':' || c == '.'))
+        .then_some((address, rest))
+}
+
+/// `[user@]host` with an IPv6 address in brackets; returns the host and what
+/// follows it.
+fn host_part(s: &str) -> (&str, &str) {
+    let after_user = s.rsplit_once('@').map_or(s, |(_, h)| h);
+    match bracketed(after_user) {
+        Some((address, rest)) => (address, rest),
+        None => match after_user.split_once(':') {
+            Some((host, rest)) => (host, rest),
+            None => (after_user, ""),
+        },
+    }
+}
+
 /// Parses `git@host:path`, `ssh://[user@]host[:port]/path` and
-/// `https://host/path`.
+/// `https://host/path`; an IPv6 host goes in brackets (`ssh://[2001:db8::1]:22/x`,
+/// `git@[2001:db8::1]:x`).
 pub fn parse_url(url: &str) -> Result<RepoUrl> {
     let url = url.trim();
     let invalid = || Error::InvalidUrl(url.to_string());
     // The URL goes to `git clone`: nothing that git could read as an option
-    // or a special transport (`ext::`, local paths).
-    if url.starts_with('-') || url.contains("::") || url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+    // or a special transport (`ext::`, local paths). `::` inside an IPv6
+    // address in brackets is no transport.
+    let outside_brackets: String = {
+        let mut depth = 0;
+        url.chars()
+            .filter(|c| {
+                match c {
+                    '[' => depth += 1,
+                    ']' => depth -= 1,
+                    _ => {}
+                }
+                depth == 0 && *c != ']'
+            })
+            .collect()
+    };
+    if url.starts_with('-')
+        || outside_brackets.contains("::")
+        || url.chars().any(|c| c.is_whitespace() || c.is_control())
+    {
         return Err(invalid());
     }
     if let Some((scheme, _)) = url.split_once("://") {
@@ -37,21 +76,26 @@ pub fn parse_url(url: &str) -> Result<RepoUrl> {
     }
     let (host, path) = if let Some(rest) = url.split_once("://").map(|(_, r)| r) {
         let (authority, path) = rest.split_once('/').ok_or_else(invalid)?;
-        let host = authority.rsplit('@').next().unwrap_or(authority);
-        let host = host.split(':').next().unwrap_or(host);
-        (host.to_string(), path.to_string())
-    } else if let Some((left, path)) = url.split_once(':') {
-        let host = left.rsplit('@').next().unwrap_or(left);
+        let (host, port) = host_part(authority);
+        if !(port.is_empty() || port.trim_start_matches(':').chars().all(|c| c.is_ascii_digit())) {
+            return Err(invalid());
+        }
         (host.to_string(), path.to_string())
     } else {
-        return Err(invalid());
+        // scp-like: `[user@]host:path`, the host may be `[v6]`.
+        let (host, rest) = host_part(url);
+        let path = rest.strip_prefix(':').unwrap_or(rest);
+        if host.is_empty() || (path.is_empty() && !rest.starts_with(':')) || !url.contains(':') {
+            return Err(invalid());
+        }
+        (host.to_string(), path.to_string())
     };
     let path = path.trim_matches('/').to_string();
     let last = path.rsplit('/').next().unwrap_or(&path);
     let name = last.strip_suffix(".git").unwrap_or(last).to_string();
     let host_ok = !host.is_empty()
         && !host.starts_with('-')
-        && host.chars().all(|c| c.is_ascii_alphanumeric() || ".-_[]".contains(c));
+        && host.chars().all(|c| c.is_ascii_alphanumeric() || ".-_:".contains(c));
     let name_ok = !name.is_empty() && name != "." && name != ".." && !name.contains([':', '\\']);
     if !host_ok || !name_ok {
         return Err(invalid());
@@ -64,7 +108,10 @@ pub fn matching_profiles<'a>(config: &'a Config, url: &RepoUrl) -> Vec<&'a Profi
     config
         .active_profiles()
         .filter(|p| {
-            p.hosts.iter().any(|h| h.hostname.eq_ignore_ascii_case(&url.host) || h.alias.as_deref() == Some(&url.host))
+            p.hosts.iter().any(|h| {
+                h.hostname.eq_ignore_ascii_case(&url.host)
+                    || h.alias.as_deref().is_some_and(|a| a.eq_ignore_ascii_case(&url.host))
+            })
         })
         .collect()
 }
@@ -119,6 +166,48 @@ mod tests {
         ] {
             assert!(parse_url(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn ipv6_hosts_and_aliases_in_capitals() {
+        let u = parse_url("ssh://git@[2001:db8::1]:22/team/app.git").unwrap();
+        assert_eq!((u.host.as_str(), u.path.as_str(), u.name.as_str()), ("2001:db8::1", "team/app.git", "app"));
+        let u = parse_url("git@[2001:db8::1]:team/app.git").unwrap();
+        assert_eq!((u.host.as_str(), u.name.as_str()), ("2001:db8::1", "app"));
+        // Still no transport and no option through brackets.
+        for bad in ["ext::[x]", "ssh://[2001:db8::1]:x/a", "[ext::sh]:a/b", "ssh://[::1]/a::b"] {
+            if let Ok(u) = parse_url(bad) {
+                assert!(
+                    !u.host.contains("ext") && u.host.chars().all(|c| c.is_ascii_hexdigit() || c == ':'),
+                    "{bad}: {u:?}"
+                );
+            }
+        }
+        assert!(parse_url("ext::sh -c x").is_err());
+        // Aliases are stored in lower case; a URL typed in capitals still finds the key.
+        let config = Config {
+            profiles: vec![Profile {
+                id: "k".into(),
+                hosts: vec![crate::model::HostEntry {
+                    alias: Some("github-kunde".into()),
+                    hostname: "github.com".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let u = parse_url("GITHUB-KUNDE:org/repo.git").unwrap();
+        assert_eq!(matching_profiles(&config, &u).len(), 1);
+        let v6 = Config {
+            profiles: vec![Profile {
+                id: "v6".into(),
+                hosts: vec![crate::model::HostEntry { hostname: "2001:db8::1".into(), ..Default::default() }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert_eq!(matching_profiles(&v6, &parse_url("ssh://[2001:db8::1]/a.git").unwrap()).len(), 1);
     }
 
     #[test]

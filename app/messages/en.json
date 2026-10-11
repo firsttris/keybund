@@ -39,6 +39,7 @@
   "field_alias": "alias",
   "field_user": "user",
   "field_comment": "comment",
+  "field_port": "port",
   "common_text": "{text}",
   "doctor_profiles_ok": "{n} keys loaded",
   "doctor_profiles_invalid": "profiles.toml is invalid",
