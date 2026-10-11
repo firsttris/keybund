@@ -79,10 +79,12 @@ keybund trust <key> --host <host>
 
 If you do not know why, do not connect – ask whoever runs the server.
 
-### The first `git clone` uses the wrong key
+### `git clone` uses the wrong key
 
-`includeIf "gitdir:"` can only apply once the repository exists. Use **Clone repository** or
-`keybund clone <url>`, which pass the key directly.
+Git takes the key of the folder it clones *into* – a clone in `~/Downloads` or another folder
+without a rule uses the default key, and GitHub answers “Repository not found”. Clone inside the
+key's folder (`cd ~/dev/client-a && git clone …`), or use **Clone repository** /
+`keybund clone <url>`, which picks the folder for you.
 
 ### A passphrase is asked on every push
 

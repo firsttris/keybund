@@ -127,8 +127,11 @@ automatically.
 
 ## Cloning into the right folder with the right key
 
-`includeIf "gitdir:…"` only applies once a repository exists – so a plain `git clone` of a client
-repository would still use the wrong key. **Clone repository** or
+A plain `git clone` already takes the key of the folder it clones *into*: Git creates the new
+repository and reads its config, the folder rule included, before it connects
+(`builtin/clone.c`). So `cd ~/dev/client-c && git clone git@github.com:client-c/app.git` works.
+Cloned anywhere else – `~/Downloads`, say – it takes the default key and GitHub answers
+“Repository not found”. **Clone repository** or
 
 ```sh
 keybund clone git@github.com:client-c/app.git
@@ -136,7 +139,8 @@ keybund clone git@github.com:client-c/app.git
 
 picks the key for the host (or asks if several keys fit), proposes `~/dev/client-c/app` as the
 target and runs `git -c core.sshCommand="ssh -i … -o IdentitiesOnly=yes" clone -- <url> <target>`.
-The key is passed for this one command only; afterwards the folder rule takes over.
+The key is passed for this one command only; afterwards the folder rule takes over. Useful when you
+are not sure which folder a repository belongs to.
 
 ![Clone helper: the repository URL, the keys that fit and the target folder](screenshot-clone.png)
 

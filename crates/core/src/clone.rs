@@ -1,6 +1,8 @@
-//! Cloning a repository into the right profile. `includeIf` does not apply
-//! while the repository does not exist yet, so the clone passes the
-//! profile's `core.sshCommand` explicitly.
+//! Cloning a repository into the right profile's folder. Git would take the
+//! folder's key there by itself – it reads the new repository's config,
+//! includeIf included, before it connects (builtin/clone.c) – but the
+//! profile's `core.sshCommand` is passed explicitly as well, so the clone
+//! does not depend on the folder rule being written yet.
 
 use std::path::PathBuf;
 
