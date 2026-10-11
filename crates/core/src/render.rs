@@ -293,7 +293,7 @@ mod tests {
             HostEntry { alias: Some("nas".into()), hostname: "192.168.1.5".into(), ..Default::default() },
             HostEntry { hostname: "10.0.0.7".into(), user: Some("root".into()), ..Default::default() },
             HostEntry {
-                alias: Some("pflegeabc".into()),
+                alias: Some("nebenjob".into()),
                 hostname: "github.com".into(),
                 provider: Provider::Github,
                 ..Default::default()
@@ -303,9 +303,9 @@ mod tests {
         let conf = ssh_config(&Config { profiles: vec![p], ..Default::default() });
         assert!(conf.contains("Host nas 192.168.1.5\n"));
         assert!(conf.contains("Host 10.0.0.7\n    HostName 10.0.0.7\n    User root\n"));
-        assert!(conf.contains("Host pflegeabc\n    HostName github.com\n"));
+        assert!(conf.contains("Host nebenjob\n    HostName github.com\n"));
         assert!(!conf.contains("Host github.com"));
-        assert!(!conf.contains("Host pflegeabc github.com"));
+        assert!(!conf.contains("Host nebenjob github.com"));
     }
 
     #[test]
@@ -353,12 +353,12 @@ mod tests {
     fn git_alias_block_sets_the_git_user() {
         let mut p = profile("pflege", "Pflege", "~/dev/pflege/", false);
         p.hosts = vec![HostEntry {
-            alias: Some("pflegeabc".into()),
+            alias: Some("nebenjob".into()),
             hostname: "github.com".into(),
             provider: Provider::Github,
             ..Default::default()
         }];
         let conf = ssh_config(&Config { profiles: vec![p], ..Default::default() });
-        assert!(conf.contains("Host pflegeabc\n    HostName github.com\n    User git\n"), "{conf}");
+        assert!(conf.contains("Host nebenjob\n    HostName github.com\n    User git\n"), "{conf}");
     }
 }

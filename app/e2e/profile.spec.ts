@@ -6,19 +6,19 @@ const row = (app: Page, text: string | RegExp) =>
   usage(app).getByRole("list", { name: "Verwendungen" }).getByRole("listitem").filter({ hasText: text }).first();
 
 test("navigates to a key and shows where it is used", async ({ app }) => {
-  await app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Sparkasse/ }).click();
-  await expect(app.getByRole("heading", { level: 1, name: "Sparkasse" })).toBeVisible();
-  await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Sparkasse/ })).toHaveAttribute("aria-current", "page");
-  await expect(app.getByText("~/.ssh/sparkasse_ed25519", { exact: true }).first()).toBeVisible();
+  await app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Acme/ }).click();
+  await expect(app.getByRole("heading", { level: 1, name: "Acme" })).toBeVisible();
+  await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Acme/ })).toHaveAttribute("aria-current", "page");
+  await expect(app.getByText("~/.ssh/acme_ed25519", { exact: true }).first()).toBeVisible();
   await expect(row(app, "GitLab-Konto")).toContainText("gitlab.kunde.de");
-  await expect(row(app, "~/dev/sparkasse/")).toBeVisible();
+  await expect(row(app, "~/dev/acme/")).toBeVisible();
 });
 
 test("copies the public key", async ({ app }) => {
-  await app.goto("/#/profile/sparkasse");
+  await app.goto("/#/profile/acme");
   await app.getByRole("button", { name: "Pubkey kopieren" }).first().click();
   await expect(app.getByRole("button", { name: "Kopiert" })).toBeVisible();
-  expect(await mockState<string>(app, "clipboard")).toMatch(/^ssh-ed25519 \S+ tristan@zentrale-sparkasse$/);
+  expect(await mockState<string>(app, "clipboard")).toMatch(/^ssh-ed25519 \S+ tristan@zentrale-acme$/);
 });
 
 test("connection test shows success and failure with the steps", async ({ app }) => {
@@ -50,12 +50,12 @@ test("connection test shows success and failure with the steps", async ({ app })
 });
 
 test("opens the provider page", async ({ app }) => {
-  await app.goto("/#/profile/sparkasse");
+  await app.goto("/#/profile/acme");
   const accounts = row(app, "GitLab-Konto");
   await accounts.getByRole("button", { name: "Key eintragen" }).click();
   await expect(accounts.getByText("Pubkey ist kopiert.")).toBeVisible();
   await expect.poll(() => mockState<string[]>(app, "openedUrls")).toEqual(["https://gitlab.kunde.de/-/user_settings/ssh_keys"]);
-  expect(await mockState<string>(app, "clipboard")).toMatch(/tristan@zentrale-sparkasse$/);
+  expect(await mockState<string>(app, "clipboard")).toMatch(/tristan@zentrale-acme$/);
 });
 
 test("shows the generated config", async ({ app }) => {
@@ -67,7 +67,7 @@ test("shows the generated config", async ({ app }) => {
 });
 
 test("a change is written right away", async ({ app }) => {
-  await app.goto("/#/profile/sparkasse");
+  await app.goto("/#/profile/acme");
   await expect(app.getByText("Configs aktuell")).toBeVisible();
   await app.getByRole("switch", { name: "Commits signieren" }).click();
   await expect(app.getByRole("switch", { name: "Commits signieren" })).toHaveAttribute("aria-checked", "true");
@@ -80,7 +80,7 @@ test("a change is written right away", async ({ app }) => {
 test("a file changed outside Keybund can be written again", async ({ app }) => {
   await app.evaluate(() => {
     const mock = (window as unknown as { __keybundMock: { state: { applied: Map<string, string> } } }).__keybundMock;
-    mock.state.applied.set("~/.config/keybund/git/sparkasse.gitconfig", "kaputt\n");
+    mock.state.applied.set("~/.config/keybund/git/acme.gitconfig", "kaputt\n");
   });
   // The plan is not cached yet, so the page shows the difference right away.
   await app.goto("/#/apply");
@@ -93,7 +93,7 @@ test("a file changed outside Keybund can be written again", async ({ app }) => {
 test("adds and removes a folder, rejects nested folders", async ({ app }) => {
   await app.goto("/#/profile/kunde-b");
   await usage(app).getByRole("button", { name: "Git-Ordner" }).click();
-  await app.getByLabel("Ordner", { exact: true }).fill("~/dev/sparkasse/sub");
+  await app.getByLabel("Ordner", { exact: true }).fill("~/dev/acme/sub");
   await app.getByRole("button", { name: "Ordner speichern" }).click();
   await expect(app.getByText(/Git-Ordner überschneiden sich/).first()).toBeVisible();
 
@@ -148,7 +148,7 @@ test("archives a profile and removes its configs", async ({ app }) => {
 });
 
 test("sidebar search finds keys by name, folder and server", async ({ app }) => {
-  await app.getByLabel("Keys durchsuchen").fill("spar");
+  await app.getByLabel("Keys durchsuchen").fill("acm");
   const nav = app.getByRole("navigation", { name: "Keys" });
   const keys = nav.getByRole("link").filter({ hasNotText: "Welcher Key" });
   await expect(keys).toHaveCount(1);
@@ -166,7 +166,7 @@ test("unknown key shows a not-found page", async ({ app }) => {
 });
 
 test("the e-mail warning does not move the signing switch", async ({ app }) => {
-  await app.goto("/#/profile/sparkasse");
+  await app.goto("/#/profile/acme");
   const sign = app.getByRole("switch", { name: "Commits signieren" });
   const before = await pagePosition(sign);
   await app.getByLabel("E-Mail").fill("kaputt");
@@ -176,7 +176,7 @@ test("the e-mail warning does not move the signing switch", async ({ app }) => {
 });
 
 test("a failing browser start is explained, not swallowed", async ({ app }) => {
-  await app.goto("/#/profile/sparkasse");
+  await app.goto("/#/profile/acme");
   await app.evaluate(() => {
     (window as unknown as { __keybundMock: { state: { openFails: boolean } } }).__keybundMock.state.openFails = true;
   });

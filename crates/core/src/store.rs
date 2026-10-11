@@ -470,11 +470,11 @@ port = 22
 provider = "generic"
 
 [[profile]]
-id = "sparkasse"
-name = "S-Communication"
-key = { path = "~/.ssh/sparkasse_ed25519", comment = "tristan@zentrale-sparkasse" }
+id = "acme"
+name = "Nordlicht-Media"
+key = { path = "~/.ssh/acme_ed25519", comment = "tristan@zentrale-acme" }
 git = { name = "Tristan", email = "tristan@kunde.de", sign = false }
-folders = ["~/dev/sparkasse/"]
+folders = ["~/dev/acme/"]
 archived = false
 
 [[profile.host]]
@@ -588,8 +588,8 @@ provider = "gitlab"
     #[test]
     fn slugs() {
         assert_eq!(slugify("Kunde C"), "kunde-c");
-        assert_eq!(slugify("  Bundesagentur für Arbeit "), "bundesagentur-fuer-arbeit");
-        assert_eq!(slugify("S-Communication"), "s-communication");
+        assert_eq!(slugify("  Grüne Wiese für Kinder "), "gruene-wiese-fuer-kinder");
+        assert_eq!(slugify("Nordlicht-Media"), "nordlicht-media");
     }
 
     #[test]
@@ -632,11 +632,11 @@ provider = "gitlab"
         assert!(matches!(save(&env, &cfg), Err(Error::KeyMissing(_))));
         std::fs::create_dir_all(env.home.join(".ssh")).unwrap();
         std::fs::write(env.home.join(".ssh/privat_ed25519"), "x").unwrap();
-        std::fs::write(env.home.join(".ssh/sparkasse_ed25519"), "x").unwrap();
+        std::fs::write(env.home.join(".ssh/acme_ed25519"), "x").unwrap();
         save(&env, &cfg).unwrap();
         assert_eq!(load(&env).unwrap(), cfg);
         // A key file that vanished later does not block other changes.
-        std::fs::remove_file(env.home.join(".ssh/sparkasse_ed25519")).unwrap();
+        std::fs::remove_file(env.home.join(".ssh/acme_ed25519")).unwrap();
         let mut changed = cfg.clone();
         changed.profiles[0].name = "Privat neu".into();
         save(&env, &changed).unwrap();

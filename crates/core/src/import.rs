@@ -16,7 +16,7 @@ use crate::{fsutil, store, Env, Error, Result};
 /// One `Host` block of an ssh config.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HostBlock {
-    /// The single host pattern, e.g. `github.com` or `pflegeabc`.
+    /// The single host pattern, e.g. `github.com` or `nebenjob`.
     pub pattern: String,
     pub hostname: Option<String>,
     pub user: Option<String>,
@@ -365,18 +365,18 @@ Host github.com
     IdentityFile ~/.ssh/privat_ed25519
     IdentitiesOnly yes
 
-# Pflegeabc Account
-Host pflegeabc
+# Nebenjob Account
+Host nebenjob
     HostName github.com
     User git
-    IdentityFile ~/.ssh/pflegeabc/id_ed25519
+    IdentityFile ~/.ssh/nebenjob/id_ed25519
     IdentitiesOnly yes
 
-# S-Communication
-Host gitlab.sfp.berlin
-    HostName gitlab.sfp.berlin
+# Nordlicht-Media
+Host gitlab.nordlicht.de
+    HostName gitlab.nordlicht.de
     User git
-    IdentityFile ~/.ssh/s-communication_ed25519
+    IdentityFile ~/.ssh/nordlicht-media_ed25519
     IdentitiesOnly yes
 
 Host *.internal !x.internal
@@ -390,7 +390,7 @@ Match host foo
     fn parses_host_blocks() {
         let blocks = parse_ssh_config(USER_CONFIG);
         let patterns: Vec<&str> = blocks.iter().map(|b| b.pattern.as_str()).collect();
-        assert_eq!(patterns, ["github.com", "pflegeabc", "gitlab.sfp.berlin"]);
+        assert_eq!(patterns, ["github.com", "nebenjob", "gitlab.nordlicht.de"]);
         let gh = &blocks[0];
         assert_eq!(gh.comment.as_deref(), Some("Privater Account"));
         assert_eq!(gh.identity_files, ["~/.ssh/privat_ed25519"]);
@@ -416,17 +416,17 @@ Match host foo
         );
 
         let pflege = &p[1];
-        assert_eq!(pflege.profile.id, "pflegeabc", "id_ed25519 says nothing, the alias does");
+        assert_eq!(pflege.profile.id, "nebenjob", "id_ed25519 says nothing, the alias does");
         assert!(!pflege.make_default);
-        assert_eq!(pflege.profile.hosts[0].alias.as_deref(), Some("pflegeabc"));
+        assert_eq!(pflege.profile.hosts[0].alias.as_deref(), Some("nebenjob"));
         assert_eq!(pflege.profile.hosts[0].hostname, "github.com");
-        assert_eq!(pflege.profile.key.path, "~/.ssh/pflegeabc/id_ed25519");
+        assert_eq!(pflege.profile.key.path, "~/.ssh/nebenjob/id_ed25519");
 
         let scomm = &p[2];
-        assert_eq!(scomm.profile.id, "s-communication");
+        assert_eq!(scomm.profile.id, "nordlicht-media");
         assert_eq!(
             scomm.profile.hosts[0].alias.as_deref(),
-            Some("gitlab.sfp.berlin"),
+            Some("gitlab.nordlicht.de"),
             "a second plain host keeps its Host block"
         );
         assert_eq!(scomm.profile.hosts[0].provider, Provider::Gitlab);
@@ -446,7 +446,7 @@ Match host foo
         });
         config.default_profile = Some("privat".into());
         let p = proposals(&env, &config, USER_CONFIG);
-        assert_eq!(p.iter().map(|x| x.profile.id.as_str()).collect::<Vec<_>>(), ["pflegeabc", "s-communication"]);
+        assert_eq!(p.iter().map(|x| x.profile.id.as_str()).collect::<Vec<_>>(), ["nebenjob", "nordlicht-media"]);
         assert!(p.iter().all(|x| !x.make_default));
 
         // The privat block is now covered by a profile and can be removed.
@@ -454,7 +454,7 @@ Match host foo
         let migrated = migrated_blocks(&env, &config, &blocks);
         assert_eq!(migrated.iter().map(|b| b.pattern.as_str()).collect::<Vec<_>>(), ["github.com"]);
         let cleaned = without_blocks(USER_CONFIG, &migrated);
-        assert!(cleaned.starts_with("Include ~/.ssh/config.d/keybund.conf\n\n# Pflegeabc Account\nHost pflegeabc\n"));
+        assert!(cleaned.starts_with("Include ~/.ssh/config.d/keybund.conf\n\n# Nebenjob Account\nHost nebenjob\n"));
         assert!(!cleaned.contains("privat_ed25519"));
         assert!(!cleaned.contains("Privater Account"));
         assert!(cleaned.contains("Host *.internal"));

@@ -447,13 +447,13 @@ mod tests {
         assert!(!args.contains(&"-p".to_string()));
     }
 
-    /// A git account behind an alias (`Host pflegeabc` → github.com): without
+    /// A git account behind an alias (`Host nebenjob` → github.com): without
     /// `git@` ssh would log in with the local user name and fail.
     #[test]
     fn git_alias_logs_in_as_git() {
         let p = Profile { key: crate::model::KeyRef { path: "~/.ssh/a".into(), comment: None }, ..Default::default() };
-        let aliased = HostEntry { alias: Some("pflegeabc".into()), ..host(Provider::Github, "github.com") };
-        assert_eq!(ssh_args(&p, &aliased).last().unwrap(), "git@pflegeabc");
+        let aliased = HostEntry { alias: Some("nebenjob".into()), ..host(Provider::Github, "github.com") };
+        assert_eq!(ssh_args(&p, &aliased).last().unwrap(), "git@nebenjob");
         let server = HostEntry {
             alias: Some("nas".into()),
             user: Some("admin".into()),
@@ -467,7 +467,7 @@ mod tests {
     fn steps_in_plain_words() {
         let env = Env::with_home("/home/t");
         let out = "debug1: Reading configuration data /home/t/.ssh/config
-debug1: /home/t/.ssh/config.d/keybund.conf line 4: Applying options for pflegeabc
+debug1: /home/t/.ssh/config.d/keybund.conf line 4: Applying options for nebenjob
 debug1: Connecting to github.com [140.82.121.4] port 22.
 debug1: Connection established.
 debug1: Authenticating to github.com:22 as 'tristan'
@@ -481,7 +481,7 @@ tristan@github.com: Permission denied (publickey).";
         assert_eq!(
             texts,
             [
-                "ssh-Config ~/.ssh/config.d/keybund.conf gilt für „pflegeabc“",
+                "ssh-Config ~/.ssh/config.d/keybund.conf gilt für „nebenjob“",
                 "Verbinde mit github.com [140.82.121.4], Port 22",
                 "Verbindung steht",
                 "Anmelden als Benutzer „tristan“",

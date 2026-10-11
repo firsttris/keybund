@@ -222,12 +222,12 @@ describe("key page", () => {
       b.state.profiles.push({
         ...structuredClone(emptyKey),
         id: "pflege",
-        name: "Pflegeabc",
-        key: { path: "~/.ssh/pflegeabc/id_ed25519", comment: null },
-        hosts: [{ provider: "github", hostname: "github.com", alias: "pflegeabc", user: null, port: null }],
+        name: "Nebenjob",
+        key: { path: "~/.ssh/nebenjob/id_ed25519", comment: null },
+        hosts: [{ provider: "github", hostname: "github.com", alias: "nebenjob", user: null, port: null }],
       });
     });
-    expect(await row("GitHub-Konto pflegeabc")).toHaveTextContent("Repos mit git@pflegeabc:… nutzen diesen Key (github.com)");
+    expect(await row("GitHub-Konto nebenjob")).toHaveTextContent("Repos mit git@nebenjob:… nutzen diesen Key (github.com)");
   });
 
   it("shows no git identity for a key that only serves servers", async () => {
@@ -318,7 +318,7 @@ describe("key page", () => {
   });
 
   it("does not offer to add the key when the server is unreachable", async () => {
-    const { user } = await renderApp("/profile/sparkasse", (b) => {
+    const { user } = await renderApp("/profile/acme", (b) => {
       b.state.unreachable.push("gitlab.kunde.de");
     });
     const gitlab = await row("GitLab-Konto");
@@ -337,13 +337,13 @@ describe("key page", () => {
   });
 
   it("copies the pubkey and opens the page of a self-hosted GitLab", async () => {
-    const { user, backend } = await renderApp("/profile/sparkasse");
+    const { user, backend } = await renderApp("/profile/acme");
     const card = await row(/Konto/);
     await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
     const hint = await within(card).findByRole("status");
-    expect(hint).toHaveTextContent("Auf der GitLab-Seite „New SSH key“ wählen, einfügen und speichern – angemeldet mit dem Konto für „Sparkasse“.");
+    expect(hint).toHaveTextContent("Auf der GitLab-Seite „New SSH key“ wählen, einfügen und speichern – angemeldet mit dem Konto für „Acme“.");
     expect(hint).not.toHaveTextContent("Signing Key");
-    expect(backend.state.clipboard).toMatch(/tristan@zentrale-sparkasse$/);
+    expect(backend.state.clipboard).toMatch(/tristan@zentrale-acme$/);
     await user.click(within(hint).getByRole("button", { name: "Seite nochmal öffnen" }));
     expect(backend.state.openedUrls).toEqual([
       "https://gitlab.kunde.de/-/user_settings/ssh_keys",
@@ -368,7 +368,7 @@ describe("key page", () => {
   });
 
   it("explains when the browser cannot be opened", async () => {
-    const { user, backend } = await renderApp("/profile/sparkasse", (b) => {
+    const { user, backend } = await renderApp("/profile/acme", (b) => {
       b.state.openFails = true;
     });
     const card = await row(/Konto/);
@@ -403,7 +403,7 @@ describe("key page", () => {
   });
 
   it("shows that an archived key has no generated config", async () => {
-    const { user } = await renderApp("/profile/bundesagentur");
+    const { user } = await renderApp("/profile/altprojekt");
     await user.click(await screen.findByRole("tab", { name: "Generierte Config" }));
     expect(await screen.findByText(/Keybund schreibt keine Regeln mehr für ihn/)).toBeInTheDocument();
   });

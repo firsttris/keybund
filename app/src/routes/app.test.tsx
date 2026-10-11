@@ -4,10 +4,10 @@ import { renderApp } from "@/test/render";
 
 describe("profile page", () => {
   it("renders the profile from the backend", async () => {
-    await renderApp("/profile/sparkasse");
-    expect(await screen.findByRole("heading", { level: 1, name: "Sparkasse" })).toBeInTheDocument();
-    expect(screen.getByText("~/.ssh/sparkasse_ed25519", { selector: "dd" })).toBeInTheDocument();
-    expect(screen.getByTestId("public-key")).toHaveTextContent(/^ssh-ed25519 .* tristan@zentrale-sparkasse$/);
+    await renderApp("/profile/acme");
+    expect(await screen.findByRole("heading", { level: 1, name: "Acme" })).toBeInTheDocument();
+    expect(screen.getByText("~/.ssh/acme_ed25519", { selector: "dd" })).toBeInTheDocument();
+    expect(screen.getByTestId("public-key")).toHaveTextContent(/^ssh-ed25519 .* tristan@zentrale-acme$/);
     expect(screen.getByText("Configs aktuell")).toBeInTheDocument();
     expect(screen.getByText(/zuletzt geschrieben (heute|gestern), \d\d:\d\d/)).toBeInTheDocument();
     expect(screen.getByText("Im Agent geladen")).toBeInTheDocument();
@@ -19,7 +19,7 @@ describe("profile page", () => {
   });
 
   it("copies the public key and shows feedback", async () => {
-    const { user, backend } = await renderApp("/profile/sparkasse");
+    const { user, backend } = await renderApp("/profile/acme");
     const [headerButton] = await screen.findAllByRole("button", { name: "Pubkey kopieren" });
     await user.click(headerButton);
     expect(await screen.findByRole("button", { name: "Kopiert" })).toBeInTheDocument();
@@ -27,15 +27,15 @@ describe("profile page", () => {
   });
 
   it("toggling signing is written right away", async () => {
-    const { user, backend } = await renderApp("/profile/sparkasse");
+    const { user, backend } = await renderApp("/profile/acme");
     await user.click(await screen.findByRole("switch", { name: "Commits signieren" }));
     expect(await screen.findByText("Gespeichert")).toBeInTheDocument();
-    expect(backend.state.applied.get("~/.config/keybund/git/sparkasse.gitconfig")).toContain("gpgsign = true");
+    expect(backend.state.applied.get("~/.config/keybund/git/acme.gitconfig")).toContain("gpgsign = true");
     expect(screen.getByText("Configs aktuell")).toBeInTheDocument();
   });
 
   it("keeps the key details folded", async () => {
-    const { user } = await renderApp("/profile/sparkasse");
+    const { user } = await renderApp("/profile/acme");
     const details = (await screen.findByText("Pubkey, Fingerprint und Datei anzeigen")).closest("details")!;
     expect(details).not.toHaveAttribute("open");
     await user.click(screen.getByText("Pubkey, Fingerprint und Datei anzeigen"));
@@ -43,7 +43,7 @@ describe("profile page", () => {
   });
 
   it("validates the e-mail before saving the identity", async () => {
-    const { user } = await renderApp("/profile/sparkasse");
+    const { user } = await renderApp("/profile/acme");
     const mail = await screen.findByLabelText("E-Mail");
     await user.clear(mail);
     await user.type(mail, "kaputt");
@@ -52,7 +52,7 @@ describe("profile page", () => {
   });
 
   it("hides actions for archived profiles", async () => {
-    await renderApp("/profile/bundesagentur");
+    await renderApp("/profile/altprojekt");
     expect(await screen.findByText("Archiviert")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Testen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Archivieren" })).not.toBeInTheDocument();
@@ -68,8 +68,8 @@ describe("sidebar and home", () => {
     // The standard key comes first.
     expect(first).toHaveTextContent("Privat");
     expect(first).toHaveTextContent("Standard · ~/dev/privat/ · GitHub · meinserver");
-    expect(rest.map((l) => l.textContent)).toEqual(["Sparkasse~/dev/sparkasse/ · GitLab", "Kunde B~/dev/kunde-b/ · GitHub"]);
-    expect(within(screen.getByRole("navigation", { name: "Archiv" })).getByText("Bundesagentur")).toBeInTheDocument();
+    expect(rest.map((l) => l.textContent)).toEqual(["Acme~/dev/acme/ · GitLab", "Kunde B~/dev/kunde-b/ · GitHub"]);
+    expect(within(screen.getByRole("navigation", { name: "Archiv" })).getByText("Altprojekt")).toBeInTheDocument();
     expect(await screen.findByLabelText("1 Hinweise")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Welcher Key?" })).not.toBeInTheDocument();
   });
@@ -97,11 +97,11 @@ describe("sidebar and home", () => {
 
   it("answers which key applies from the search", async () => {
     const { user, router } = await renderApp("/");
-    await user.type(await screen.findByLabelText("Keys durchsuchen"), "~/dev/sparkasse/app");
+    await user.type(await screen.findByLabelText("Keys durchsuchen"), "~/dev/acme/app");
     expect(screen.getByText("Kein Key passt")).toBeInTheDocument();
-    await user.click(screen.getByRole("link", { name: "Welcher Key gilt für „~/dev/sparkasse/app“?" }));
+    await user.click(screen.getByRole("link", { name: "Welcher Key gilt für „~/dev/acme/app“?" }));
     expect(router.state.location.pathname).toBe("/which");
-    expect(await screen.findByTestId("which-result")).toHaveTextContent("sparkasse_ed25519");
+    expect(await screen.findByTestId("which-result")).toHaveTextContent("acme_ed25519");
     // Enter does the same.
     await user.clear(screen.getByLabelText("Keys durchsuchen"));
     await user.type(screen.getByLabelText("Keys durchsuchen"), "meinserver{Enter}");
@@ -174,7 +174,7 @@ describe("sidebar and home", () => {
 describe("apply page", () => {
   it("restores files that were changed outside Keybund", async () => {
     const { user } = await renderApp("/", (b) => {
-      b.state.applied.set("~/.config/keybund/git/sparkasse.gitconfig", "kaputt\n");
+      b.state.applied.set("~/.config/keybund/git/acme.gitconfig", "kaputt\n");
     });
     expect(await screen.findByText(/1 Config-Datei passt nicht zu deinen Keys/)).toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: "Ansehen & neu schreiben" }));
@@ -187,7 +187,7 @@ describe("apply page", () => {
 
   it("asks to reload when the plan changed meanwhile", async () => {
     const { user, backend } = await renderApp("/apply", (b) => {
-      b.state.applied.set("~/.config/keybund/git/sparkasse.gitconfig", "kaputt\n");
+      b.state.applied.set("~/.config/keybund/git/acme.gitconfig", "kaputt\n");
     });
     await screen.findByText("-kaputt");
     backend.state.applied.set("~/.config/keybund/git/kunde-b.gitconfig", "auch kaputt\n");

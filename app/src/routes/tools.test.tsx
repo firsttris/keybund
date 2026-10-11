@@ -65,9 +65,9 @@ describe("settings", () => {
   it("changes the default profile and lists keys", async () => {
     const { user, backend } = await renderApp("/settings");
     const select = await screen.findByLabelText("Key für Repos außerhalb deiner Git-Ordner");
-    await screen.findByRole("option", { name: "Sparkasse" });
-    await user.selectOptions(select, "sparkasse");
-    expect(backend.state.defaultProfile).toBe("sparkasse");
+    await screen.findByRole("option", { name: "Acme" });
+    await user.selectOptions(select, "acme");
+    expect(backend.state.defaultProfile).toBe("acme");
     await user.selectOptions(select, "");
     expect(backend.state.defaultProfile).toBeNull();
 

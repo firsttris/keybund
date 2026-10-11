@@ -64,10 +64,10 @@ test("takes an existing key for a server", async ({ app }) => {
 
 test("rejects a name that already exists", async ({ app }) => {
   await app.goto("/#/new");
-  await app.getByLabel("Name").fill("Sparkasse");
-  await expect(app.getByText("ed25519 · ~/.ssh/sparkasse_ed25519")).toBeVisible();
+  await app.getByLabel("Name").fill("Acme");
+  await expect(app.getByText("ed25519 · ~/.ssh/acme_ed25519")).toBeVisible();
   await app.getByRole("button", { name: /Key anlegen/ }).click();
-  await expect(app.getByRole("alert")).toHaveText("Einen Key „Sparkasse“ gibt es schon.");
+  await expect(app.getByRole("alert")).toHaveText("Einen Key „Acme“ gibt es schon.");
 });
 
 test("the validation message does not move the button", async ({ app }) => {

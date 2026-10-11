@@ -2,15 +2,15 @@ import { expect, test } from "./fixtures";
 
 test("resolves a folder and a host", async ({ app }) => {
   // Straight from the search: Enter asks which key applies.
-  await app.getByLabel("Keys durchsuchen").fill("~/dev/sparkasse/portal-frontend");
+  await app.getByLabel("Keys durchsuchen").fill("~/dev/acme/portal-frontend");
   await app.getByLabel("Keys durchsuchen").press("Enter");
   await expect(app.getByRole("heading", { level: 1, name: "Welcher Key?" })).toBeVisible();
   const result = app.getByTestId("which-result");
-  await expect(result).toContainText("sparkasse_ed25519");
-  await expect(result).toContainText('includeIf "gitdir:~/dev/sparkasse/"');
+  await expect(result).toContainText("acme_ed25519");
+  await expect(result).toContainText('includeIf "gitdir:~/dev/acme/"');
   await expect(result).toContainText("Tristan <tristan@kunde.de>");
   await expect(result).toContainText("ja, nur dieser Key wird angeboten");
-  await expect(result.getByRole("link", { name: "Key Sparkasse" })).toBeVisible();
+  await expect(result.getByRole("link", { name: "Key Acme" })).toBeVisible();
 
   await app.getByRole("button", { name: "meinserver" }).click();
   await expect(result).toContainText("privat_ed25519");
@@ -36,10 +36,10 @@ test("clones into the matching profile", async ({ app }) => {
   await app.getByRole("link", { name: "Repo klonen" }).click();
   await app.getByLabel("Repo-URL").fill("git@gitlab.kunde.de:team/portal-frontend.git");
   await app.getByRole("button", { name: "Prüfen" }).click();
-  await expect(app.getByRole("radio", { name: /Sparkasse/ })).toBeChecked();
-  await expect(app.getByLabel("Zielordner")).toHaveValue("~/dev/sparkasse/portal-frontend");
+  await expect(app.getByRole("radio", { name: /Acme/ })).toBeChecked();
+  await expect(app.getByLabel("Zielordner")).toHaveValue("~/dev/acme/portal-frontend");
   await app.getByRole("button", { name: "Klonen" }).click();
-  await expect(app.getByRole("status")).toContainText("Geklont nach ~/dev/sparkasse/portal-frontend");
+  await expect(app.getByRole("status")).toContainText("Geklont nach ~/dev/acme/portal-frontend");
 
   // Same target again fails.
   await app.getByRole("button", { name: "Klonen" }).click();
@@ -62,17 +62,17 @@ test("clone asks when several profiles share a host", async ({ app }) => {
 test("changes the default profile", async ({ app }) => {
   await app.goto("/#/settings");
   await expect(app.getByLabel("Key für Repos außerhalb deiner Git-Ordner")).toHaveValue("privat");
-  await app.getByLabel("Key für Repos außerhalb deiner Git-Ordner").selectOption("sparkasse");
+  await app.getByLabel("Key für Repos außerhalb deiner Git-Ordner").selectOption("acme");
   await expect(app.getByText("Git und ssh benutzen es ab sofort.")).toBeVisible();
   await app.goto("/#/");
   await expect(app.getByText("Configs aktuell")).toBeVisible();
-  await expect(app.getByRole("main").getByRole("list", { name: "Sparkasse wird benutzt für" })).toContainText("Standard für Git");
+  await expect(app.getByRole("main").getByRole("list", { name: "Acme wird benutzt für" })).toContainText("Standard für Git");
 });
 
 test("lists existing keys with their usage", async ({ app }) => {
   await app.goto("/#/settings");
   await expect(app.getByText("~/.ssh/id_ed25519", { exact: true })).toBeVisible();
-  await expect(app.getByRole("link", { name: "genutzt von Sparkasse" })).toBeVisible();
+  await expect(app.getByRole("link", { name: "genutzt von Acme" })).toBeVisible();
   await app.getByText("Erweitert").click();
   await expect(app.getByText("~/.config/keybund/profiles.toml")).toBeVisible();
 });
@@ -89,8 +89,8 @@ test("layout has no horizontal scrolling", async ({ app }) => {
 test("sidebar stays in place when switching pages", async ({ app }, testInfo) => {
   test.skip(testInfo.project.name === "narrow", "the sidebar sits above the content on narrow screens");
   const doctor = app.getByRole("link", { name: /^Doctor/ });
-  await app.goto("/#/profile/sparkasse");
-  await expect(app.getByRole("heading", { level: 1, name: "Sparkasse" })).toBeVisible();
+  await app.goto("/#/profile/acme");
+  await expect(app.getByRole("heading", { level: 1, name: "Acme" })).toBeVisible();
   const start = await doctor.boundingBox();
   for (const [link, heading] of [
     [/^Doctor/, "Doctor"],
@@ -106,12 +106,12 @@ test("sidebar stays in place when switching pages", async ({ app }, testInfo) =>
 test("takes over the existing ~/.ssh/config", async ({ app }) => {
   await app.getByRole("link", { name: "Übernehmen" }).click();
   await expect(app.getByRole("heading", { name: "Bestehende SSH-Config übernehmen" })).toBeVisible();
-  await expect(app.getByRole("region", { name: "Pflegeabc Account" })).toContainText("~/.ssh/pflegeabc/id_ed25519");
+  await expect(app.getByRole("region", { name: "Nebenjob Account" })).toContainText("~/.ssh/nebenjob/id_ed25519");
   await app.getByRole("button", { name: "2 Keys übernehmen" }).click();
   await expect(app.getByRole("status")).toContainText("Alles übernommen: 2 Keys, alte Einträge entfernt");
   await app.getByText("Geänderte Dateien").click();
   await expect(app.getByText("Backup: ~/.ssh/config.keybund-backup")).toBeVisible();
-  await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Pflegeabc Account/ })).toBeVisible();
+  await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Nebenjob Account/ })).toBeVisible();
   // The banner is gone.
   await app.goto("/#/");
   await expect(app.getByText(/mit eigenem Key, die Keybund/)).toHaveCount(0);
@@ -123,8 +123,8 @@ test("doctor removes an old entry after the import", async ({ app }) => {
   await app.getByRole("button", { name: "2 Keys übernehmen" }).click();
   await expect(app.getByRole("status")).toContainText("Alles übernommen: 2 Keys");
   await app.goto("/#/doctor");
-  await expect(app.getByText("Doppelter Eintrag für pflegeabc in ~/.ssh/config")).toBeVisible();
-  await app.getByRole("button", { name: "Doppelter Eintrag für pflegeabc in ~/.ssh/config beheben" }).click();
+  await expect(app.getByText("Doppelter Eintrag für nebenjob in ~/.ssh/config")).toBeVisible();
+  await app.getByRole("button", { name: "Doppelter Eintrag für nebenjob in ~/.ssh/config beheben" }).click();
   await expect(app.getByText(/Doppelter Eintrag/)).toHaveCount(0);
 });
 

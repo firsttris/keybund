@@ -31,7 +31,7 @@ describe("mock backend contract", () => {
     expect(((await b.invoke("plan_changes")) as Plan).changes).toEqual([]);
     const view = (await b.invoke("load_profiles")) as ProfilesView;
     expect(view.pending_changes).toBe(0);
-    expect(view.profiles.map((p) => p.profile.id)).toEqual(["privat", "sparkasse", "kunde-b", "bundesagentur"]);
+    expect(view.profiles.map((p) => p.profile.id)).toEqual(["privat", "acme", "kunde-b", "altprojekt"]);
   });
 
   it("previews without writing, creates with writing", async () => {
@@ -86,7 +86,7 @@ describe("mock backend contract", () => {
 
   it("refuses to restore a file that changed since the preview", async () => {
     const b = backend();
-    b.state.applied.set("~/.config/keybund/git/sparkasse.gitconfig", "kaputt\n");
+    b.state.applied.set("~/.config/keybund/git/acme.gitconfig", "kaputt\n");
     const plan = (await b.invoke("plan_changes")) as Plan;
     expect(plan.changes).toHaveLength(1);
     await expect(b.invoke("apply_changes", { expectedDiffs: [] })).rejects.toMatchObject({ kind: "stale_plan" });
@@ -105,7 +105,7 @@ describe("mock backend contract", () => {
 
   it("resolves folders and hosts", async () => {
     const b = backend();
-    expect(await b.invoke("which", { query: "~/dev/sparkasse/repo" })).toMatchObject({ profile_id: "sparkasse", mode: "folder" });
+    expect(await b.invoke("which", { query: "~/dev/acme/repo" })).toMatchObject({ profile_id: "acme", mode: "folder" });
     expect(await b.invoke("which", { query: "~/elsewhere" })).toMatchObject({ profile_id: "privat", via: "Standard-Key" });
     expect(await b.invoke("which", { query: "meinserver" })).toMatchObject({ profile_id: "privat", hostname: "1.2.3.4" });
   });
@@ -114,7 +114,7 @@ describe("mock backend contract", () => {
     const b = backend();
     expect(await b.invoke("clone_preview", { url: "git@gitlab.kunde.de:team/app.git" })).toMatchObject({
       matched: true,
-      candidates: [{ profile_id: "sparkasse", target: "~/dev/sparkasse/app" }],
+      candidates: [{ profile_id: "acme", target: "~/dev/acme/app" }],
     });
     expect(await b.invoke("clone_preview", { url: "https://github.com/a/b" })).toMatchObject({ matched: true, repo: { name: "b" } });
     await expect(b.invoke("clone_preview", { url: "kaputt" })).rejects.toMatchObject({ kind: "invalid_url" });
@@ -123,7 +123,7 @@ describe("mock backend contract", () => {
   it("proposes, imports and cleans up ~/.ssh/config like the core", async () => {
     const b = backend();
     const proposals = (await b.invoke("import_proposals")) as ImportProposal[];
-    expect(proposals.map((p) => p.profile.id)).toEqual(["pflegeabc", "s-communication"]);
+    expect(proposals.map((p) => p.profile.id)).toEqual(["nebenjob", "nordlicht-media"]);
     expect(proposals.every((p) => !p.make_default)).toBe(true);
     expect(((await b.invoke("load_profiles")) as ProfilesView).import_available).toBe(2);
     expect(((await b.invoke("cleanup_preview")) as Plan).changes).toEqual([]);
@@ -142,9 +142,9 @@ describe("mock backend contract", () => {
     const b = backend();
     const proposals = (await b.invoke("import_proposals")) as ImportProposal[];
     const done = (await b.invoke("import_profiles", { chosen: proposals.slice(0, 1), removeOld: true })) as ImportDone;
-    expect(done.ids).toEqual(["pflegeabc"]);
+    expect(done.ids).toEqual(["nebenjob"]);
     expect(done.report.backups).toEqual(["~/.ssh/config.keybund-backup"]);
-    expect(b.state.sshBlocks.map((x) => x.pattern)).toEqual(["gitlab.sfp.berlin"]);
+    expect(b.state.sshBlocks.map((x) => x.pattern)).toEqual(["gitlab.nordlicht.de"]);
   });
 
   it("makes a plain git host the default when there is none", async () => {

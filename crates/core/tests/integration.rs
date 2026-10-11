@@ -390,10 +390,10 @@ fn import_existing_ssh_config_and_clean_up() {
     let (_dir, env, _) = setup();
     // Start without Keybund profiles, only the hand-made setup.
     fs::remove_file(env.profiles_file()).unwrap();
-    for key in ["~/.ssh/privat2_ed25519", "~/.ssh/pflegeabc/id_ed25519", "~/.ssh/s-communication_ed25519"] {
+    for key in ["~/.ssh/privat2_ed25519", "~/.ssh/nebenjob/id_ed25519", "~/.ssh/nordlicht-media_ed25519"] {
         keygen::generate(&env, &GenerateOptions { path: key.into(), comment: "x".into(), passphrase: None }).unwrap();
     }
-    let user_config = "# Privater Account\nHost github.com\n    HostName github.com\n    User git\n    IdentityFile ~/.ssh/privat2_ed25519\n    IdentitiesOnly yes\n\n# Pflegeabc Account\nHost pflegeabc\n    HostName github.com\n    User git\n    IdentityFile ~/.ssh/pflegeabc/id_ed25519\n    IdentitiesOnly yes\n\n# S-Communication\nHost gitlab.sfp.berlin\n    HostName gitlab.sfp.berlin\n    User git\n    IdentityFile ~/.ssh/s-communication_ed25519\n    IdentitiesOnly yes\n\nHost *\n    ServerAliveInterval 30\n";
+    let user_config = "# Privater Account\nHost github.com\n    HostName github.com\n    User git\n    IdentityFile ~/.ssh/privat2_ed25519\n    IdentitiesOnly yes\n\n# Nebenjob Account\nHost nebenjob\n    HostName github.com\n    User git\n    IdentityFile ~/.ssh/nebenjob/id_ed25519\n    IdentitiesOnly yes\n\n# Nordlicht-Media\nHost gitlab.nordlicht.de\n    HostName gitlab.nordlicht.de\n    User git\n    IdentityFile ~/.ssh/nordlicht-media_ed25519\n    IdentitiesOnly yes\n\nHost *\n    ServerAliveInterval 30\n";
     fs::write(env.ssh_config(), user_config).unwrap();
 
     // A Keybund profile on github.com next to the old global entry: doctor
@@ -417,7 +417,7 @@ fn import_existing_ssh_config_and_clean_up() {
     let proposals = import::proposals_for(&env).unwrap();
     assert_eq!(
         proposals.iter().map(|p| p.profile.id.as_str()).collect::<Vec<_>>(),
-        ["privat2", "pflegeabc", "s-communication"]
+        ["privat2", "nebenjob", "nordlicht-media"]
     );
     assert!(proposals.iter().all(|p| p.key_exists));
     import::import(&env, &proposals).unwrap();
@@ -428,15 +428,15 @@ fn import_existing_ssh_config_and_clean_up() {
 
     // Keybund now writes the alias blocks itself.
     let conf = fs::read_to_string(env.ssh_keybund_conf()).unwrap();
-    assert!(conf.contains("Host pflegeabc\n    HostName github.com\n"));
-    assert!(conf.contains("Host gitlab.sfp.berlin\n"));
+    assert!(conf.contains("Host nebenjob\n    HostName github.com\n"));
+    assert!(conf.contains("Host gitlab.nordlicht.de\n"));
     assert!(!conf.contains("Host github.com\n"), "github.com stays a shared host without Host block");
 
     // Doctor offers to remove the old entries; the fix removes exactly them.
     let report = doctor::run(&env);
     let check = report.checks.iter().find(|c| c.id == "ssh-config-github.com").unwrap();
     assert_eq!(check.fix, Some(doctor::Fix::CleanupSshConfig));
-    assert!(report.checks.iter().any(|c| c.id == "ssh-config-pflegeabc"));
+    assert!(report.checks.iter().any(|c| c.id == "ssh-config-nebenjob"));
     let plan = import::plan_cleanup(&env).unwrap();
     assert_eq!(plan.changes.len(), 1);
     assert!(plan.changes[0].user_file);

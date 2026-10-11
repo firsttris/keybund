@@ -5,8 +5,8 @@ describe("slugify", () => {
   // Same cases as store::tests::slugs in the Rust core.
   it.each([
     ["Kunde C", "kunde-c"],
-    ["  Bundesagentur für Arbeit ", "bundesagentur-fuer-arbeit"],
-    ["S-Communication", "s-communication"],
+    ["  Grüne Wiese für Kinder ", "gruene-wiese-fuer-kinder"],
+    ["Nordlicht-Media", "nordlicht-media"],
     ["Straße 42!", "strasse-42"],
     ["---", ""],
   ])("%s → %s", (input, expected) => expect(slugify(input)).toBe(expected));
