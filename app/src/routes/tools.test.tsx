@@ -114,6 +114,22 @@ describe("settings", () => {
     expect(screen.getByLabelText("Ordner")).toHaveAttribute("placeholder", "~/work/kunde-w/");
   });
 
+  it("shows why the settings could not be loaded instead of spinning", async () => {
+    const { user } = await renderApp("/settings", (b) => {
+      b.state.configError = "kaputt";
+    });
+    const cards = await screen.findAllByRole("alert");
+    expect(cards.length).toBeGreaterThanOrEqual(2);
+    expect(within(screen.getByRole("region", { name: "Neue Keys" })).getByRole("alert")).toHaveTextContent(
+      "profiles.toml ist fehlerhaft: kaputt",
+    );
+    await user.click(screen.getByText("Erweitert"));
+    expect(within(screen.getByRole("region", { name: "Für besondere Fälle" })).getByRole("alert")).toHaveTextContent(
+      "profiles.toml ist fehlerhaft: kaputt",
+    );
+    expect(screen.queryByRole("status", { name: "Lädt …" })).not.toBeInTheDocument();
+  });
+
   it("keeps special switches under Erweitert and saves them right away", async () => {
     const { user, backend } = await renderApp("/settings");
     const advanced = (await screen.findByText("Erweitert")).closest("details")!;

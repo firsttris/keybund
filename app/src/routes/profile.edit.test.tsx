@@ -1,6 +1,7 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Profile } from "@/lib/bindings";
+import { setLang } from "@/lib/i18n";
 import { renderApp } from "@/test/render";
 
 const usage = () => screen.findByRole("region", { name: "Wo wird dieser Key benutzt?" });
@@ -168,6 +169,115 @@ describe("key page", () => {
 
     await user.click(within(server).getByRole("button", { name: "Server srv entfernen" }));
     expect(await screen.findByText("Configs aktuell")).toBeInTheDocument();
+  });
+
+  it("asks for two host keys one after the other", async () => {
+    const { user, backend } = await renderApp("/profile/privat", (b) => {
+      b.state.latency = 40;
+      b.state.profiles
+        .find((p) => p.id === "privat")!
+        .hosts.push(
+          { provider: "generic", hostname: "10.0.0.1", alias: "alpha", user: null, port: null },
+          { provider: "generic", hostname: "10.0.0.2", alias: "beta", user: null, port: null },
+        );
+    });
+    const alpha = await row("Server alpha");
+    const beta = await row("Server beta");
+    // Both tests start while the first host key check is still running.
+    fireEvent.click(within(alpha).getByRole("button", { name: "Testen" }));
+    fireEvent.click(within(beta).getByRole("button", { name: "Testen" }));
+    let dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Erste Verbindung zu 10.0.0.1");
+    await user.click(within(dialog).getByRole("button", { name: "Fingerprint stimmt" }));
+    dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Erste Verbindung zu 10.0.0.2");
+    await user.click(within(dialog).getByRole("button", { name: "Fingerprint stimmt" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(await within(alpha).findByTestId("connection-status")).toHaveTextContent("Anmeldung erfolgreich");
+    expect(await within(beta).findByTestId("connection-status")).toHaveTextContent("Anmeldung erfolgreich");
+    expect(backend.state.knownHosts).toEqual(expect.arrayContaining(["10.0.0.1", "10.0.0.2"]));
+  });
+
+  it("keeps the host key question open when the language changes", async () => {
+    const { user, backend } = await renderApp("/profile/privat", (b) => {
+      b.state.profiles
+        .find((p) => p.id === "privat")!
+        .hosts.push({ provider: "generic", hostname: "10.0.0.3", alias: "gamma", user: null, port: null });
+    });
+    const gamma = await row("Server gamma");
+    await user.click(within(gamma).getByRole("button", { name: "Testen" }));
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Erste Verbindung zu 10.0.0.3");
+    try {
+      act(() => setLang("en"));
+      // Still the same question, now in English – the test behind it is still waiting.
+      const dialog = screen.getByRole("alertdialog");
+      expect(dialog).toHaveTextContent("First connection to 10.0.0.3");
+      await user.click(within(dialog).getByRole("button", { name: "Fingerprint matches" }));
+      // The answer reaches the test: the key is trusted and the connection tested
+      // (the page itself was re-rendered in English, so its row started afresh).
+      await waitFor(() => expect(backend.state.knownHosts).toContain("10.0.0.3"));
+      await waitFor(() => expect(backend.state.lastTests.get("privat")).toMatchObject({ success: true }));
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    } finally {
+      act(() => setLang("de"));
+    }
+  });
+
+  it("does not add a host twice on a double click", async () => {
+    const { user, backend } = await renderApp("/profile/kunde-b", (b) => {
+      b.state.latency = 60;
+    });
+    await user.click(within(await usage()).getByRole("button", { name: "Server" }));
+    const form = screen.getByRole("form", { name: "Server hinzufügen" });
+    await user.type(within(form).getByLabelText("Hostname oder IP"), "10.0.0.7");
+    const save = within(form).getByRole("button", { name: "Server speichern" });
+    await user.dblClick(save);
+    expect(save).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Server 10.0.0.7 entfernen" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Server hinzufügen" })).not.toBeInTheDocument());
+    expect(backend.state.profiles.find((p) => p.id === "kunde-b")!.hosts.map((h) => h.hostname)).toEqual([
+      "github.com",
+      "10.0.0.7",
+    ]);
+    expect(within(await usage()).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("rejects the same account twice", async () => {
+    const { user } = await renderApp("/profile/kunde-b");
+    const card = await usage();
+    await user.click(within(card).getByRole("button", { name: "Git-Konto" }));
+    await user.click(screen.getByRole("button", { name: "Konto speichern" }));
+    expect(await within(card).findByRole("alert")).toHaveTextContent("github.com ist bei diesem Key schon eingetragen");
+  });
+
+  it("shows when the host key check itself fails", async () => {
+    const { user, backend } = await renderApp("/profile/privat", (b) => {
+      b.state.hostKeyError = "io";
+      b.state.knownHosts = [];
+    });
+    const server = await row("Server meinserver");
+    await user.click(within(server).getByRole("button", { name: "Testen" }));
+    expect(await within(server).findByRole("alert")).toHaveTextContent(
+      "Dateizugriff auf ~/.ssh/known_hosts fehlgeschlagen: Permission denied",
+    );
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    // Without ssh-keyscan there is no check: ssh itself decides, the probe says so.
+    backend.state.hostKeyError = "tool_missing";
+    await user.click(within(server).getByRole("button", { name: "Testen" }));
+    expect(await within(server).findByTestId("connection-status")).toHaveTextContent(
+      "Host-Key von 1.2.3.4 ist noch nicht bestätigt",
+    );
+  });
+
+  it("says when profiles.toml was saved but the configs were not written", async () => {
+    const { user, backend } = await renderApp("/profile/acme", (b) => {
+      b.state.applyError = "Read-only file system";
+    });
+    await user.click(await screen.findByRole("switch", { name: "Commits signieren" }));
+    expect(await screen.findByText(/Dateizugriff auf .* fehlgeschlagen: Read-only file system/)).toBeInTheDocument();
+    expect(backend.state.profiles.find((p) => p.id === "acme")!.git!.sign).toBe(true);
+    expect(await screen.findByText(/1 Config-Datei passt nicht zu deinen Keys/)).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Commits signieren" })).toHaveAttribute("aria-checked", "true");
   });
 
   it("reports an unreachable server", async () => {

@@ -131,6 +131,37 @@ test("adds a server and installs the key", async ({ app }) => {
   ).toBeVisible();
 });
 
+test("asks for two host keys one after the other", async ({ app }) => {
+  await app.goto("/#/profile/privat");
+  for (const [hostname, alias] of [
+    ["10.0.0.1", "alpha"],
+    ["10.0.0.2", "beta"],
+  ]) {
+    await usage(app).getByRole("button", { name: "Server", exact: true }).click();
+    const form = app.getByRole("form", { name: "Server hinzufügen" });
+    await form.getByLabel("Hostname oder IP").fill(hostname);
+    await form.getByLabel(/Alias/).fill(alias);
+    await form.getByRole("button", { name: "Server speichern" }).click();
+    await expect(row(app, `Server ${alias}`)).toBeVisible();
+  }
+  // ssh-keyscan takes its time: the second test starts while the first check still runs.
+  await app.evaluate(() => {
+    (window as unknown as { __keybundMock: { state: { latency: number } } }).__keybundMock.state.latency = 1000;
+  });
+  const alpha = row(app, "Server alpha");
+  const beta = row(app, "Server beta");
+  await alpha.getByRole("button", { name: "Testen" }).click();
+  await beta.getByRole("button", { name: "Testen" }).click();
+  const dialog = app.getByRole("alertdialog");
+  await expect(dialog).toContainText("Erste Verbindung zu 10.0.0.1");
+  await dialog.getByRole("button", { name: "Fingerprint stimmt" }).click();
+  await expect(dialog).toContainText("Erste Verbindung zu 10.0.0.2");
+  await dialog.getByRole("button", { name: "Fingerprint stimmt" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(alpha.getByTestId("connection-status")).toHaveText("Anmeldung erfolgreich");
+  await expect(beta.getByTestId("connection-status")).toHaveText("Anmeldung erfolgreich");
+});
+
 test("adds a git account", async ({ app }) => {
   await app.goto("/#/profile/kunde-b");
   await usage(app).getByRole("button", { name: "Git-Konto" }).click();

@@ -1,5 +1,5 @@
 import { screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { msg } from "@/lib/mock/backend";
 import { renderApp } from "@/test/render";
 
@@ -165,6 +165,27 @@ describe("sidebar and home", () => {
     expect(localStorage.getItem("keybund.howItWorks.hidden")).toBe("1");
     await user.click(screen.getByRole("button", { name: "Wie funktioniert Keybund?" }));
     expect(screen.getByRole("region", { name: "So funktioniert Keybund" })).toBeInTheDocument();
+  });
+
+  it("shows a load error once instead of refetching forever", async () => {
+    let backend: Awaited<ReturnType<typeof renderApp>>["backend"] | undefined;
+    await renderApp("/", (b) => {
+      b.state.configError = "Zeile 3: unerwartetes Zeichen";
+      backend = b;
+      vi.spyOn(b, "invoke");
+    });
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts.map((a) => a.textContent)).toEqual([
+      "profiles.toml ist fehlerhaft: Zeile 3: unerwartetes Zeichen",
+      "profiles.toml ist fehlerhaft: Zeile 3: unerwartetes Zeichen",
+    ]);
+    expect(within(screen.getByRole("main")).getByRole("alert")).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Keys" })).getByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Lädt …" })).not.toBeInTheDocument();
+    // Before: every remount of the page's children refetched, hundreds of times a second.
+    await new Promise((r) => setTimeout(r, 300));
+    const loads = vi.mocked(backend!.invoke).mock.calls.filter(([cmd]) => cmd === "load_profiles");
+    expect(loads).toHaveLength(1);
   });
 
   it("shows the empty state without profiles", async () => {

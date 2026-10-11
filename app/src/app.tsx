@@ -10,7 +10,11 @@ import { createAppRouter } from "./router";
 export function createQueryClient() {
   return new QueryClient({
     defaultOptions: {
-      queries: { retry: false, refetchOnWindowFocus: true, staleTime: 5_000 },
+      // No refetch when an observer mounts: a page that shows a spinner while its
+      // children (which share the query) are unmounted would otherwise loop on an
+      // error – mount, refetch, spinner, unmount, error, mount … The app
+      // invalidates explicitly after every write.
+      queries: { retry: false, retryOnMount: false, refetchOnWindowFocus: true, staleTime: 5_000 },
       mutations: { retry: false },
     },
   });
@@ -35,8 +39,9 @@ export function App({
       <Fragment key={lang}>
         <RouterProvider router={router} />
         <Toaster theme={theme} position="bottom-right" />
-        <HostKeyPrompt />
       </Fragment>
+      {/* Outside the keyed fragment: a remount would drop the prompt a running test waits for. */}
+      <HostKeyPrompt />
     </QueryClientProvider>
   );
 }

@@ -171,8 +171,21 @@ export function SettingsPage() {
   );
 }
 
+/** A card that shows why its settings could not be loaded instead of spinning forever. */
+function LoadFailed({ id, title, error }: { id: string; title: string; error: unknown }) {
+  return (
+    <Card aria-labelledby={id}>
+      <CardTitle id={id}>{title}</CardTitle>
+      <p role="alert" className="m-0 text-[13px] text-danger">
+        {errorMessage(error)}
+      </p>
+    </Card>
+  );
+}
+
 function SettingsCard() {
   const settings = useSettings();
+  if (settings.error) return <LoadFailed id="settings-title" title={m.settings_newKeys()} error={settings.error} />;
   if (!settings.data) return <Spinner />;
   // Remounts with fresh values after saving.
   // Remounts only when the folders change (not when a switch under "Erweitert" is flipped).
@@ -238,6 +251,7 @@ function AdvancedCard() {
   const settings = useSettings();
   const update = useUpdateSettings();
   const s = settings.data;
+  if (settings.error) return <LoadFailed id="advanced-title" title={m.settings_special()} error={settings.error} />;
   if (!s) return <Spinner />;
   const toggle = (patch: Partial<Settings>) =>
     update.mutate(patch, { onSuccess: toastSaved, onError: (e) => toast.error(errorMessage(e)) });

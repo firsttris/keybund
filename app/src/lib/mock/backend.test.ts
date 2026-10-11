@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ImportDone, ImportProposal, NewProject, Plan, Profile, ProfilesView } from "../bindings";
-import { createMockBackend, seedState } from "./backend";
+import { createMockBackend, normalizeFolder, seedState } from "./backend";
 
 function backend() {
   const state = seedState();
@@ -171,6 +171,237 @@ describe("mock backend contract", () => {
     const [p] = (await b.invoke("import_proposals")) as ImportProposal[];
     expect(p.make_default).toBe(true);
     expect(p.profile.hosts[0].alias).toBeNull();
+  });
+
+  it("checks ids, names and values like store::validate", async () => {
+    const b = backend();
+    const p = b.state.profiles[0];
+    const update = (patch: Partial<Profile>) => b.invoke("update_profile", { profile: { ...p, ...patch } as Profile });
+    const withHost = (host: Partial<Profile["hosts"][number]>) =>
+      update({
+        hosts: [{ alias: null, hostname: "example.org", user: null, port: null, provider: "generic", ...host }],
+      });
+    await expect(b.invoke("create_project", { project: project("Kunde C") })).rejects.toMatchObject({
+      kind: "invalid_id",
+      message: { key: "error_invalidId", args: { id: "Kunde C" } },
+    });
+    await expect(update({ name: "  " })).rejects.toMatchObject({ kind: "missing_name" });
+    await expect(update({ name: "Pri\nvat" })).rejects.toMatchObject({
+      kind: "invalid_value",
+      message: { key: "error_invalidValue", args: { value: "Pri\nvat", field: { key: "field_name", args: {} } } },
+    });
+    for (const path of ['~/.ssh/a"b', "~/.ssh/%d/key", `~/.ssh/\${HOME}/key`, "~/.ssh/a\\b"]) {
+      await expect(update({ key: { path, comment: null } })).rejects.toMatchObject({
+        kind: "invalid_value",
+        message: { args: { field: { key: "field_key" } } },
+      });
+    }
+    await expect(update({ git: { name: "T", email: "a b@x.de", sign: true } })).rejects.toMatchObject({
+      kind: "invalid_value",
+      message: { args: { field: { key: "field_gitEmail" } } },
+    });
+    for (const hostname of ["my server", "-x", "a*b", "a?b", "a,b", "a#b", "a'b", "a[b]"]) {
+      await expect(withHost({ hostname })).rejects.toMatchObject({
+        kind: "invalid_value",
+        message: { args: { value: hostname, field: { key: "field_hostname" } } },
+      });
+    }
+    await expect(withHost({ alias: "-nas" })).rejects.toMatchObject({
+      message: { args: { field: { key: "field_alias" } } },
+    });
+    await expect(withHost({ user: "root admin" })).rejects.toMatchObject({
+      message: { args: { field: { key: "field_user" } } },
+    });
+    for (const folder of ["dev/x", "~/dev/*", "~/dev/a?b", "~/dev/[a]", "~/dev\\x"]) {
+      await expect(update({ folders: [folder] })).rejects.toMatchObject({
+        kind: "invalid_path",
+        message: { key: "error_invalidPath" },
+      });
+    }
+    // Nothing of that was saved.
+    expect(b.state.profiles[0]).toEqual(p);
+    // A saved folder with `.` or `..` (git compares real paths) fails every later check.
+    b.state.profiles[2].folders = ["~/dev/../x/"];
+    await expect(b.invoke("preview_add_host", { id: "kunde-b", host: p.hosts[0] })).rejects.toMatchObject({
+      kind: "invalid_path",
+      message: { args: { path: "~/dev/../x/" } },
+    });
+  });
+
+  it("rejects the same host twice in one key and aliases that differ only in case", async () => {
+    const b = backend();
+    const github = { alias: null, hostname: "github.com", user: null, port: null, provider: "github" as const };
+    await expect(
+      b.invoke("add_host", { id: "privat", host: { ...github, hostname: "GitHub.com" } }),
+    ).rejects.toMatchObject({
+      kind: "duplicate_host",
+      message: { key: "error_duplicateHost", args: { hostname: "github.com" } },
+    });
+    // Another alias on the same host is a different entry.
+    await b.invoke("add_host", { id: "privat", host: { ...github, alias: "gh-work" } });
+    await expect(
+      b.invoke("preview_add_host", { id: "privat", host: { ...github, alias: "GH-Work" } }),
+    ).rejects.toMatchObject({ kind: "duplicate_host" });
+    await expect(
+      b.invoke("add_host", { id: "kunde-b", host: { ...github, provider: "generic", hostname: "MeinServer" } }),
+    ).rejects.toMatchObject({ kind: "duplicate_alias", message: { args: { host: "meinserver" } } });
+  });
+
+  it("stores host names in lower case and trims them", async () => {
+    const b = backend();
+    const host = { alias: " NAS ", hostname: "Nas.Local", user: " Root ", port: null, provider: "generic" as const };
+    await b.invoke("add_host", { id: "kunde-b", host });
+    expect(b.state.profiles[2].hosts[1]).toMatchObject({ alias: "nas", hostname: "nas.local", user: "Root" });
+    const p = b.state.profiles[0];
+    await b.invoke("update_profile", {
+      profile: { ...p, hosts: [{ ...host, alias: "Srv2", hostname: "Nas2.Local" }] } as Profile,
+    });
+    expect(b.state.profiles[0].hosts[0]).toMatchObject({ alias: "srv2", hostname: "nas2.local" });
+    const c = project("c");
+    c.profile.hosts = [{ ...host, alias: "C-Host", hostname: "Nas3.Local" }];
+    await b.invoke("create_project", { project: c });
+    expect(b.state.profiles[4].hosts[0]).toMatchObject({ alias: "c-host", hostname: "nas3.local" });
+  });
+
+  it("normalizes folders like store::normalize_folder", async () => {
+    const b = backend();
+    expect(await b.invoke("normalize_folder", { folder: " ~/dev//x/./y/../z " })).toBe("~/dev/x/z/");
+    expect(await b.invoke("normalize_folder", { folder: "/home/tristan/dev/x" })).toBe("~/dev/x/");
+    expect(await b.invoke("normalize_folder", { folder: "/srv/x/" })).toBe("/srv/x/");
+    expect(await b.invoke("normalize_folder", { folder: "~" })).toBe("~/");
+    expect(normalizeFolder("/home/tristan")).toBe("~/");
+    const p = b.state.profiles[2];
+    await b.invoke("update_profile", { profile: { ...p, folders: ["/home/tristan/dev/kunde-b//"] } as Profile });
+    expect(b.state.profiles[2].folders).toEqual(["~/dev/kunde-b/"]);
+    // Nested is decided on the real path.
+    await expect(
+      b.invoke("update_profile", { profile: { ...p, folders: ["/home/tristan/dev/privat/sub"] } as Profile }),
+    ).rejects.toMatchObject({ kind: "nested_folders" });
+  });
+
+  it("writes the settings folders relative to ~ without a trailing slash", async () => {
+    const b = backend();
+    const settings = { ...b.state.settings, projects_dir: "/home/tristan/work/", keys_dir: " ~/.ssh/keys// " };
+    expect(await b.invoke("update_settings", { settings })).toMatchObject({
+      projects_dir: "~/work",
+      keys_dir: "~/.ssh/keys",
+    });
+    expect(await b.invoke("update_settings", { settings: { ...settings, projects_dir: "/" } })).toMatchObject({
+      projects_dir: "/",
+    });
+    await expect(b.invoke("update_settings", { settings: { ...settings, keys_dir: "keys" } })).rejects.toMatchObject({
+      kind: "invalid_path",
+      message: { args: { path: "keys" } },
+    });
+  });
+
+  it("takes its time for writes when asked", async () => {
+    const b = backend();
+    b.state.latency = 100;
+    vi.useFakeTimers();
+    try {
+      const p = b.state.profiles[0];
+      let done = 0;
+      void b.invoke("update_profile", { profile: { ...p, name: "Neu" } as Profile }).then(() => done++);
+      void b
+        .invoke("add_host", {
+          id: "kunde-b",
+          host: { alias: null, hostname: "10.0.0.1", user: null, port: null, provider: "generic" },
+        })
+        .then(() => done++);
+      void b.invoke("host_key_check", { id: "privat", host: null }).then(() => done++);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(done).toBe(0);
+      await vi.advanceTimersByTimeAsync(60);
+      expect(done).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("previews a new key as the default only on request", async () => {
+    const b = backend();
+    b.state.defaultProfile = null;
+    const index = (plan: Plan) => plan.changes.find((c) => c.path.endsWith("index.gitconfig"))?.diff ?? "";
+    const plain = (await b.invoke("preview_new_project", { project: project("c") })) as Plan;
+    expect(index(plain)).not.toContain("+# Default key: c");
+    const asDefault = (await b.invoke("preview_new_project", {
+      project: { ...project("c"), make_default: true },
+    })) as Plan;
+    expect(index(asDefault)).toContain("+# Default key: c");
+    // The existing key's path is written relative to ~.
+    const existing: NewProject = { ...project("d"), key: { type: "existing", path: "/home/tristan/.ssh/id_ed25519" } };
+    await b.invoke("create_project", { project: existing });
+    expect(b.state.profiles[4].key.path).toBe("~/.ssh/id_ed25519");
+    expect(b.state.defaultProfile).toBeNull();
+  });
+
+  it("refuses to archive over an archived key and forgets the last test", async () => {
+    const b = backend();
+    b.state.keys.set("~/.ssh/archive/acme_ed25519", { ageDays: 1, comment: "alt" });
+    await expect(b.invoke("archive_profile", { id: "acme" })).rejects.toMatchObject({
+      kind: "key_exists",
+      message: { args: { path: "~/.ssh/archive/acme_ed25519" } },
+    });
+    expect(b.state.profiles[1].archived).toBe(false);
+    b.state.keys.delete("~/.ssh/archive/acme_ed25519");
+    expect(b.state.lastTests.has("acme")).toBe(true);
+    await b.invoke("archive_profile", { id: "acme" });
+    expect(b.state.lastTests.has("acme")).toBe(false);
+    expect(((await b.invoke("load_profiles")) as ProfilesView).profiles[1].last_test).toBeNull();
+  });
+
+  it("leaves a key file in place that another key entry still uses", async () => {
+    const b = backend();
+    b.state.profiles[2].key.path = "~/.ssh/privat_ed25519";
+    expect(await b.invoke("archive_profile", { id: "kunde-b" })).toMatchObject({ key_path: "~/.ssh/privat_ed25519" });
+    expect(b.state.keys.has("~/.ssh/privat_ed25519")).toBe(true);
+    expect(b.state.keys.has("~/.ssh/archive/privat_ed25519")).toBe(false);
+    expect(b.state.profiles[2]).toMatchObject({ archived: true, key: { path: "~/.ssh/privat_ed25519" } });
+  });
+
+  it("keeps profiles.toml when writing the configs fails", async () => {
+    const b = backend();
+    b.state.applyError = "Read-only file system";
+    const p = b.state.profiles[1];
+    await expect(
+      b.invoke("update_profile", { profile: { ...p, git: { ...p.git!, sign: true } } as Profile }),
+    ).rejects.toMatchObject({ kind: "io", message: { key: "error_io", args: { detail: "Read-only file system" } } });
+    expect(b.state.profiles[1].git!.sign).toBe(true);
+    expect(((await b.invoke("load_profiles")) as ProfilesView).pending_changes).toBe(1);
+    await expect(b.invoke("set_default_profile", { id: null })).rejects.toMatchObject({ kind: "io" });
+    b.state.applyError = null;
+    await b.invoke("set_default_profile", { id: null });
+    expect(((await b.invoke("load_profiles")) as ProfilesView).pending_changes).toBe(0);
+  });
+
+  it("fails every command while profiles.toml cannot be parsed", async () => {
+    const b = backend();
+    b.state.configError = "Zeile 3";
+    await expect(b.invoke("load_profiles")).rejects.toMatchObject({
+      kind: "config_parse",
+      message: { key: "error_configParse", args: { detail: "Zeile 3" } },
+    });
+    await expect(b.invoke("settings")).rejects.toMatchObject({ kind: "config_parse" });
+    expect(await b.invoke("plugin:app|version")).toBe("0.1.0");
+  });
+
+  it("lets the host key check fail on request", async () => {
+    const b = backend();
+    for (const [kind, key] of [
+      ["tool_missing", "error_toolMissing"],
+      ["io", "error_io"],
+      ["network", "error_network"],
+      ["no_host", "error_other"],
+    ]) {
+      b.state.hostKeyError = kind;
+      await expect(b.invoke("host_key_check", { id: "privat", host: "meinserver" })).rejects.toMatchObject({
+        kind,
+        message: { key },
+      });
+    }
+    b.state.hostKeyError = null;
+    expect(await b.invoke("host_key_check", { id: "privat", host: "meinserver" })).toEqual({ state: "known" });
   });
 
   it("rejects unknown commands", async () => {

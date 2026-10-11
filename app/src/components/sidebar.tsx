@@ -1,6 +1,7 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Activity, Archive, Crosshair, Download, KeyRound, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
+import { errorMessage } from "@/lib/api";
 import type { ProfileView } from "@/lib/bindings";
 import { activeKeys, usageParts } from "@/lib/categories";
 import { t } from "@/lib/i18n";
@@ -15,7 +16,7 @@ const navItem =
   "flex min-h-10 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] text-secondary-foreground no-underline hover:bg-muted data-[status=active]:bg-muted data-[status=active]:font-medium data-[status=active]:text-foreground [&_svg]:size-[15px]";
 
 export function Sidebar() {
-  const { data } = useProfiles();
+  const { data, error } = useProfiles();
   const doctor = useDoctor();
   const [filter, setFilter] = useState("");
   const navigate = useNavigate();
@@ -105,6 +106,11 @@ export function Sidebar() {
 
       <nav aria-label={m.sidebar_keys()} className="flex flex-col gap-0.5">
         <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">{m.sidebar_yourKeys()}</span>
+        {error && (
+          <p role="alert" className="m-0 px-2.5 text-xs text-danger">
+            {errorMessage(error)}
+          </p>
+        )}
         {keys.map(keyLink)}
         {nothing && (
           <span className="px-2.5 text-xs text-muted-foreground">

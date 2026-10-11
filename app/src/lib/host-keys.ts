@@ -1,5 +1,5 @@
 import { m } from "@/paraglide/messages";
-import { api } from "./api";
+import { ApiError, api } from "./api";
 import type { HostKeyCheck } from "./bindings";
 
 export type UnknownHostKey = Extract<HostKeyCheck, { state: "unknown" }>;
@@ -21,9 +21,11 @@ export async function ensureHostKey(id: string, host: string | null): Promise<vo
   let check: HostKeyCheck;
   try {
     check = await api.hostKeyCheck(id, host);
-  } catch {
-    // Without a check (e.g. ssh-keyscan missing) ssh itself decides.
-    return;
+  } catch (e) {
+    // Without ssh-keyscan there is no check; ssh itself decides and the probe
+    // says so. Every other failure (file access, unknown host …) is shown.
+    if (e instanceof ApiError && e.kind === "tool_missing") return;
+    throw e;
   }
   if (check.state !== "unknown") return;
   const confirmed = asker ? await asker(check) : false;

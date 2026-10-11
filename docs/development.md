@@ -89,7 +89,11 @@ documentation pictures (they show the dark theme).
 doctor, host key prompts, connection tests with success and failure, imports, uninstall. It is used
 whenever the frontend does not run inside Tauri – `just dev-mock`, Vitest, Playwright and the
 screenshots. Its seed data (`seedState()`) is the demo you see in the pictures. In the browser
-console, `window.__keybundMock.state` shows and changes its state.
+console, `window.__keybundMock.state` shows and changes its state. It validates like the core
+(`store::validate`), and a few switches on its state let tests reach the error paths: `latency`
+(also honoured by `update_profile`, `add_host` and `host_key_check`), `configError` (every command
+fails like a broken `profiles.toml`), `applyError` (the profile is saved but the configs are not
+written) and `hostKeyError` (`host_key_check` fails with that error kind).
 
 ## Documentation and screenshots
 

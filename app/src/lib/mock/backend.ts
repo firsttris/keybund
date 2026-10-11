@@ -141,6 +141,12 @@ export interface MockState {
   dolphinLibssh: string | null;
   /** known_hosts names (`host` or `[host]:port`) whose key is stored. */
   knownHosts: string[];
+  /** profiles.toml cannot be parsed: the detail of the `config_parse` error every load fails with. */
+  configError: string | null;
+  /** `host_key_check` fails with this error kind (`tool_missing`, `io`, …). */
+  hostKeyError: string | null;
+  /** Writing the configs fails with this detail: profiles.toml is saved, the configs are not. */
+  applyError: string | null;
 }
 
 export interface SshBlock {
@@ -248,6 +254,9 @@ export function seedState(): MockState {
     globalIdentity: { name: "Tristan Teufel", email: "tristanteufel@example.org" },
     settings: { projects_dir: "~/dev", keys_dir: "~/.ssh", absolute_ssh_include: false, known_hosts_per_profile: true },
     unreachable: [],
+    configError: null,
+    hostKeyError: null,
+    applyError: null,
   };
   state.applied = renderAll(state);
   return state;
@@ -310,6 +319,14 @@ function sshHostBlocks(p: Profile, settings?: Settings): string {
 function markApplied(state: MockState) {
   state.applied = renderAll(state);
   state.lastApplied = Date.now();
+}
+
+/** Like `save_and_apply`: profiles.toml is already saved when writing the configs fails. */
+function applyConfigs(state: MockState) {
+  if (state.applyError !== null) {
+    throw new MockError("io", msg("error_io", { path: "~/.ssh/config.d/keybund.conf", detail: state.applyError }));
+  }
+  markApplied(state);
 }
 
 function renderAll(state: MockState, profiles = state.profiles, def = state.defaultProfile): Map<string, string> {
@@ -501,6 +518,20 @@ function hostKeyKnown(state: MockState, h: HostEntry): boolean {
   return state.knownHosts.includes(knownName(h));
 }
 
+/** The error `host_key_check` fails with when a test asks for one (`state.hostKeyError`). */
+function hostKeyFailure(kind: string, h: HostEntry): MockError {
+  switch (kind) {
+    case "tool_missing":
+      return new MockError(kind, msg("error_toolMissing", { tool: "ssh-keyscan" }));
+    case "io":
+      return new MockError(kind, msg("error_io", { path: "~/.ssh/known_hosts", detail: "Permission denied" }));
+    case "network":
+      return new MockError(kind, msg("error_network", { host: h.hostname, detail: "Connection timed out" }));
+    default:
+      return new MockError(kind, msg("error_other", { detail: kind }));
+  }
+}
+
 function view(state: MockState, p: Profile): ProfileView {
   return {
     profile: structuredClone(p),
@@ -521,55 +552,176 @@ function find(state: MockState, id: string): Profile {
   return p;
 }
 
-function normalizeFolder(f: string): string {
-  const t = f.trim();
-  return t.endsWith("/") ? t : `${t}/`;
+// --- paths and validation (mirror crates/core/src/store.rs) -----------------
+
+/** The home of the seeded user (key comments say tristan@zentrale). */
+export const HOME = "/home/tristan";
+
+/** `Env::expand`: `~` and `~/…` become absolute. */
+function expand(path: string): string {
+  if (path === "~") return HOME;
+  return path.startsWith("~/") ? `${HOME}/${path.slice(2)}` : path;
 }
 
-function validate(profiles: Profile[]) {
-  for (const p of profiles) {
-    if (p.git?.sign && !p.git.email.trim())
-      throw new MockError("sign_without_email", msg("error_signWithoutEmail", { id: p.id }));
+/** `Env::contract`: the home prefix becomes `~` again. */
+function contract(path: string): string {
+  if (path === HOME) return "~";
+  return path.startsWith(`${HOME}/`) ? `~/${path.slice(HOME.length + 1)}` : path;
+}
+
+/** `store::lexical`: `.` and `..` resolved without the file system, `//` collapsed. */
+function lexical(path: string): string {
+  const absolute = path.startsWith("/");
+  const out: string[] = [];
+  for (const part of path.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") {
+      if (out.length > 0 && out[out.length - 1] !== "..") out.pop();
+      else if (!absolute) out.push("..");
+      continue;
+    }
+    out.push(part);
   }
-  const folders = profiles.filter((p) => !p.archived).flatMap((p) => p.folders);
-  for (let i = 0; i < folders.length; i++)
-    for (let j = i + 1; j < folders.length; j++)
-      if (folders[i].startsWith(folders[j]) || folders[j].startsWith(folders[i]))
-        throw new MockError("nested_folders", msg("error_nestedFolders", { a: folders[i], b: folders[j] }));
-  const patterns = new Set<string>();
-  for (const h of profiles.filter((p) => !p.archived).flatMap((p) => p.hosts)) {
-    for (const pattern of sshPatterns(h)) {
-      if (patterns.has(pattern)) throw new MockError("duplicate_alias", msg("error_duplicateAlias", { host: pattern }));
-      patterns.add(pattern);
+  return `${absolute ? "/" : ""}${out.join("/")}` || (absolute ? "/" : ".");
+}
+
+/**
+ * `store::normalize_folder`: expanded, lexically cleaned, written with `~`
+ * and a trailing `/` (without it gitdir: would not match subfolders). The
+ * real one also resolves symlinks of the existing part.
+ */
+export function normalizeFolder(f: string): string {
+  const t = f.trim();
+  const s = contract(lexical(expand(t)));
+  return s.endsWith("/") ? s : `${s}/`;
+}
+
+/** `store::normalize_dir`: a settings folder, absolute or below `~`, without a trailing `/`. */
+function normalizeDir(input: string): string {
+  const t = input.trim();
+  if (!(t.startsWith("/") || t === "~" || t.startsWith("~/"))) {
+    throw new MockError("invalid_path", msg("error_invalidPath", { path: t }));
+  }
+  const s = contract(expand(t));
+  return s.length > 1 ? s.replace(/\/+$/, "") : s;
+}
+
+/** `store::is_valid_id`: a–z, 0–9, - and _, at most 64 characters. */
+export function isValidId(id: string): boolean {
+  return id.length > 0 && id.length <= 64 && /^[a-z0-9_-]+$/.test(id);
+}
+
+/** `char::is_control`: C0 and C1 control characters (and DEL). */
+const hasControl = (v: string) =>
+  [...v].some((c) => c.charCodeAt(0) < 0x20 || (c.charCodeAt(0) >= 0x7f && c.charCodeAt(0) < 0xa0));
+const invalidValue = (field: string, value: string) =>
+  new MockError("invalid_value", msg("error_invalidValue", { value, field: msg(`field_${field}`) }));
+
+/** `store::check_values`: what ends up verbatim in ssh and git configs. */
+function checkValues(p: Profile) {
+  const printable = (field: string, value: string) => {
+    if (hasControl(value)) throw invalidValue(field, value);
+  };
+  // A token for `Host` / `HostName` / `User`: no spaces, wildcards, quotes or leading '-'.
+  const token = (field: string, value: string) => {
+    if (value === "" || value.startsWith("-") || hasControl(value) || /[\s*?!,"'#%[\]]/.test(value)) {
+      throw invalidValue(field, value);
+    }
+  };
+  printable("name", p.name);
+  printable("key", p.key.path);
+  // ssh expands % and ${…} in IdentityFile, a quote would end the quoted path, a backslash is swallowed.
+  if (/["%\\]/.test(p.key.path) || p.key.path.includes("${")) throw invalidValue("key", p.key.path);
+  if (p.git) {
+    printable("gitName", p.git.name);
+    printable("gitEmail", p.git.email);
+    // The e-mail is the principal in allowed_signers, a pattern line of its own.
+    if (p.git.sign && p.git.email.trim() && /[\s,*?!]/.test(p.git.email)) throw invalidValue("gitEmail", p.git.email);
+  }
+  for (const f of p.folders) {
+    printable("folder", f);
+    // gitdir: patterns are globs; git compares the real path, so `..` would never match.
+    const dotted = f.split("/").some((c) => c === "." || c === "..");
+    if (/["*?[\\]/.test(f) || !(f.startsWith("/") || f.startsWith("~/")) || dotted) {
+      throw new MockError("invalid_path", msg("error_invalidPath", { path: f }));
     }
   }
-  const ids = new Set<string>();
-  for (const p of profiles) {
-    if (ids.has(p.id)) throw new MockError("duplicate_id", msg("error_duplicateId", { id: p.id }));
-    ids.add(p.id);
+  const seen = new Set<string>();
+  for (const h of p.hosts) {
+    token("hostname", h.hostname);
+    if (h.alias !== null) token("alias", h.alias);
+    if (h.user !== null) token("user", h.user);
+    // The same account or server twice in one key: two identical blocks, two identical rows.
+    const same = `${h.hostname.toLowerCase()}\u0000${h.alias?.toLowerCase() ?? ""}`;
+    if (seen.has(same)) throw new MockError("duplicate_host", msg("error_duplicateHost", { hostname: h.hostname }));
+    seen.add(same);
   }
 }
 
-/** Like `api::normalized`: trimmed values, empty optionals dropped. */
+/** `store::validate` (+ `validate_in`), in the same order. */
+function validate(profiles: Profile[], defaultProfile: string | null = null) {
+  const ids = new Set<string>();
+  const aliases = new Set<string>();
+  for (const p of profiles) {
+    if (!isValidId(p.id)) throw new MockError("invalid_id", msg("error_invalidId", { id: p.id }));
+    if (ids.has(p.id)) throw new MockError("duplicate_id", msg("error_duplicateId", { id: p.id }));
+    ids.add(p.id);
+    if (!p.name.trim()) throw new MockError("missing_name", msg("error_missingName", { id: p.id }));
+    checkValues(p);
+    if (p.git?.sign && !p.git.email.trim())
+      throw new MockError("sign_without_email", msg("error_signWithoutEmail", { id: p.id }));
+    if (p.archived) continue;
+    for (const h of p.hosts) {
+      for (const pattern of sshPatterns(h)) {
+        // ssh matches Host patterns case-sensitively, but two keys for `NAS` and `nas` would only confuse.
+        if (aliases.has(pattern.toLowerCase()))
+          throw new MockError("duplicate_alias", msg("error_duplicateAlias", { host: pattern }));
+        aliases.add(pattern.toLowerCase());
+      }
+    }
+  }
+  if (defaultProfile !== null && !profiles.some((p) => p.id === defaultProfile && !p.archived))
+    throw new MockError("default_profile_missing", msg("error_defaultProfileMissing", { id: defaultProfile }));
+  // Folders must not be nested, compared as real paths: includeIf would apply both.
+  const slashed = (f: string) => (f.endsWith("/") ? f : `${f}/`);
+  const folders = profiles.filter((p) => !p.archived).flatMap((p) => p.folders);
+  for (let i = 0; i < folders.length; i++)
+    for (let j = i + 1; j < folders.length; j++) {
+      const [a, b] = [slashed(expand(folders[i])), slashed(expand(folders[j]))];
+      if (a.startsWith(b) || b.startsWith(a))
+        throw new MockError("nested_folders", msg("error_nestedFolders", { a: folders[i], b: folders[j] }));
+    }
+}
+
+/**
+ * Like `api::normalized`: trimmed values, empty optionals dropped, folders
+ * normalized. Host names are stored in lower case so `ssh nas` and
+ * `ssh NAS.local` agree.
+ */
 function normalized(profile: Profile): Profile {
   const p = structuredClone(profile);
   p.id = p.id.trim();
   p.name = p.name.trim();
   p.folders = p.folders.filter((f) => f.trim()).map(normalizeFolder);
   for (const h of p.hosts) {
-    h.hostname = h.hostname.trim();
-    h.alias = h.alias?.trim() || null;
+    h.hostname = h.hostname.trim().toLowerCase();
+    h.alias = h.alias?.trim().toLowerCase() || null;
     h.user = h.user?.trim() || null;
   }
   return p;
 }
 
-function withNewProject(state: MockState, project: NewProject): Profile[] {
+/** `api::with_new_profile`: the profiles and the default key as the new project would leave them. */
+function withNewProject(state: MockState, project: NewProject): { profiles: Profile[]; def: string | null } {
+  if (state.profiles.some((p) => p.id === project.profile.id))
+    throw new MockError("duplicate_id", msg("error_duplicateId", { id: project.profile.id }));
   const p = normalized(project.profile);
-  if (project.key.type === "existing") p.key = { path: project.key.path, comment: null };
+  if (project.key.type === "existing") p.key = { path: contract(expand(project.key.path)), comment: null };
   const profiles = [...state.profiles, p];
-  validate(profiles);
-  return profiles;
+  // Only on request: a standard key replaces ssh's own key choice for every repo outside the git folders.
+  const def = project.make_default ? p.id : state.defaultProfile;
+  validate(profiles, def);
+  return { profiles, def };
 }
 
 function doctorReport(state: MockState): Report {
@@ -710,6 +862,10 @@ export function createMockBackend(state: MockState = seedState()) {
   }
 
   async function handle(cmd: string, args: Args): Promise<unknown> {
+    // Every command starts with `store::load`: a broken profiles.toml fails all of them.
+    if (state.configError !== null && !cmd.startsWith("plugin:")) {
+      throw new MockError("config_parse", msg("error_configParse", { detail: state.configError }));
+    }
     switch (cmd) {
       case "load_profiles": {
         const result: ProfilesView = {
@@ -739,31 +895,22 @@ export function createMockBackend(state: MockState = seedState()) {
         return structuredClone(state.settings);
       case "update_settings": {
         const next = structuredClone(args.settings as Settings);
-        for (const key of ["projects_dir", "keys_dir"] as const) {
-          const v = next[key].trim();
-          if (!(v.startsWith("/") || v === "~" || v.startsWith("~/"))) {
-            throw new MockError("invalid_path", msg("error_invalidPath", { path: v }));
-          }
-          next[key] = v.length > 1 ? v.replace(/\/+$/, "") : v;
-        }
+        next.projects_dir = normalizeDir(next.projects_dir);
+        next.keys_dir = normalizeDir(next.keys_dir);
         state.settings = next;
-        markApplied(state);
+        applyConfigs(state);
         return structuredClone(next);
       }
       case "normalize_folder":
         return normalizeFolder(String(args.folder));
       case "preview_new_project": {
-        const project = args.project as NewProject;
-        if (state.profiles.some((p) => p.id === project.profile.id))
-          throw new MockError("duplicate_id", msg("error_duplicateId", { id: project.profile.id }));
-        return planFor(state, withNewProject(state, project), state.defaultProfile ?? project.profile.id);
+        const { profiles, def } = withNewProject(state, args.project as NewProject);
+        return planFor(state, profiles, def);
       }
       case "create_project": {
         await sleep(state.latency);
         const project = args.project as NewProject;
-        if (state.profiles.some((p) => p.id === project.profile.id))
-          throw new MockError("duplicate_id", msg("error_duplicateId", { id: project.profile.id }));
-        const profiles = withNewProject(state, project);
+        const { profiles, def } = withNewProject(state, project);
         const p = profiles[profiles.length - 1];
         if (project.key.type === "generate") {
           if (state.keys.has(p.key.path))
@@ -774,9 +921,9 @@ export function createMockBackend(state: MockState = seedState()) {
           throw new MockError("key_missing", msg("error_keyMissing", { path: p.key.path }));
         }
         state.profiles = profiles;
-        if (project.make_default) state.defaultProfile = p.id;
+        state.defaultProfile = def;
         const plan = planFor(state);
-        markApplied(state);
+        applyConfigs(state);
         const v = view(state, p);
         state.clipboard = v.key.public_key;
         let openError: Msg | null = null;
@@ -796,12 +943,13 @@ export function createMockBackend(state: MockState = seedState()) {
         return created;
       }
       case "update_profile": {
+        await sleep(state.latency);
         const next = normalized(args.profile as Profile);
         const profiles = state.profiles.map((p) => (p.id === next.id ? next : p));
         find(state, next.id);
-        validate(profiles);
+        validate(profiles, state.defaultProfile);
         state.profiles = profiles;
-        markApplied(state);
+        applyConfigs(state);
         return view(state, next);
       }
       case "set_default_profile": {
@@ -809,7 +957,7 @@ export function createMockBackend(state: MockState = seedState()) {
         if (id && !state.profiles.some((p) => p.id === id && !p.archived))
           throw new MockError("default_profile_missing", msg("error_defaultProfileMissing", { id }));
         state.defaultProfile = id;
-        markApplied(state);
+        applyConfigs(state);
         return null;
       }
       case "copy_public_key": {
@@ -957,7 +1105,10 @@ export function createMockBackend(state: MockState = seedState()) {
         } satisfies InstallResult;
       }
       case "host_key_check": {
+        // ssh-keyscan takes a moment; meanwhile a second test may start.
+        await sleep(state.latency);
         const { p, h } = hostOf(state, String(args.id), args.host as string | null);
+        if (state.hostKeyError !== null) throw hostKeyFailure(state.hostKeyError, h);
         if (hostKeyKnown(state, h)) return { state: "known" } satisfies HostKeyCheck;
         if (PINNED_HOSTS.includes(h.hostname) && (!h.port || h.port === 22)) {
           state.knownHosts.push(knownName(h));
@@ -985,14 +1136,15 @@ export function createMockBackend(state: MockState = seedState()) {
       }
       case "preview_add_host":
       case "add_host": {
+        if (cmd === "add_host") await sleep(state.latency);
         const p = find(state, String(args.id));
-        const host = structuredClone(args.host as HostEntry);
+        const host = normalized({ ...profile({ id: p.id, name: p.name }), hosts: [args.host as HostEntry] }).hosts[0];
         const next = { ...structuredClone(p), hosts: [...p.hosts, host] };
         const profiles = state.profiles.map((x) => (x.id === p.id ? next : x));
-        validate(profiles);
+        validate(profiles, state.defaultProfile);
         if (cmd === "preview_add_host") return planFor(state, profiles);
         state.profiles = profiles;
-        markApplied(state);
+        applyConfigs(state);
         return view(state, next);
       }
       case "last_test":
@@ -1004,7 +1156,7 @@ export function createMockBackend(state: MockState = seedState()) {
         const expected = args.expectedDiffs as string[];
         if (JSON.stringify(plan.changes.map((c) => c.diff)) !== JSON.stringify(expected))
           throw new MockError("stale_plan", msg("error_stalePlan", { path: plan.changes[0]?.path ?? "" }));
-        markApplied(state);
+        applyConfigs(state);
         const report: ApplyReport = {
           written: plan.changes.filter((c) => c.kind !== "delete").map((c) => c.path),
           deleted: plan.changes.filter((c) => c.kind === "delete").map((c) => c.path),
@@ -1074,15 +1226,23 @@ export function createMockBackend(state: MockState = seedState()) {
         if (p.archived) throw new MockError("archived", msg("error_archived", { id: p.id }));
         const file = p.key.path.split("/").pop()!;
         const newPath = `~/.ssh/archive/${file}`;
-        const key = state.keys.get(p.key.path);
-        state.keys.delete(p.key.path);
-        if (key) state.keys.set(newPath, key);
-        p.key = { ...p.key, path: newPath };
+        // Another active key entry uses the same file: it stays where it is.
+        const shared = state.profiles.some((x) => x.id !== p.id && !x.archived && x.key.path === p.key.path);
+        if (!shared && state.keys.has(newPath))
+          throw new MockError("key_exists", msg("error_keyExists", { path: newPath }));
+        if (!shared) {
+          const key = state.keys.get(p.key.path);
+          state.keys.delete(p.key.path);
+          if (key) state.keys.set(newPath, key);
+          p.key = { ...p.key, path: newPath };
+        }
         p.archived = true;
         if (state.defaultProfile === p.id) state.defaultProfile = null;
-        markApplied(state);
+        // `history::forget`: an archived key has no test to show.
+        state.lastTests.delete(p.id);
+        applyConfigs(state);
         const result: ArchiveResult = {
-          key_path: newPath,
+          key_path: p.key.path,
           remove_key_urls: p.hosts.flatMap((h) =>
             h.provider === "github"
               ? [`https://${h.hostname}/settings/keys`]
@@ -1123,11 +1283,11 @@ export function createMockBackend(state: MockState = seedState()) {
           folders: c.profile.folders.map(normalizeFolder),
         }));
         const profiles = [...state.profiles, ...added];
-        validate(profiles);
-        state.profiles = profiles;
         const def = chosen.find((c) => c.make_default);
+        validate(profiles, def ? def.profile.id : state.defaultProfile);
+        state.profiles = profiles;
         if (def) state.defaultProfile = def.profile.id;
-        markApplied(state);
+        applyConfigs(state);
         const done: ImportDone = {
           ids: added.map((p) => p.id),
           report: { written: [...state.applied.keys()], deleted: [], backups: [] },

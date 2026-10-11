@@ -6,7 +6,7 @@ import { ConfigStatus } from "@/components/pending-banner";
 import { buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { errorMessage } from "@/lib/api";
-import type { ProfileView } from "@/lib/bindings";
+import type { ProfilesView, ProfileView } from "@/lib/bindings";
 import { activeKeys, gitAccounts, servers, usageParts } from "@/lib/categories";
 import { rich, t } from "@/lib/i18n";
 import { useDoctor, useProfiles } from "@/lib/queries";
@@ -14,14 +14,16 @@ import { cn, formatRelative, providerLabel } from "@/lib/utils";
 import { m } from "@/paraglide/messages";
 
 export function HomePage() {
-  const { data, isPending } = useProfiles();
-  const keys = activeKeys(data?.profiles ?? []);
-
+  const { data, isPending, error } = useProfiles();
+  if (error) return <p role="alert">{errorMessage(error)}</p>;
   if (isPending) return <Spinner />;
+  const keys = activeKeys(data.profiles);
   return (
     <>
       <h1 className="m-0 text-[26px] font-semibold tracking-tight">{m.home_title()}</h1>
-      <Todo />
+      {/* The loaded data go down as props: a child that subscribed on its own would be
+          mounted and unmounted with the spinner above. */}
+      <Todo data={data} />
       <HowItWorks forceOpen={keys.length === 0} />
       {keys.length === 0 ? (
         <div className="flex max-w-[520px] flex-col gap-3 rounded-xl border border-dashed border-border p-8">
@@ -33,7 +35,7 @@ export function HomePage() {
               {m.sidebar_newKey()}
             </Link>
             <Link
-              to={data && data.import_available > 0 ? "/import" : "/settings"}
+              to={data.import_available > 0 ? "/import" : "/settings"}
               className={cn(buttonVariants({ variant: "outline" }), "no-underline")}
             >
               {m.home_takeOver()}
@@ -65,11 +67,10 @@ type TodoItem = { id: string; tone: "danger" | "warn" | "info"; text: React.Reac
 const linkClass = "shrink-0 text-[13px] font-medium text-foreground";
 
 /** What needs attention right now – or a calm "all good". */
-function Todo() {
-  const { data } = useProfiles();
+function Todo({ data }: { data: ProfilesView }) {
   const doctor = useDoctor();
   // Only claim "all good" once the doctor has answered.
-  if (!data || doctor.isPending) return null;
+  if (doctor.isPending) return null;
   const keys = activeKeys(data.profiles);
   const items: TodoItem[] = [];
   for (const v of keys) {

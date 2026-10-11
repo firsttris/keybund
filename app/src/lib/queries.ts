@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { m } from "@/paraglide/messages";
 import { api, errorMessage } from "./api";
-import type { Fix, HostEntry, ImportProposal, NewProject, Profile, Settings } from "./bindings";
+import type { Fix, ImportProposal, NewProject, Profile, Settings } from "./bindings";
 import { ensureHostKey } from "./host-keys";
 import { t } from "./i18n";
 
@@ -200,13 +200,5 @@ export function useUpdateSettings() {
     mutationFn: async (patch: Partial<Settings>) => api.updateSettings({ ...(await api.settings()), ...patch }),
     // Paths change the defaults of new keys, the switches the generated configs.
     onSettled: () => client.invalidateQueries(),
-  });
-}
-
-export function useAddHost() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, host }: { id: string; host: HostEntry }) => api.addHost(id, host),
-    onSuccess: () => client.invalidateQueries(),
   });
 }

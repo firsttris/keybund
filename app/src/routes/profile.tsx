@@ -227,8 +227,12 @@ function UsageCard({ view }: { view: ProfileView }) {
       )}
 
       {adding === "folder" && <FolderForm profile={profile} onDone={() => setAdding(null)} />}
-      {adding === "git" && <HostForm kind="git" onCancel={() => setAdding(null)} onSave={addHost} />}
-      {adding === "server" && <HostForm kind="server" onCancel={() => setAdding(null)} onSave={addHost} />}
+      {adding === "git" && (
+        <HostForm kind="git" saving={update.isPending} onCancel={() => setAdding(null)} onSave={addHost} />
+      )}
+      {adding === "server" && (
+        <HostForm kind="server" saving={update.isPending} onCancel={() => setAdding(null)} onSave={addHost} />
+      )}
 
       {!empty && !adding && !profile.archived && (
         <div className="flex flex-wrap items-center gap-2">
@@ -746,10 +750,13 @@ function KeyCard({ view, onCopy }: { view: ProfileView; onCopy: () => void }) {
 
 export function HostForm({
   kind,
+  saving = false,
   onSave,
   onCancel,
 }: {
   kind: "git" | "server";
+  /** A save is running: the form closes on success, until then a second submit would add the host twice. */
+  saving?: boolean;
   onSave: (h: HostEntry) => void;
   onCancel: () => void;
 }) {
@@ -765,7 +772,7 @@ export function HostForm({
       className="flex flex-col gap-3 rounded-lg border border-border p-3"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!hostname.trim()) return;
+        if (saving || !hostname.trim()) return;
         onSave({
           provider,
           hostname: hostname.trim(),
@@ -843,7 +850,8 @@ export function HostForm({
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           {m.common_cancel()}
         </Button>
-        <Button size="sm" type="submit">
+        <Button size="sm" type="submit" disabled={saving}>
+          {saving && <Spinner className="size-3" />}
           {server ? m.hostForm_saveServer() : m.hostForm_saveAccount()}
         </Button>
       </div>
