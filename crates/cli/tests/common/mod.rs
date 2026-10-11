@@ -149,7 +149,7 @@ impl Sandbox {
 
     /// An executable script in the sandbox's `bin`, which comes first on PATH.
     #[cfg(unix)]
-    fn script(&self, name: &str, body: &str) {
+    pub fn script(&self, name: &str, body: &str) {
         use std::os::unix::fs::PermissionsExt;
         let path = self.bin.join(name);
         fs::write(&path, body).unwrap();

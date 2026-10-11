@@ -197,6 +197,7 @@ mod tests {
         let s = summary(&all, &p).unwrap();
         assert_eq!((s.host.as_deref(), s.success), (Some("nas"), false));
         // The server works again: now the latest test is the summary.
+        std::thread::sleep(std::time::Duration::from_millis(5));
         record(&env, "p", "nas", &probe(true)).unwrap();
         assert_eq!(get(&env, &p).unwrap().host.as_deref(), Some("nas"));
         assert!(get(&env, &p).unwrap().success);

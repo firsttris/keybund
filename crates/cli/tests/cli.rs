@@ -876,3 +876,49 @@ fn edit_saves_nothing_when_a_folder_cannot_be_created() {
         .stderr(predicate::str::contains("Ordner ~/afile/dev kann nicht angelegt werden"));
     assert_eq!(sb.read(".config/keybund/profiles.toml"), before);
 }
+
+/// sshd 9.8+ blocks an address that keeps connecting without logging in,
+/// and ssh-keyscan opens one connection per key type. Keybund asks for the
+/// Ed25519 key alone first (one connection), for the others only when the
+/// server has none, and not again when the host does not answer at all.
+#[test]
+#[cfg(unix)]
+fn host_keys_are_scanned_with_as_few_connections_as_possible() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile("Server", &["--provider", "generic", "--host", "10.1.2.3", "--alias", "srv"]);
+    let log = sb.path("keyscan.log");
+    // A server without an Ed25519 key: a banner on stderr every round, a key only in the second.
+    let fake = |keys: &str| format!("#!/bin/sh\necho \"$*\" >> '{}'\n{keys}\n", log.display());
+    // A key only the second round brings (the pinned GitHub ECDSA key will do).
+    let ecdsa = "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=";
+    sb.script(
+        "ssh-keyscan",
+        &fake(&format!(
+            "echo '# 10.1.2.3:22 SSH-2.0-OpenSSH_9.9' >&2\ncase \"$*\" in *rsa*) echo '10.1.2.3 {ecdsa}';; esac"
+        )),
+    );
+    sb.cmd().args(["trust", "server"]).assert().stdout(predicate::str::contains("Erste Verbindung zu 10.1.2.3"));
+    let calls = sb.read("keyscan.log");
+    let rounds: Vec<&str> = calls.lines().collect();
+    assert_eq!(rounds.len(), 2, "{calls}");
+    assert!(rounds[0].contains("-t ed25519 "), "{calls}");
+    assert!(rounds[1].contains("-t ecdsa,rsa "), "{calls}");
+
+    // An Ed25519 key answers in the first round: one connection.
+    fs::remove_file(&log).unwrap();
+    sb.script(
+        "ssh-keyscan",
+        &fake("echo '10.1.2.3 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl'"),
+    );
+    let _ = sb.cmd().args(["trust", "server"]).assert();
+    assert_eq!(sb.read("keyscan.log").lines().count(), 1);
+
+    // No answer at all: not asked a second time.
+    fs::remove_file(&log).unwrap();
+    sb.script("ssh-keyscan", &fake("true"));
+    let _ = sb.cmd().args(["trust", "server"]).assert();
+    assert_eq!(sb.read("keyscan.log").lines().count(), 1);
+}

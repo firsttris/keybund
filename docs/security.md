@@ -46,8 +46,11 @@ sees. Keybund does not:
   `UserKnownHostsFile` (under `Host *`, say), the keys go to the first of those, where ssh will find
   them, and only those files count as "known".
 - **Every other host**: before the first connection – a test, adding a key, `keybund trust` – Keybund
-  fetches the host keys with `ssh-keyscan` and shows their **SHA256 fingerprints**. Only after you
-  confirm (**Fingerprint matches**) are they stored, and ssh connects with
+  fetches the host key with `ssh-keyscan` and shows its **SHA256 fingerprint** – the Ed25519 key,
+  and ECDSA/RSA only for a server without one. Each key type costs ssh-keyscan a connection, and
+  OpenSSH 9.8+ blocks an address for a while after too many connections without a login
+  (`PerSourcePenalties`); ssh learns the server's other keys later through `UpdateHostKeys`.
+  Only after you confirm (**Fingerprint matches**) is the key stored, and ssh connects with
   `StrictHostKeyChecking=yes`. Compare the fingerprint with what the server shows locally:
   `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, or your hoster's console.
 - **A changed host key** is never accepted silently: ssh refuses the connection and the test says

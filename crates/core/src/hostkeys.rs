@@ -153,16 +153,36 @@ pub fn parse_scan(output: &str) -> Vec<(HostKey, String)> {
         .collect()
 }
 
+/// The key types asked for, one `ssh-keyscan` round each, until one answers.
+/// ssh-keyscan opens a connection per key type (five by default), and
+/// sshd 9.8+ blocks an address that keeps connecting without logging in
+/// (`PerSourcePenalties`, noauth): a test, a check and a confirmation in a
+/// row could lock the user out for a while. One Ed25519 key is enough –
+/// ssh prefers the host key type it already knows (`HostKeyAlgorithms`
+/// ordering in sshconnect2.c) and learns the others via `UpdateHostKeys`.
+const SCAN_ROUNDS: [&str; 2] = ["ed25519", "ecdsa,rsa"];
+
 /// Asks the host for its keys (`ssh-keyscan`).
 pub fn scan(env: &Env, host: &HostEntry) -> Result<Vec<(HostKey, String)>> {
-    let mut cmd = env.command("ssh-keyscan");
-    cmd.args(["-T", "5"]);
-    if let Some(port) = host.port {
-        cmd.arg("-p").arg(port.to_string());
+    for types in SCAN_ROUNDS {
+        let mut cmd = env.command("ssh-keyscan");
+        cmd.args(["-T", "5", "-t", types]);
+        if let Some(port) = host.port {
+            cmd.arg("-p").arg(port.to_string());
+        }
+        cmd.arg("--").arg(&host.hostname);
+        let out = process::output(cmd)?;
+        let keys = parse_scan(&String::from_utf8_lossy(&out.stdout));
+        if !keys.is_empty() {
+            return Ok(keys);
+        }
+        // No SSH banner at all: the host is not reachable, asking again only waits.
+        let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+        if !said.contains("SSH-") {
+            break;
+        }
     }
-    cmd.arg("--").arg(&host.hostname);
-    let out = process::output(cmd)?;
-    Ok(parse_scan(&String::from_utf8_lossy(&out.stdout)))
+    Ok(Vec::new())
 }
 
 fn append(path: &Path, name: &str, keys: &[String]) -> Result<()> {

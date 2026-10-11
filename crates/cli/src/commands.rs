@@ -1048,8 +1048,22 @@ pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
 /// added, unknown ones are shown and confirmed (or `keybund trust` is
 /// suggested without a terminal).
 fn host_key_ok(env: &Env, settings: &Settings, profile: &Profile, host: &HostEntry, yes: bool) -> Result<()> {
+    let check = keybund_core::hostkeys::check(env, settings, profile, host)?;
+    confirm_host_key(env, settings, profile, host, yes, check)
+}
+
+/// Acts on a host key check already made – each check scans the server,
+/// and sshd 9.8+ counts every scan against the address (see `hostkeys::scan`).
+fn confirm_host_key(
+    env: &Env,
+    settings: &Settings,
+    profile: &Profile,
+    host: &HostEntry,
+    yes: bool,
+    check: keybund_core::hostkeys::HostKeyCheck,
+) -> Result<()> {
     use keybund_core::hostkeys::{self, HostKeyCheck};
-    match hostkeys::check(env, settings, profile, host)? {
+    match check {
         HostKeyCheck::Known => Ok(()),
         // ssh reports the network problem itself.
         HostKeyCheck::Unreachable { .. } => Ok(()),
@@ -1103,12 +1117,11 @@ pub fn trust(env: &Env, id: &str, host: Option<&str>, yes: bool) -> Result<ExitC
             ui::success(&format!("{}: Host-Key ist bekannt", target.target_name()));
             continue;
         }
-        if let keybund_core::hostkeys::HostKeyCheck::Unreachable { .. } =
-            keybund_core::hostkeys::check(env, &config.settings, p, target)?
-        {
+        let check = keybund_core::hostkeys::check(env, &config.settings, p, target)?;
+        if let keybund_core::hostkeys::HostKeyCheck::Unreachable { .. } = check {
             bail!("{} ist nicht erreichbar – Host-Key nicht geprüft", target.target_name());
         }
-        host_key_ok(env, &config.settings, p, target, yes)?;
+        confirm_host_key(env, &config.settings, p, target, yes, check)?;
     }
     Ok(ExitCode::SUCCESS)
 }
