@@ -60,6 +60,17 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      # The runner puts Homebrew first; a Mac out of the box has Apple's ssh and git
+      # (/usr/bin, Xcode Command Line Tools). Test against those.
+      - name: Apple's ssh and git first on PATH
+        run: |
+          echo /usr/bin >> "$GITHUB_PATH"
+      - name: Tool versions
+        run: |
+          which -a ssh git | head -4
+          ssh -V
+          git --version
+          test "$(command -v ssh)" = /usr/bin/ssh && test "$(command -v git)" = /usr/bin/git
       - run: mkdir -p app/dist && echo '<!doctype html>' > app/dist/index.html
       - run: cargo clippy --workspace --all-targets --all-features
       - run: cargo test --workspace
