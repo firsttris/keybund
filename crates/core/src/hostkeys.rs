@@ -67,19 +67,51 @@ pub fn known_name(host: &HostEntry) -> String {
     }
 }
 
-/// Where a new key of `host` is stored.
-pub fn target_file(env: &Env, settings: &Settings, profile: &Profile, host: &HostEntry) -> PathBuf {
-    if settings.known_hosts_per_profile && host.provider == Provider::Generic {
-        env.expand(&render::profile_known_hosts(&profile.id))
-    } else {
-        env.known_hosts()
-    }
+/// The known_hosts files ssh itself uses for `host`, from `ssh -G`:
+/// `(user files, global files)`. The user's own `UserKnownHostsFile` (under
+/// `Host *`, say) counts – a key stored anywhere else would never be read.
+/// `None` when ssh cannot tell (not installed, a broken config).
+fn ssh_known_hosts(env: &Env, host: &HostEntry) -> Option<(Vec<PathBuf>, Vec<PathBuf>)> {
+    let out = env.ssh_g(host.target_name())?;
+    let list = |key: &str| -> Vec<PathBuf> {
+        out.lines()
+            .find_map(|l| l.strip_prefix(key).and_then(|v| v.strip_prefix(' ')))
+            .map(|v| v.split_whitespace().map(|p| env.from_ssh(p)).collect())
+            .unwrap_or_default()
+    };
+    let user = list("userknownhostsfile");
+    (!user.is_empty()).then(|| (user, list("globalknownhostsfile")))
 }
 
+/// Where a new key of `host` is stored: the key's own file for its servers,
+/// otherwise the first file ssh reads – the one ssh itself would add to.
+pub fn target_file(env: &Env, settings: &Settings, profile: &Profile, host: &HostEntry) -> PathBuf {
+    if settings.known_hosts_per_profile && host.provider == Provider::Generic {
+        return env.expand(&render::profile_known_hosts(&profile.id));
+    }
+    ssh_known_hosts(env, host).and_then(|(user, _)| user.into_iter().next()).unwrap_or_else(|| env.known_hosts())
+}
+
+/// Every file a key of `host` may already be in: the target and the files
+/// ssh reads – so a key stored per key before the setting was switched off
+/// (no longer read by ssh) does not count as known.
 fn files(env: &Env, settings: &Settings, profile: &Profile, host: &HostEntry) -> Vec<PathBuf> {
-    let mut files = vec![target_file(env, settings, profile, host), env.known_hosts()];
-    files.extend(env.global_known_hosts.clone());
-    files.dedup();
+    let mut files = vec![target_file(env, settings, profile, host)];
+    match ssh_known_hosts(env, host) {
+        Some((user, global)) => {
+            files.extend(user);
+            // In a test home the machine's files stay out, as before.
+            if env.global_known_hosts.is_some() {
+                files.extend(global);
+            }
+        }
+        None => {
+            files.push(env.known_hosts());
+            files.extend(env.global_known_hosts.clone());
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    files.retain(|f| seen.insert(f.clone()));
     files
 }
 
@@ -164,7 +196,7 @@ pub fn check(env: &Env, settings: &Settings, profile: &Profile, host: &HostEntry
     let pinned = pinned(host);
     if !pinned.is_empty() {
         let keys: Vec<String> = pinned.iter().map(|k| k.to_string()).collect();
-        append(&env.known_hosts(), &known_name(host), &keys)?;
+        append(&target_file(env, settings, profile, host), &known_name(host), &keys)?;
         return Ok(HostKeyCheck::Pinned);
     }
     let keys = scan(env, host)?;

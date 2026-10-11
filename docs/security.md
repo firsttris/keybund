@@ -42,7 +42,9 @@ sees. Keybund does not:
 
 - **GitHub, GitLab.com and Bitbucket**: their published host keys (Ed25519 and ECDSA) are built into
   Keybund and written to `~/.ssh/known_hosts` without a question – there is nothing for you to
-  compare.
+  compare. Keybund asks `ssh -G` which files ssh reads: if your own `~/.ssh/config` sets
+  `UserKnownHostsFile` (under `Host *`, say), the keys go to the first of those, where ssh will find
+  them, and only those files count as "known".
 - **Every other host**: before the first connection – a test, adding a key, `keybund trust` – Keybund
   fetches the host keys with `ssh-keyscan` and shows their **SHA256 fingerprints**. Only after you
   confirm (**Fingerprint matches**) are they stored, and ssh connects with

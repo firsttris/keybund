@@ -789,3 +789,33 @@ fn which_shows_the_origin_in_a_non_ascii_home() {
     let r = which::which(&env, &config, "~/dev/acme/app").unwrap();
     assert_eq!(r.source.as_deref(), Some("~/dev/acme/app/.git/config"), "{r:?}");
 }
+
+/// The user's own `UserKnownHostsFile` under `Host *`: ssh reads and writes
+/// only that file, so Keybund must store and look up host keys there – a key
+/// in `~/.ssh/known_hosts` would never be read and the test would stay
+/// "host key not confirmed" forever.
+#[test]
+fn host_keys_go_where_ssh_looks_for_them() {
+    use keybund_core::hostkeys::{self, HostKeyCheck};
+    use keybund_core::model::Settings;
+    if !has("ssh") || !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    fs::write(env.ssh_config(), "Host *\n    UserKnownHostsFile ~/.ssh/kh2\n").unwrap();
+    let profile = config.profile("kunde-a").unwrap();
+    let github = &profile.hosts[0];
+    let settings = Settings::default();
+
+    assert_eq!(hostkeys::target_file(&env, &settings, profile, github), env.home.join(".ssh/kh2"));
+    assert!(!hostkeys::is_known(&env, &settings, profile, github));
+    assert_eq!(hostkeys::check(&env, &settings, profile, github).unwrap(), HostKeyCheck::Pinned);
+    assert!(fs::read_to_string(env.home.join(".ssh/kh2")).unwrap().starts_with("github.com ssh-ed25519 "));
+    assert!(!env.known_hosts().exists(), "nothing in a file ssh does not read");
+    assert!(hostkeys::is_known(&env, &settings, profile, github));
+
+    // A key only in ~/.ssh/known_hosts does not count while ssh reads kh2.
+    fs::remove_file(env.home.join(".ssh/kh2")).unwrap();
+    fs::write(env.known_hosts(), format!("github.com {}\n", hostkeys::PINNED[0].1)).unwrap();
+    assert!(!hostkeys::is_known(&env, &settings, profile, github));
+}

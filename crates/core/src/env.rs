@@ -17,6 +17,11 @@ pub struct Env {
     pub login_shell: Option<PathBuf>,
     /// The system-wide known_hosts (`/etc/ssh/ssh_known_hosts`); none in tests.
     pub global_known_hosts: Option<PathBuf>,
+    /// Tests only: the config `ssh -G` reads (`-F`). ssh takes `~/.ssh/config`
+    /// and `~` from the passwd entry, not from `HOME`, so a test home needs
+    /// this to be asked at all; paths ssh prints below the real home are
+    /// mapped back into the test home.
+    pub ssh_config_override: Option<PathBuf>,
 }
 
 impl Env {
@@ -34,6 +39,7 @@ impl Env {
             config_dir: config_base.join("keybund"),
             login_shell,
             global_known_hosts: Some(PathBuf::from("/etc/ssh/ssh_known_hosts")),
+            ssh_config_override: None,
         })
     }
 
@@ -41,7 +47,8 @@ impl Env {
     pub fn with_home(home: impl Into<PathBuf>) -> Self {
         let home = home.into();
         let config_dir = home.join(".config").join("keybund");
-        Env { home, config_dir, login_shell: None, global_known_hosts: None }
+        let ssh_config_override = Some(home.join(".ssh").join("config"));
+        Env { home, config_dir, login_shell: None, global_known_hosts: None, ssh_config_override }
     }
 
     /// Expands a leading `~` to the home directory.
@@ -62,6 +69,30 @@ impl Env {
             Ok(rest) if rest.as_os_str().is_empty() => "~".to_string(),
             Ok(rest) => format!("~/{}", rest.display()),
             Err(_) => path.display().to_string(),
+        }
+    }
+
+    /// `ssh -G <host>`: what ssh resolves for a host from its config (the
+    /// test config with `-F` when [`Env::ssh_config_override`] is set).
+    pub fn ssh_g(&self, host: &str) -> Option<String> {
+        let mut cmd = self.command("ssh");
+        if let Some(config) = &self.ssh_config_override {
+            cmd.arg("-F").arg(config);
+        }
+        cmd.args(["-G", "--", host]);
+        crate::process::stdout(cmd).ok()
+    }
+
+    /// A path from `ssh -G` as a path of this environment: in a test home,
+    /// what ssh expanded below the real home is moved into the test home.
+    pub fn from_ssh(&self, path: &str) -> PathBuf {
+        let path = PathBuf::from(path);
+        if self.ssh_config_override.is_none() {
+            return path;
+        }
+        match std::env::home_dir().and_then(|real| path.strip_prefix(real).ok().map(|r| self.home.join(r))) {
+            Some(mapped) => mapped,
+            None => path,
         }
     }
 
