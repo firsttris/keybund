@@ -189,14 +189,14 @@ pub async fn test_connection(state: State<'_, AppState>, id: String, host: Optio
                     .find(|h| h.target_name() == name || h.hostname == name)
                     .ok_or_else(|| CmdError::no_such_host(&id, &name))?;
                 let result = probe::probe_detached(&env, profile, h)?;
-                // The key's latest test is remembered (sidebar, start page).
-                history::record(&env, &id, &result)?;
+                // Remembered per host (its row) and summed up per key (sidebar, start page).
+                history::record(&env, &id, h.target_name(), &result)?;
                 Ok(result)
             }
             None => {
                 let h = profile.hosts.first().ok_or_else(|| keybund_core::Error::NoHost(profile.id.clone()))?;
                 let result = probe::probe_detached(&env, profile, h)?;
-                history::record(&env, &id, &result)?;
+                history::record(&env, &id, h.target_name(), &result)?;
                 Ok(result)
             }
         }
@@ -229,7 +229,8 @@ pub async fn install_key(
 #[tauri::command]
 #[specta::specta]
 pub async fn last_test(state: State<'_, AppState>, id: String) -> CmdResult<Option<LastTest>> {
-    Ok(history::get(&state.env, &id))
+    let config = store::load(&state.env)?;
+    Ok(history::get(&state.env, config.profile(&id)?))
 }
 
 #[tauri::command]

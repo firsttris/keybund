@@ -93,9 +93,16 @@ pub fn show(env: &Env, id: &str) -> Result<ExitCode> {
     for h in &p.hosts {
         ui::row("Host", &host_label(h));
     }
-    if let Some(t) = history::get(env, &p.id) {
+    let tests = history::load(env);
+    for t in history::host_tests(&tests, p) {
         let when = format_millis(t.at);
-        ui::row("Letzter Test", &format!("{} ({when})", t.message));
+        let host = t.host.as_deref().unwrap_or_default();
+        ui::row("Letzter Test", &format!("{host}: {} ({when})", t.message));
+    }
+    if history::host_tests(&tests, p).is_empty() {
+        if let Some(t) = history::summary(&tests, p) {
+            ui::row("Letzter Test", &format!("{} ({})", t.message, format_millis(t.at)));
+        }
     }
     if let Some(k) = &info.public_key {
         println!("\n{k}");
@@ -478,7 +485,6 @@ fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCod
         bail!("Key „{}“ hat keinen Host {name}", profile.id);
     }
     let mut ok = true;
-    let mut remembered = None;
     let settings = store::load(env)?.settings;
     for host in hosts {
         // An unconfirmed host key fails this host, the others are still tested.
@@ -488,10 +494,8 @@ fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCod
             continue;
         }
         let r = probe::probe(env, profile, host)?;
-        // The profile's result: the first failure, else the first success.
-        if only.is_none() && (remembered.is_none() || (!r.success && ok)) {
-            remembered = Some(r.clone());
-        }
+        // Per host, like the app: the key's summary is computed from these.
+        history::record(env, &profile.id, host.target_name(), &r)?;
         if r.success {
             ui::success(&format!("{}: {}", r.host, r.message));
         } else {
@@ -503,9 +507,6 @@ fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCod
                 ui::hint(&format!("Key eintragen: keybund install-key {} --host {}", profile.id, host.target_name()));
             }
         }
-    }
-    if let Some(r) = remembered {
-        history::record(env, &profile.id, &r)?;
     }
     Ok(if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE })
 }

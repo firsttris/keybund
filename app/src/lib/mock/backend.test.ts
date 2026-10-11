@@ -74,6 +74,19 @@ describe("mock backend contract", () => {
     expect(b.state.profiles[0].hosts[0]).toMatchObject({ alias: null, hostname: "example.org", user: "git" });
   });
 
+  it("remembers the last test per host, the key's summary prefers a failure", async () => {
+    const b = backend();
+    b.state.unreachable.push("1.2.3.4");
+    await b.invoke("test_connection", { id: "privat", host: "meinserver" });
+    await b.invoke("test_connection", { id: "privat", host: "github.com" });
+    const view = ((await b.invoke("load_profiles")) as ProfilesView).profiles[0];
+    expect(view.host_tests.map((t) => [t.host, t.success])).toEqual([
+      ["github.com", true],
+      ["meinserver", false],
+    ]);
+    expect(view.last_test).toMatchObject({ host: "meinserver", success: false });
+  });
+
   it("pins provider host keys only on port 22", async () => {
     const b = backend();
     const p = b.state.profiles[0];
@@ -345,9 +358,9 @@ describe("mock backend contract", () => {
     });
     expect(b.state.profiles[1].archived).toBe(false);
     b.state.keys.delete("~/.ssh/archive/acme_ed25519");
-    expect(b.state.lastTests.has("acme")).toBe(true);
+    expect(b.state.lastTests.has("acme/gitlab.kunde.de")).toBe(true);
     await b.invoke("archive_profile", { id: "acme" });
-    expect(b.state.lastTests.has("acme")).toBe(false);
+    expect(b.state.lastTests.has("acme/gitlab.kunde.de")).toBe(false);
     expect(((await b.invoke("load_profiles")) as ProfilesView).profiles[1].last_test).toBeNull();
   });
 

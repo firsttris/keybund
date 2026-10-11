@@ -27,7 +27,7 @@ temporary home directory in tests.
 | `store` | Loading, validating and saving `profiles.toml`: the TOML layout (`[[profile]]`, `[[profile.host]]`), all [validation rules](configuration.md#validation), keeping unknown fields, `slugify` for IDs, normalising folders (symlinks, trailing `/`). |
 | `error` | One `Error` enum with a stable `kind()` per variant and its text as a message key (`Error::msg`). |
 | `i18n` | `Msg { key, args }` – a text for people as a catalog key with arguments (arguments may be messages themselves), the `msg!` macro, and rendering from `app/messages/{de,en}.json` for the CLI (`Display`). |
-| `history` | The last connection test per key in `last-tests.json`, shared by app and CLI. |
+| `history` | The last connection test per host in `last-tests.json`, shared by app and CLI; a key's summary is its failing host, else its latest test. |
 
 ### Generating and writing configuration
 

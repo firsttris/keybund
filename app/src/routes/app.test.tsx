@@ -77,7 +77,8 @@ describe("sidebar and home", () => {
 
   it("shows what needs attention on the home page", async () => {
     await renderApp("/", (b) => {
-      b.state.lastTests.set("kunde-b", {
+      b.state.lastTests.set("kunde-b/github.com", {
+        host: "github.com",
         success: false,
         account: null,
         message: msg("probe_keyUnknown", { provider: "GitHub" }),

@@ -31,6 +31,8 @@ export const commands = {
 	/**  Puts the profile's key on a server (`host` = alias or hostname). */
 	installKey: (id: string, host: string) => typedError<InstallResult, CmdError>(__TAURI_INVOKE("install_key", { id, host })),
 	lastTest: (id: string) => typedError<{
+	/**  The host that was tested (alias or hostname); `None` in old files. */
+	host: string | null,
 	success: boolean,
 	account: string | null,
 	message: Msg,
@@ -275,6 +277,8 @@ export type KeyRef = {
 export type LastTest = LastTest_Serialize | LastTest_Deserialize;
 
 export type LastTest_Deserialize = {
+	/**  The host that was tested (alias or hostname); `None` in old files. */
+	host?: string | null,
 	success: boolean,
 	account: string | null,
 	message: Msg,
@@ -283,6 +287,8 @@ export type LastTest_Deserialize = {
 };
 
 export type LastTest_Serialize = {
+	/**  The host that was tested (alias or hostname); `None` in old files. */
+	host: string | null,
 	success: boolean,
 	account: string | null,
 	message: Msg,
@@ -387,7 +393,10 @@ export type ProfileView_Deserialize = {
 	key: KeyInfo,
 	is_default: boolean,
 	add_key_urls: HostLink[],
+	/**  The key's summary: a failing host if any, else the latest test. */
 	last_test: LastTest_Deserialize | null,
+	/**  The last test of each host, in host order (hosts never tested are missing). */
+	host_tests: LastTest_Deserialize[],
 	/**  The key is loaded in ssh-agent (`None`: no agent running). */
 	in_agent: boolean | null,
 };
@@ -397,7 +406,10 @@ export type ProfileView_Serialize = {
 	key: KeyInfo,
 	is_default: boolean,
 	add_key_urls: HostLink[],
+	/**  The key's summary: a failing host if any, else the latest test. */
 	last_test: LastTest_Serialize | null,
+	/**  The last test of each host, in host order (hosts never tested are missing). */
+	host_tests: LastTest_Serialize[],
 	/**  The key is loaded in ssh-agent (`None`: no agent running). */
 	in_agent: boolean | null,
 };

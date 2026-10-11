@@ -495,6 +495,7 @@
   "usage_serverTile": "ssh, scp and sftp to a computer or an IP – also in Dolphin.",
   "usage_orDefault": "Or: use it as the default for Git (wherever no other key applies)",
   "test_running": "Testing the connection",
+  "test_last": "Last tested {when}: {result}",
   "test_otherKeyTitle": "This key was not used",
   "test_otherKeyText": "ssh also offered {key} (from your ~/.ssh/config), and that is what logged in. Add this key at the provider and remove the old entry.",
   "test_takeOverConfig": "Take over existing config",

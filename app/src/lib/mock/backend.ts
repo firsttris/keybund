@@ -213,8 +213,9 @@ export function seedState(): MockState {
     applied: new Map(),
     lastTests: new Map([
       [
-        "acme",
+        "acme/gitlab.kunde.de",
         {
+          host: "gitlab.kunde.de",
           success: true,
           account: "@tristan",
           message: msg("probe_connected", { account: "@tristan" }),
@@ -532,6 +533,22 @@ function hostKeyFailure(kind: string, h: HostEntry): MockError {
   }
 }
 
+/** `history::host_tests`: the last test of each current host, in host order. */
+export function hostTests(state: MockState, p: Profile): LastTest[] {
+  return p.hosts.flatMap((h) => {
+    const t = state.lastTests.get(`${p.id}/${h.alias ?? h.hostname}`);
+    return t ? [t] : [];
+  });
+}
+
+/** `history::summary`: the latest failing host, else the latest test, else an old per-key entry. */
+export function testSummary(state: MockState, p: Profile): LastTest | null {
+  const tests = hostTests(state, p);
+  const latest = (list: LastTest[]) =>
+    list.reduce<LastTest | null>((a, b) => (!a || (b.at ?? 0) > (a.at ?? 0) ? b : a), null);
+  return latest(tests.filter((t) => !t.success)) ?? latest(tests) ?? state.lastTests.get(p.id) ?? null;
+}
+
 function view(state: MockState, p: Profile): ProfileView {
   return {
     profile: structuredClone(p),
@@ -541,7 +558,8 @@ function view(state: MockState, p: Profile): ProfileView {
       const url = ADD_KEY_URL[h.provider]?.(h.hostname);
       return url ? [{ host: h.hostname, provider: h.provider, url }] : [];
     }),
-    last_test: state.lastTests.get(p.id) ?? null,
+    last_test: testSummary(state, p),
+    host_tests: hostTests(state, p),
     in_agent: state.agentKeys ? state.agentKeys.includes(p.key.path) : null,
   };
 }
@@ -973,6 +991,18 @@ export function createMockBackend(state: MockState = seedState()) {
       case "test_connection": {
         await sleep(state.latency);
         const p = find(state, String(args.id));
+        // `history::record`: per host, every result; an old per-key entry gives way.
+        const remember = (result: ProbeResult) => {
+          state.lastTests.delete(p.id);
+          state.lastTests.set(`${p.id}/${result.host}`, {
+            host: result.host,
+            success: result.success,
+            account: result.account,
+            message: result.message,
+            at: Date.now(),
+          });
+          return result;
+        };
         const wanted = args.host as string | null | undefined;
         const h = wanted ? p.hosts.find((x) => x.alias === wanted || x.hostname === wanted) : p.hosts[0];
         if (!h)
@@ -984,7 +1014,7 @@ export function createMockBackend(state: MockState = seedState()) {
         const pinned = PINNED_HOSTS.includes(h.hostname) && (!h.port || h.port === 22);
         const unconfirmed = !hostKeyKnown(state, h) && !pinned && !state.unreachable.includes(h.hostname);
         if (unconfirmed) {
-          return {
+          return remember({
             success: false,
             host: h.alias ?? h.hostname,
             account: null,
@@ -999,7 +1029,7 @@ export function createMockBackend(state: MockState = seedState()) {
               { ok: false, text: msg("step_hostKeyFailed") },
             ],
             log: "Host key verification failed.",
-          } satisfies ProbeResult;
+          });
         }
         // Kunde B's key is not in its GitHub account until it is uploaded.
         const where = `${h.hostname}:${p.key.path}`;
@@ -1064,13 +1094,7 @@ export function createMockBackend(state: MockState = seedState()) {
             message: msg("probe_otherKey_as", { account: "@firsttris", key: "~/.ssh/privat_ed25519" }),
           });
         }
-        state.lastTests.set(p.id, {
-          success: result.success,
-          account: result.account,
-          message: result.message,
-          at: Date.now(),
-        });
-        return result;
+        return remember(result);
       }
       case "install_key": {
         await sleep(state.latency);
@@ -1148,7 +1172,7 @@ export function createMockBackend(state: MockState = seedState()) {
         return view(state, next);
       }
       case "last_test":
-        return state.lastTests.get(String(args.id)) ?? null;
+        return testSummary(state, find(state, String(args.id)));
       case "plan_changes":
         return planFor(state);
       case "apply_changes": {
@@ -1239,7 +1263,9 @@ export function createMockBackend(state: MockState = seedState()) {
         p.archived = true;
         if (state.defaultProfile === p.id) state.defaultProfile = null;
         // `history::forget`: an archived key has no test to show.
-        state.lastTests.delete(p.id);
+        for (const k of [...state.lastTests.keys()]) {
+          if (k === p.id || k.startsWith(`${p.id}/`)) state.lastTests.delete(k);
+        }
         applyConfigs(state);
         const result: ArchiveResult = {
           key_path: p.key.path,

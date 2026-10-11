@@ -39,7 +39,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, errorMessage } from "@/lib/api";
-import type { HostEntry, Profile, ProfileView, Provider } from "@/lib/bindings";
+import type { HostEntry, LastTest, Profile, ProfileView, Provider } from "@/lib/bindings";
 import { gitAccounts, servers } from "@/lib/categories";
 import { rich, t } from "@/lib/i18n";
 import { openExternal } from "@/lib/open";
@@ -56,7 +56,15 @@ import {
   useUpdateProfile,
 } from "@/lib/queries";
 import { pickFolder } from "@/lib/tauri";
-import { defaultHostname, formatAge, formatDate, GIT_PROVIDERS, isValidEmail, providerLabel } from "@/lib/utils";
+import {
+  defaultHostname,
+  formatAge,
+  formatDate,
+  formatRelative,
+  GIT_PROVIDERS,
+  isValidEmail,
+  providerLabel,
+} from "@/lib/utils";
 import { m } from "@/paraglide/messages";
 
 const mono = "font-mono text-[13px]";
@@ -217,11 +225,18 @@ function UsageCard({ view }: { view: ProfileView }) {
               profile={profile}
               host={h}
               addKeyUrl={view.add_key_urls.find((l) => l.host === h.hostname)?.url ?? null}
+              lastTest={lastTestOf(view, h)}
               onRemove={() => removeHost(h)}
             />
           ))}
           {serverList.map((h) => (
-            <ServerRow key={`s-${h.alias ?? h.hostname}`} profile={profile} host={h} onRemove={() => removeHost(h)} />
+            <ServerRow
+              key={`s-${h.alias ?? h.hostname}`}
+              profile={profile}
+              host={h}
+              lastTest={lastTestOf(view, h)}
+              onRemove={() => removeHost(h)}
+            />
           ))}
         </ul>
       )}
@@ -350,14 +365,39 @@ function UsageRow({
   );
 }
 
+/** The stored result of the host's last test (also from the CLI or an earlier session). */
+function lastTestOf(view: ProfileView, host: HostEntry): LastTest | null {
+  return view.host_tests.find((t) => t.host === (host.alias ?? host.hostname)) ?? null;
+}
+
 /** The one thing to do when the server does not know the key yet. */
 type Fix = { text: string; label: string; onClick: () => void; busy?: boolean };
 
-function TestResult({ test, fix }: { test: ReturnType<typeof useTestConnection>; fix?: Fix | null }) {
+function TestResult({
+  test,
+  fix,
+  lastTest,
+}: {
+  test: ReturnType<typeof useTestConnection>;
+  fix?: Fix | null;
+  lastTest?: LastTest | null;
+}) {
   if (test.isPending) return <Spinner label={m.test_running()} />;
   if (test.isError) return <FieldError>{errorMessage(test.error)}</FieldError>;
   const result = test.data;
-  if (!result) return null;
+  if (!result) {
+    // Not tested in this session: what the last test of this host said.
+    if (!lastTest) return null;
+    return (
+      <span
+        data-testid="last-test"
+        className={`flex items-center gap-2 text-xs ${lastTest.success ? "text-muted-foreground" : "text-danger"}`}
+      >
+        {lastTest.success ? <Check aria-hidden className="size-3.5" /> : <X aria-hidden className="size-3.5" />}
+        {m.test_last({ when: formatRelative(lastTest.at), result: t(lastTest.message) })}
+      </span>
+    );
+  }
   return (
     <div aria-live="polite" className="flex flex-col gap-2">
       <span
@@ -404,11 +444,13 @@ function AccountRow({
   profile,
   host,
   addKeyUrl,
+  lastTest,
   onRemove,
 }: {
   profile: Profile;
   host: HostEntry;
   addKeyUrl: string | null;
+  lastTest: LastTest | null;
   onRemove: () => void;
 }) {
   const test = useTestConnection();
@@ -484,6 +526,7 @@ function AccountRow({
       )}
       <TestResult
         test={test}
+        lastTest={lastTest}
         fix={
           pasting
             ? null
@@ -498,7 +541,17 @@ function AccountRow({
   );
 }
 
-function ServerRow({ profile, host, onRemove }: { profile: Profile; host: HostEntry; onRemove: () => void }) {
+function ServerRow({
+  profile,
+  host,
+  lastTest,
+  onRemove,
+}: {
+  profile: Profile;
+  host: HostEntry;
+  lastTest: LastTest | null;
+  onRemove: () => void;
+}) {
   const install = useInstallKey();
   const test = useTestConnection();
   const name = host.alias ?? host.hostname;
@@ -547,6 +600,7 @@ function ServerRow({ profile, host, onRemove }: { profile: Profile; host: HostEn
       </div>
       <TestResult
         test={test}
+        lastTest={lastTest}
         fix={{
           text: m.server_fixText({ name }),
           label: m.server_fixLabel({ name }),

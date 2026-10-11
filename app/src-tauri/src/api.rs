@@ -2,6 +2,8 @@
 //! commands in `commands.rs` are thin wrappers around these, so the logic is
 //! testable without a window.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -73,7 +75,10 @@ pub struct ProfileView {
     pub key: KeyInfo,
     pub is_default: bool,
     pub add_key_urls: Vec<HostLink>,
+    /// The key's summary: a failing host if any, else the latest test.
     pub last_test: Option<LastTest>,
+    /// The last test of each host, in host order (hosts never tested are missing).
+    pub host_tests: Vec<LastTest>,
     /// The key is loaded in ssh-agent (`None`: no agent running).
     pub in_agent: Option<bool>,
 }
@@ -92,7 +97,7 @@ pub struct ProfilesView {
     pub global_identity: GlobalIdentity,
 }
 
-pub fn profile_view(env: &Env, config: &Config, p: &Profile, last_test: Option<LastTest>) -> ProfileView {
+pub fn profile_view(env: &Env, config: &Config, p: &Profile, tests: &BTreeMap<String, LastTest>) -> ProfileView {
     ProfileView {
         profile: p.clone(),
         key: keygen::key_info(env, &p.key),
@@ -108,7 +113,8 @@ pub fn profile_view(env: &Env, config: &Config, p: &Profile, last_test: Option<L
                 })
             })
             .collect(),
-        last_test,
+        last_test: keybund_core::history::summary(tests, p),
+        host_tests: keybund_core::history::host_tests(tests, p),
         in_agent: None,
     }
 }
@@ -125,7 +131,6 @@ fn last_applied(env: &Env) -> Option<f64> {
 
 pub fn load_profiles(env: &Env) -> CmdResult<ProfilesView> {
     let tests = keybund_core::history::load(env);
-    let last_test = |id: &str| tests.get(id).cloned();
     let config = store::load(env)?;
     let pending_changes = apply::plan(env, &config).map(|p| p.changes.len() as u32).unwrap_or(0);
     let import_available = import::proposals_for(env).map(|p| p.len() as u32).unwrap_or(0);
@@ -136,7 +141,7 @@ pub fn load_profiles(env: &Env) -> CmdResult<ProfilesView> {
             .profiles
             .iter()
             .map(|p| {
-                let mut view = profile_view(env, &config, p, last_test(&p.id));
+                let mut view = profile_view(env, &config, p, &tests);
                 view.in_agent = match (&agent, &view.key.fingerprint) {
                     (Some(loaded), Some(fp)) => Some(loaded.contains(fp)),
                     _ => None,
@@ -274,7 +279,7 @@ pub fn create_project(env: &Env, project: &NewProject) -> CmdResult<CreatedProje
     let report = apply::apply_config(env, &config)?;
     let profile = config.profile(&id)?;
     Ok(CreatedProject {
-        profile: profile_view(env, &config, profile, None),
+        profile: profile_view(env, &config, profile, &keybund_core::history::load(env)),
         report,
         public_key: keygen::read_public(env, &profile.key)?.line(),
         open_error: None,
@@ -297,7 +302,7 @@ pub fn update_profile(env: &Env, profile: Profile) -> CmdResult<ProfileView> {
     let slot = config.profile_mut(&profile.id)?;
     *slot = profile.clone();
     save_and_apply(env, &config)?;
-    Ok(profile_view(env, &config, &profile, None))
+    Ok(profile_view(env, &config, &profile, &keybund_core::history::load(env)))
 }
 
 fn with_host(env: &Env, id: &str, host: HostEntry) -> CmdResult<Config> {
@@ -321,7 +326,7 @@ pub fn add_host(env: &Env, id: &str, host: HostEntry) -> CmdResult<ProfileView> 
     let config = with_host(env, id, host)?;
     save_and_apply(env, &config)?;
     let profile = config.profile(id)?;
-    Ok(profile_view(env, &config, profile, None))
+    Ok(profile_view(env, &config, profile, &keybund_core::history::load(env)))
 }
 
 fn host_of<'a>(profile: &'a Profile, host: Option<&str>) -> CmdResult<&'a HostEntry> {

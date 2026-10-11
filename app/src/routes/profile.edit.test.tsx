@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { describe, expect, it } from "vitest";
 import type { Profile } from "@/lib/bindings";
 import { setLang } from "@/lib/i18n";
+import { msg } from "@/lib/mock/backend";
 import { renderApp } from "@/test/render";
 
 const usage = () => screen.findByRole("region", { name: "Wo wird dieser Key benutzt?" });
@@ -82,6 +83,38 @@ describe("key page", () => {
     expect(within(card).getByLabelText("E-Mail")).toHaveValue("");
     expect(within(card).getByLabelText("E-Mail")).toHaveAttribute("placeholder", "tristanteufel@example.org");
     expect(within(card).getByText(/Dafür braucht der Key eine eigene E-Mail/)).toBeInTheDocument();
+  });
+
+  it("shows each host's last test on its row, and the failing one in the sidebar", async () => {
+    await renderApp("/profile/privat", (b) => {
+      b.state.lastTests.set("privat/meinserver", {
+        host: "meinserver",
+        success: false,
+        account: null,
+        message: msg("probe_keyUnknown_server"),
+        at: Date.now() - 600_000,
+      });
+      b.state.lastTests.set("privat/github.com", {
+        host: "github.com",
+        success: true,
+        account: "@tristan",
+        message: msg("probe_connected", { account: "@tristan" }),
+        at: Date.now() - 60_000,
+      });
+    });
+    const shown = (await screen.findAllByTestId("last-test")).map((el) => [
+      el.closest("li")?.textContent?.includes("Server meinserver") ? "server" : "github",
+      el.textContent,
+    ]);
+    expect(shown).toEqual([
+      ["github", "Zuletzt getestet vor 1 Min.: Verbunden als @tristan"],
+      ["server", "Zuletzt getestet vor 10 Min.: Server kennt diesen Key nicht"],
+    ]);
+    // The key's summary: the failing server, although GitHub was tested later.
+    const nav = screen.getByRole("navigation", { name: "Keys" });
+    const privat = within(nav).getByRole("link", { name: /Privat/ });
+    expect(privat).toHaveTextContent("Test fehlgeschlagen");
+    expect(within(privat).getByTitle("Server kennt diesen Key nicht")).toBeInTheDocument();
   });
 
   it("shows the global identity for a key without git folders", async () => {
@@ -216,7 +249,9 @@ describe("key page", () => {
       // The answer reaches the test: the key is trusted and the connection tested
       // (the page itself was re-rendered in English, so its row started afresh).
       await waitFor(() => expect(backend.state.knownHosts).toContain("10.0.0.3"));
-      await waitFor(() => expect(backend.state.lastTests.get("privat")).toMatchObject({ success: true }));
+      await waitFor(() =>
+        expect(backend.state.lastTests.get("privat/gamma")).toMatchObject({ host: "gamma", success: true }),
+      );
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     } finally {
       act(() => setLang("de"));

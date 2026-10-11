@@ -49,7 +49,7 @@ One row per use, each with a short explanation in plain words:
 | **GitHub / GitLab / Bitbucket account** | **Add key** (copy the public key and open the provider's page), **Test**, remove |
 | **Server**, e.g. `meinserver` | **Add key** (put the key into `authorized_keys`, like `ssh-copy-id`), **Test**, remove |
 
-**Add:** **Git folder**, **Git account**, **Server**. A test result stays under its row; **Details:
+**Add:** **Git folder**, **Git account**, **Server**. A test result stays under its row – and on the next visit the row still says how its last test went (also a test from the command line). The sidebar and the overview sum it up per key: if any of its hosts failed, the key shows the failure. **Details:
 what happened during the test** explains each step of the ssh connection, shows the command to run
 it yourself and, on request, ssh's complete output.
 

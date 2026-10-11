@@ -832,3 +832,26 @@ fn import_all_skips_blocks_without_a_key_file() {
         .stdout(predicate::str::contains("1 Key(s) übernommen"));
     assert!(sb.read(".config/keybund/profiles.toml").contains("work_ed25519"));
 }
+
+/// Every tested host keeps its own result, also with `--host`, and `show`
+/// lists them – the same file the app reads for each host's row.
+#[test]
+#[cfg(unix)]
+fn the_last_test_is_kept_per_host() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile("Server", &["--provider", "generic", "--host", "1.2.3.4", "--alias", "srv"]);
+    sb.cmd().args(["edit", "server", "--add-host", "5.6.7.8", "--alias", "backup", "--yes"]).assert().success();
+    sb.fake_ssh("", 0);
+    sb.cmd().args(["test", "server", "--host", "srv"]).assert().success();
+    sb.fake_ssh("root@5.6.7.8: Permission denied (publickey).", 255);
+    sb.cmd().args(["test", "server", "--host", "backup"]).assert().code(1);
+    let stored = sb.read(".config/keybund/last-tests.json");
+    assert!(stored.contains("\"server/srv\"") && stored.contains("\"server/backup\""), "{stored}");
+    sb.cmd().args(["show", "server"]).assert().success().stdout(
+        predicate::str::contains("srv: Anmeldung erfolgreich")
+            .and(predicate::str::contains("backup: Server kennt diesen Key nicht")),
+    );
+}

@@ -151,7 +151,7 @@ changes) so the generated files follow.
 | `profiles.toml` | the configuration above |
 | `git/index.gitconfig`, `git/<id>.gitconfig` | generated Git configuration, see [What Keybund writes](generated-files.md) |
 | `allowed_signers` | generated, for verifying SSH-signed commits |
-| `last-tests.json` | the last connection test per key, shared by app and CLI |
+| `last-tests.json` | the last connection test per host (`<key>/<host>`), shared by app and CLI |
 | `.askpass-*/` | a private helper (mode `700`) that hands a new key's passphrase to `ssh-keygen`; exists only while a key is being created |
 
 Keybund does not use environment variables of its own. It respects `HOME`, `XDG_CONFIG_HOME` and
