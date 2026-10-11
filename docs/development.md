@@ -145,7 +145,7 @@ To add a text: add the key to both catalogs (`area_name`, e.g. `settings_languag
 | Rust macOS | `clippy` and `cargo test --workspace` on macos-14, with Apple's `ssh` and `git` from `/usr/bin` first on `PATH` |
 | Rust coverage | `cargo llvm-cov`; core and CLI must stay above 85 % of lines |
 | Frontend | Biome (`biome check`), `tsc -b`, Vitest with coverage thresholds (90 % lines), `vite build` |
-| Playwright | every end-to-end flow on a desktop and a narrow viewport, in the official Playwright image of the version in `pnpm-lock.yaml` |
+| Playwright | every end-to-end flow on a desktop and a narrow viewport in Chromium and once more in WebKit (macOS' engine), in the official Playwright image of the version in `pnpm-lock.yaml` |
 
 ## Releases
 
