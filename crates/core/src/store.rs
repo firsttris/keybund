@@ -203,7 +203,59 @@ pub fn save(env: &Env, config: &Config) -> Result<()> {
     }
     fsutil::ensure_dir(&env.config_dir, Some(0o700))?;
     let header = "# Keybund profiles – source of truth for all generated SSH and Git configs.\n\n";
-    fsutil::atomic_write(&env.profiles_file(), &format!("{header}{}", to_toml(config)), Some(0o600))
+    let old = fsutil::read_optional(&env.profiles_file())?.unwrap_or_default();
+    let body = keep_unknown(&to_toml(config), &old);
+    fsutil::atomic_write(&env.profiles_file(), &format!("{header}{body}"), Some(0o600))
+}
+
+const KNOWN_TOP: [&str; 3] = ["default_profile", "settings", "profile"];
+const KNOWN_SETTINGS: [&str; 4] = ["projects_dir", "keys_dir", "absolute_ssh_include", "known_hosts_per_profile"];
+const KNOWN_PROFILE: [&str; 8] = ["id", "name", "color", "key", "git", "folders", "archived", "host"];
+
+/// Keys Keybund does not know (hand-written, or from a newer version) survive
+/// a save: they are copied from the old file into the new one – top level,
+/// `[settings]` and per profile (matched by id).
+fn keep_unknown(new_text: &str, old_text: &str) -> String {
+    use toml::{Table, Value};
+    let Ok(old) = old_text.parse::<Table>() else { return new_text.to_string() };
+    let Ok(mut new) = new_text.parse::<Table>() else { return new_text.to_string() };
+    let unknown = |t: &Table, known: &[&str]| -> Vec<(String, Value)> {
+        t.iter().filter(|(k, _)| !known.contains(&k.as_str())).map(|(k, v)| (k.clone(), v.clone())).collect()
+    };
+    let mut changed = false;
+    for (k, v) in unknown(&old, &KNOWN_TOP) {
+        new.insert(k, v);
+        changed = true;
+    }
+    if let Some(Value::Table(old_settings)) = old.get("settings") {
+        let extra = unknown(old_settings, &KNOWN_SETTINGS);
+        if !extra.is_empty() {
+            let settings = new.entry("settings").or_insert_with(|| Value::Table(Table::new()));
+            if let Value::Table(t) = settings {
+                t.extend(extra);
+                changed = true;
+            }
+        }
+    }
+    if let (Some(Value::Array(old_profiles)), Some(Value::Array(new_profiles))) =
+        (old.get("profile"), new.get_mut("profile"))
+    {
+        for np in new_profiles.iter_mut() {
+            let Value::Table(np) = np else { continue };
+            let id = np.get("id").cloned();
+            let Some(Value::Table(op)) = old_profiles.iter().find(|p| p.get("id") == id.as_ref()) else { continue };
+            let extra = unknown(op, &KNOWN_PROFILE);
+            if !extra.is_empty() {
+                np.extend(extra);
+                changed = true;
+            }
+        }
+    }
+    if changed {
+        toml::to_string_pretty(&new).unwrap_or_else(|_| new_text.to_string())
+    } else {
+        new_text.to_string()
+    }
 }
 
 /// Values end up verbatim in ssh and git configs: a line break would add
@@ -555,6 +607,21 @@ provider = "gitlab"
         assert_eq!(normalize_folder(&env, "~/dev/real/"), "~/dev/real/");
         #[cfg(unix)]
         assert_eq!(normalize_folder(&env, "~/dev/link"), "~/dev/real/");
+    }
+
+    #[test]
+    fn unknown_keys_survive_a_save() {
+        let old = "future = 1\n\n[settings]\nlater = \"x\"\n\n[[profile]]\nid = \"a\"\nname = \"A\"\nextra = \"keep\"\nkey = { path = \"~/.ssh/a\" }\n";
+        let mut cfg = parse(old).unwrap();
+        cfg.profiles[0].name = "A2".into();
+        let out = keep_unknown(&to_toml(&cfg), old);
+        let back: toml::Table = out.parse().unwrap();
+        assert_eq!(back["future"].as_integer(), Some(1));
+        assert_eq!(back["settings"]["later"].as_str(), Some("x"));
+        assert_eq!(back["profile"][0]["extra"].as_str(), Some("keep"));
+        assert_eq!(parse(&out).unwrap().profiles[0].name, "A2");
+        // Nothing unknown: the output stays exactly as Keybund writes it.
+        assert_eq!(keep_unknown(&to_toml(&cfg), &to_toml(&cfg)), to_toml(&cfg));
     }
 
     #[test]

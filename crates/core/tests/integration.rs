@@ -523,12 +523,13 @@ fn uninstall_removes_only_keybund_and_can_restore_the_originals() {
     assert!(env.expand("~/.ssh/privat_ed25519").exists(), "keys are never touched");
     assert!(uninstall::preview(&env, UninstallOptions::default()).unwrap().plan.is_empty());
 
-    // Reinstall, then restore the originals and purge everything.
+    // Reinstall: the backup is taken anew, so restoring keeps the edits
+    // made in between instead of going back to the very first state.
     apply::apply_config(&env, &config).unwrap();
     let opts = UninstallOptions { restore_backups: true, purge: true };
     let preview = uninstall::preview(&env, opts).unwrap();
     uninstall::uninstall(&env, &preview.plan).unwrap();
-    assert_eq!(fs::read_to_string(env.ssh_config()).unwrap(), ssh_before);
+    assert_eq!(fs::read_to_string(env.ssh_config()).unwrap(), format!("{ssh_before}\nHost nas\n    User admin\n"));
     assert!(!env.config_dir.exists());
 }
 
@@ -559,4 +560,37 @@ fn absolute_include_and_known_hosts_per_profile() {
     assert!(text.lines().any(|l| l.starts_with("userknownhostsfile") && l.contains("known_hosts.d/privat")), "{text}");
     // Nothing left to do after the fix.
     assert!(apply::plan(&env, &store::load(&env).unwrap()).unwrap().changes.is_empty());
+}
+
+/// No ~/.gitconfig before Keybund: an old backup from an earlier install
+/// must not count as "the original".
+#[test]
+fn stale_backup_goes_when_there_was_no_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let env = Env::with_home(dir.path());
+    fs::write(dir.path().join(".gitconfig.keybund-backup"), "[user]\n\tname = alt\n").unwrap();
+    apply::apply_config(&env, &keybund_core::model::Config::default()).unwrap();
+    assert!(env.gitconfig().exists());
+    assert!(!dir.path().join(".gitconfig.keybund-backup").exists());
+}
+
+/// A linked worktree belongs where its main repository is: git matches
+/// `gitdir:` against the main repo's git directory, and so does `which`.
+#[test]
+fn which_follows_worktrees_like_git() {
+    if !has("git") || !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    apply::apply_config(&env, &config).unwrap();
+    let main = env.home.join("dev/kunde-a/main");
+    fs::create_dir_all(&main).unwrap();
+    git(&env, &main, &["init", "-q"]);
+    git(&env, &main, &["-c", "user.name=T", "-c", "user.email=t@x", "commit", "-q", "--allow-empty", "-m", "x"]);
+    let tree = env.home.join("dev/kunde-b/tree");
+    git(&env, &main, &["worktree", "add", "-q", &tree.display().to_string()]);
+    let r = which::which(&env, &config, &tree.display().to_string()).unwrap();
+    assert_eq!(r.profile_id.as_deref(), Some("kunde-a"), "{r:?}");
+    assert_eq!(r.git_email.as_deref(), Some("kunde-a@example.org"));
+    assert!(!r.notes.iter().any(|n| n.contains("anderen Key")), "{:?}", r.notes);
 }

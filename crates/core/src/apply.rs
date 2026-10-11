@@ -208,8 +208,22 @@ pub fn apply(env: &Env, plan: &Plan) -> Result<ApplyReport> {
     let mut report = ApplyReport::default();
     for change in &plan.changes {
         if change.user_file {
-            if let Some(b) = fsutil::backup_once(&change.abs_path)? {
-                report.backups.push(env.contract(&b));
+            // The backup holds the file as it was before Keybund: taken anew
+            // whenever Keybund is not (or no longer) in it, e.g. after an
+            // uninstall, so "restore" never brings back an outdated state.
+            let before_keybund = match &change.old {
+                Some(old) => !keybund_in(env, &change.abs_path, old),
+                None => true,
+            };
+            if !before_keybund {
+                if let Some(b) = fsutil::backup_once(&change.abs_path)? {
+                    report.backups.push(env.contract(&b));
+                }
+            } else if change.old.is_some() {
+                report.backups.push(env.contract(&fsutil::backup(&change.abs_path)?));
+            } else {
+                // There was no file before Keybund: an old backup would be wrong.
+                let _ = fs::remove_file(fsutil::backup_path(&change.abs_path));
             }
         }
         match &change.new {
@@ -226,6 +240,17 @@ pub fn apply(env: &Env, plan: &Plan) -> Result<ApplyReport> {
         }
     }
     Ok(report)
+}
+
+/// `true` if the user's file already contains Keybund's include line.
+fn keybund_in(env: &Env, path: &Path, content: &str) -> bool {
+    if path == env.ssh_config() {
+        ssh_include_present(content)
+    } else if path == env.gitconfig() {
+        git_include_present(content, &env.contract(&env.index_gitconfig()))
+    } else {
+        false
+    }
 }
 
 /// Convenience: plan and apply in one go.

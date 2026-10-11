@@ -470,7 +470,12 @@ fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCod
     let mut remembered = None;
     let settings = store::load(env)?.settings;
     for host in hosts {
-        host_key_ok(env, &settings, profile, host, false)?;
+        // An unconfirmed host key fails this host, the others are still tested.
+        if let Err(e) = host_key_ok(env, &settings, profile, host, false) {
+            ok = false;
+            ui::error(&format!("{}: {e}", host.target_name()));
+            continue;
+        }
         let r = probe::probe(env, profile, host)?;
         // The profile's result: the first failure, else the first success.
         if only.is_none() && (remembered.is_none() || (!r.success && ok)) {
@@ -524,6 +529,10 @@ pub fn config(env: &Env, key: Option<&str>, value: Option<&str>) -> Result<ExitC
         ui::row("known-hosts-per-profile", &s.known_hosts_per_profile.to_string());
         return Ok(ExitCode::SUCCESS);
     };
+    const KEYS: [&str; 4] = ["projects-dir", "keys-dir", "absolute-ssh-include", "known-hosts-per-profile"];
+    if !KEYS.contains(&key) {
+        bail!("Unbekannte Einstellung „{key}“ ({})", KEYS.join(", "));
+    }
     let Some(value) = value else {
         bail!("Wert fehlt: keybund config {key} <wert>");
     };

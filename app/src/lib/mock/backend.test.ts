@@ -62,6 +62,28 @@ describe("mock backend contract", () => {
     expect(b.state.applied.get(`~/.config/keybund/git/${p.id}.gitconfig`)).toContain("gpgsign = true");
   });
 
+  it("validates the default key and trims values like the Rust side", async () => {
+    const b = backend();
+    await expect(b.invoke("set_default_profile", { id: "gibtsnicht" })).rejects.toMatchObject({
+      kind: "default_profile_missing",
+    });
+    const p = b.state.profiles[0];
+    const host = { alias: "  ", hostname: " example.org ", user: " git ", port: null, provider: "generic" as const };
+    await b.invoke("update_profile", { profile: { ...p, name: " Privat ", hosts: [host] } as Profile });
+    expect(b.state.profiles[0].name).toBe("Privat");
+    expect(b.state.profiles[0].hosts[0]).toMatchObject({ alias: null, hostname: "example.org", user: "git" });
+  });
+
+  it("pins provider host keys only on port 22", async () => {
+    const b = backend();
+    const p = b.state.profiles[0];
+    const host = { alias: null, hostname: "github.com", user: null, port: 443, provider: "github" as const };
+    await b.invoke("update_profile", { profile: { ...p, hosts: [host] } as Profile });
+    const result = (await b.invoke("test_connection", { id: p.id, host: null })) as { success: boolean; message: string };
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("nicht bestätigt");
+  });
+
   it("refuses to restore a file that changed since the preview", async () => {
     const b = backend();
     b.state.applied.set("~/.config/keybund/git/sparkasse.gitconfig", "kaputt\n");

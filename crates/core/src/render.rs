@@ -76,6 +76,9 @@ pub fn ssh_config(config: &Config) -> String {
                 // New host keys go into the profile's own file, known ones
                 // from the shared file still count.
                 let _ = writeln!(out, "    UserKnownHostsFile {} ~/.ssh/known_hosts", profile_known_hosts(&p.id));
+                // ssh only learns rotated host keys by default with the default
+                // UserKnownHostsFile; switch it back on for the own file.
+                let _ = writeln!(out, "    UpdateHostKeys yes");
             }
         }
     }

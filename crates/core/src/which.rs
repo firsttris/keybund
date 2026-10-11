@@ -97,8 +97,13 @@ fn which_folder(env: &Env, config: &Config, query: &str) -> Result<WhichResult> 
     let dir = std::fs::canonicalize(&dir).unwrap_or(dir);
     let mut result = WhichResult::new(&env.contract(&dir), WhichMode::Folder);
 
-    let folder_match = profile_for_folder(env, config, &dir);
     let in_repo = dir.is_dir() && git_in_repo(env, &dir);
+    // git matches `gitdir:` against the repository's git directory – for a
+    // linked worktree that lives with the main repo, not with the checkout.
+    let folder_match = match in_repo.then(|| git_dir(env, &dir)).flatten() {
+        Some(git_dir) => profile_for_folder(env, config, &git_dir),
+        None => profile_for_folder(env, config, &dir),
+    };
 
     if in_repo {
         if let Some((origin, value)) = git_get(env, &dir, "core.sshCommand") {
@@ -246,6 +251,13 @@ fn git_in_repo(env: &Env, dir: &Path) -> bool {
     let mut cmd = env.command("git");
     cmd.arg("-C").arg(dir).args(["rev-parse", "--git-dir"]);
     process::output(cmd).map(|o| o.status.success()).unwrap_or(false)
+}
+
+/// The absolute git directory of the repository at `dir`.
+fn git_dir(env: &Env, dir: &Path) -> Option<PathBuf> {
+    let mut cmd = env.command("git");
+    cmd.arg("-C").arg(dir).args(["rev-parse", "--absolute-git-dir"]);
+    process::stdout(cmd).ok().map(|s| PathBuf::from(s.trim())).filter(|p| p.is_absolute())
 }
 
 /// `git config --show-origin --get <key>` → (origin, value).

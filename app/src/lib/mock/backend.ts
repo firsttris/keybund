@@ -273,7 +273,7 @@ function sshHostBlocks(p: Profile, settings?: Settings): string {
       if (h.port != null) block += `    Port ${h.port}\n`;
       block += `    IdentityFile ${p.key.path}\n    IdentitiesOnly yes\n    AddKeysToAgent yes\n`;
       if (settings?.known_hosts_per_profile && h.provider === "generic") {
-        block += `    UserKnownHostsFile ~/.ssh/known_hosts.d/${p.id} ~/.ssh/known_hosts\n`;
+        block += `    UserKnownHostsFile ~/.ssh/known_hosts.d/${p.id} ~/.ssh/known_hosts\n    UpdateHostKeys yes\n`;
       }
       return block;
     })
@@ -512,9 +512,22 @@ function validate(profiles: Profile[]) {
   }
 }
 
-function withNewProject(state: MockState, project: NewProject): Profile[] {
-  const p = structuredClone(project.profile);
+/** Like `api::normalized`: trimmed values, empty optionals dropped. */
+function normalized(profile: Profile): Profile {
+  const p = structuredClone(profile);
+  p.id = p.id.trim();
+  p.name = p.name.trim();
   p.folders = p.folders.filter((f) => f.trim()).map(normalizeFolder);
+  for (const h of p.hosts) {
+    h.hostname = h.hostname.trim();
+    h.alias = h.alias?.trim() || null;
+    h.user = h.user?.trim() || null;
+  }
+  return p;
+}
+
+function withNewProject(state: MockState, project: NewProject): Profile[] {
+  const p = normalized(project.profile);
   if (project.key.type === "existing") p.key = { path: project.key.path, comment: null };
   const profiles = [...state.profiles, p];
   validate(profiles);
@@ -744,8 +757,7 @@ export function createMockBackend(state: MockState = seedState()) {
         return created;
       }
       case "update_profile": {
-        const next = structuredClone(args.profile as Profile);
-        next.folders = next.folders.filter((f) => f.trim()).map(normalizeFolder);
+        const next = normalized(args.profile as Profile);
         const profiles = state.profiles.map((p) => (p.id === next.id ? next : p));
         find(state, next.id);
         validate(profiles);
@@ -753,10 +765,14 @@ export function createMockBackend(state: MockState = seedState()) {
         markApplied(state);
         return view(state, next);
       }
-      case "set_default_profile":
-        state.defaultProfile = (args.id as string | null) ?? null;
+      case "set_default_profile": {
+        const id = (args.id as string | null) ?? null;
+        if (id && !state.profiles.some((p) => p.id === id && !p.archived))
+          throw new MockError("default_profile_missing", `Standard-Key „${id}“ existiert nicht`);
+        state.defaultProfile = id;
         markApplied(state);
         return null;
+      }
       case "copy_public_key": {
         const key = keyInfo(state, find(state, String(args.id)).key.path).public_key;
         if (!key) throw new MockError("key_missing", "Key fehlt");
@@ -773,7 +789,8 @@ export function createMockBackend(state: MockState = seedState()) {
         const h = wanted ? p.hosts.find((x) => x.alias === wanted || x.hostname === wanted) : p.hosts[0];
         if (!h) throw new MockError("no_host", wanted ? `Key „${p.id}“ hat keinen Host ${wanted}` : `Key „${p.id}“ hat keinen Host`);
         // Like StrictHostKeyChecking=yes: no connection to an unconfirmed host.
-        const unconfirmed = !hostKeyKnown(state, h) && !PINNED_HOSTS.includes(h.hostname) && !state.unreachable.includes(h.hostname);
+        const pinned = PINNED_HOSTS.includes(h.hostname) && (!h.port || h.port === 22);
+        const unconfirmed = !hostKeyKnown(state, h) && !pinned && !state.unreachable.includes(h.hostname);
         if (unconfirmed) {
           return {
             success: false,

@@ -37,6 +37,13 @@ pub fn atomic_write(path: &Path, content: &str, mode: Option<u32>) -> Result<()>
     result
 }
 
+/// Copies `path` to `<path>.keybund-backup`, replacing an older backup.
+pub fn backup(path: &Path) -> Result<PathBuf> {
+    let backup = backup_path(path);
+    fs::copy(path, &backup).map_err(|e| Error::io(&backup, e))?;
+    Ok(backup)
+}
+
 /// Copies `path` to `<path>.keybund-backup` unless such a backup already
 /// exists. Returns the backup path if one was created.
 pub fn backup_once(path: &Path) -> Result<Option<PathBuf>> {

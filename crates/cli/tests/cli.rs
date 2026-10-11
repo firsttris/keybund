@@ -716,7 +716,7 @@ fn unknown_host_keys_are_confirmed_first() {
         sb.cmd()
             .args(["test", "server"])
             .assert()
-            .code(2)
+            .code(1)
             .stdout(predicate::str::contains("Erste Verbindung zu [10.1.2.3]:2222"))
             .stdout(predicate::str::contains("SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU"))
             .stderr(predicate::str::contains("keybund trust server --host srv"));
