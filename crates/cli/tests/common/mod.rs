@@ -26,6 +26,13 @@ impl Sandbox {
         // No network in tests: hosts answer no keys unless a test says so.
         #[cfg(unix)]
         sb.fake_keyscan("");
+        // No desktop either, on macOS too: no clipboard, and `open` never
+        // starts the runner's real browser.
+        #[cfg(target_os = "macos")]
+        {
+            sb.script("pbcopy", "#!/bin/sh\nexit 1\n");
+            sb.script("open", "#!/bin/sh\nexit 0\n");
+        }
         sb
     }
 
@@ -129,15 +136,24 @@ impl Sandbox {
         fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
     }
 
-    /// A fake `xdg-open` that writes the opened URL to a file; returns the file.
+    /// A fake browser opener (`xdg-open` on Linux, `open` on macOS) that
+    /// writes the opened URL to a file; returns the file.
     #[cfg(unix)]
     pub fn fake_xdg_open(&self) -> PathBuf {
-        use std::os::unix::fs::PermissionsExt;
         let log = self.dir.path().join("opened");
-        let script = self.bin.join("xdg-open");
-        fs::write(&script, format!("#!/bin/sh\necho \"$1\" >> '{}'\n", log.display())).unwrap();
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        let body = format!("#!/bin/sh\necho \"$1\" >> '{}'\n", log.display());
+        self.script("xdg-open", &body);
+        self.script("open", &body);
         log
+    }
+
+    /// An executable script in the sandbox's `bin`, which comes first on PATH.
+    #[cfg(unix)]
+    fn script(&self, name: &str, body: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        let path = self.bin.join(name);
+        fs::write(&path, body).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
     }
 
     pub fn new_profile(&self, name: &str, extra: &[&str]) {

@@ -27,7 +27,14 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
         }
         bail!("Keine Zwischenablage gefunden (wl-copy, xclip oder xsel installieren) – mit --print ausgeben");
     }
-    #[cfg(not(target_os = "linux"))]
+    // pbcopy ships with macOS; a program on PATH (like on Linux) also lets
+    // the tests replace it instead of writing to the real clipboard.
+    #[cfg(target_os = "macos")]
+    {
+        pipe_to("pbcopy", &[], text)
+            .map_err(|_| anyhow::anyhow!("Zwischenablage nicht erreichbar (pbcopy) – mit --print ausgeben"))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         let mut clipboard = arboard::Clipboard::new().context("Zwischenablage nicht verfügbar")?;
         clipboard.set_text(text.to_string()).context("Kopieren fehlgeschlagen")?;
