@@ -24,6 +24,7 @@ just coverage       # Rust coverage (cargo-llvm-cov)
 | **Real sshd** | a throw-away `sshd` on localhost: a key with a passphrase is asked once and then served by the agent – for the connection test and for `git`; a wrong key is detected; installing a key like `ssh-copy-id` | `crates/core/tests/sshd.rs` |
 | **CLI integration** | every command against a temporary home, with fake `ssh`/`xdg-open` where a network would be needed; exit codes; refusing to ask without a terminal | `crates/cli/tests/cli.rs` |
 | **CLI end-to-end** | the full life cycle through the `keybund` binary only: two clients on github.com, a private default, a server, clone, which, doctor, archive – checked with the real `git`; and a NAS against a throw-away `sshd`: `ssh -G` resolves alias and IP from the generated files, `trust`, `install-key` (once), `test` succeeds and fails for real, `git ls-remote` over the alias, folder rules through a symlink, a linked worktree and a same-prefix sibling | `crates/cli/tests/e2e.rs` |
+| **macOS** | the whole Rust suite once more on a macOS runner, against Apple's `ssh` and `git`; the CLI tests expect what the binary writes there (`gitdir/i:`, the Keychain options). Rendering for macOS is also tested on Linux through `Env::platform` | `.github/workflows/ci.yml` (`rust-macos`) |
 | **IPC (Tauri)** | commands called through Tauri's IPC layer with the mock runtime and the real capabilities: JSON in, JSON out | `app/src-tauri/tests/ipc.rs` |
 | **Contract** | `bindings.ts` matches the Rust commands; the mock backend behaves like the core (validation, rendering, errors) | `app/src-tauri/tests/bindings.rs`, `app/src/lib/mock/backend.test.ts` |
 | **Unit & component (frontend)** | Vitest + Testing Library: whole pages and flows against the mock backend – creating keys, adding uses, tests and their fixes, imports, uninstall; 90 % line coverage required | `app/src/**/*.test.ts(x)` |
@@ -42,6 +43,9 @@ just coverage       # Rust coverage (cargo-llvm-cov)
   generated files (`-F`), so the developer's own config never leaks in. In core tests,
   `Env::with_home` does the same for `Env::ssh_g`: it asks ssh with `-F <home>/.ssh/config` and maps
   paths ssh expanded below the real home back into the test home.
+- **Platforms.** What differs between Linux and macOS goes through `Env::platform`, never `cfg!` in
+  the rendering, so a test on Linux can render and check the macOS files
+  (`Env { platform: Platform::MacOs, ..Env::with_home(dir) }`).
 - **Snapshots for rendering.** A change in `render.rs` shows up as a snapshot diff; review it like
   code, then `just snapshots`.
 - **Frontend tests click like a user.** Query by role and label (`getByRole("button", { name:

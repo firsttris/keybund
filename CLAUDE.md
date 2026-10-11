@@ -81,7 +81,10 @@ Every bug fix comes with a test that fails without it.
 
 ## Keybund specifics
 
-- Linux only (KDE, GNOME; X11 and Wayland). No new runtime dependencies beyond OpenSSH and Git.
+- Linux (KDE, GNOME; X11 and Wayland) and macOS 11+; Windows is not supported yet. No new runtime
+  dependencies beyond OpenSSH and Git. Platform differences go through `Env::platform` (rendering
+  stays pure and the macOS output is tested on Linux); the macOS CI job runs the Rust suite against
+  Apple's ssh and git.
 - Keybund writes only its own files (`~/.ssh/config.d/keybund.conf`, `~/.config/keybund/`) plus one
   `Include` line in `~/.ssh/config` and one `[include]` in `~/.gitconfig`, always with a backup
   first. It never reads a private key.

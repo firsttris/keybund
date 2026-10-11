@@ -112,6 +112,24 @@ From a toolbox/distrobox Keybund uses `flatpak-spawn --host xdg-open`; from an A
 browser with a clean environment, with `gio open` as a fallback. If nothing works, the app shows the
 link to copy.
 
+### macOS: “Keybund” cannot be opened / is damaged
+
+The app is not notarized by Apple yet. Open it once with **System Settings → Privacy & Security →
+Open Anyway**, or remove the download mark: `xattr -dr com.apple.quarantine /Applications/Keybund.app`
+(see [Installation](installation.md)).
+
+### macOS: the passphrase is asked again after every restart
+
+Keybund writes `UseKeychain yes`, which only Apple's own ssh (`/usr/bin/ssh`) understands. If
+`which ssh` shows Homebrew's or MacPorts' ssh, that one ignores the option and the agent starts
+empty after a restart. Use Apple's ssh, or load the key once per session with `ssh-add`.
+
+### macOS: the app asks for a passphrase in a dialog titled “Keybund”
+
+That is Keybund's own password dialog (macOS brings none): ssh needs the passphrase of a key or the
+password of a server, and the app has no terminal to ask in. With `UseKeychain` the passphrase is
+stored in the Keychain afterwards; you are not asked again.
+
 ### Dolphin: `sftp://nas` asks for a password or does not find the host
 
 See the doctor's Dolphin check above. Dolphin also needs the host's key in a known_hosts file it

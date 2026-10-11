@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="docs/banner.png" alt="Keybund: SSH key manager for Linux – the right SSH key, automatically" width="900">
+<img src="docs/banner.png" alt="Keybund: SSH key manager for Linux and macOS – the right SSH key, automatically" width="900">
 
-**The right SSH key, automatically – an SSH key manager for Linux.**<br>
+**The right SSH key, automatically – an SSH key manager for Linux and macOS.**<br>
 One key per GitHub, GitLab or Bitbucket account, per client and per server, the right Git e-mail per folder.<br>
 Plain OpenSSH and Git config underneath: no agent, no daemon, nothing that has to keep running.
 
@@ -59,6 +59,9 @@ chmod +x Keybund_*_amd64.AppImage && ./Keybund_*_amd64.AppImage
 # … or on Debian/Ubuntu
 sudo apt install ./keybund_*_amd64.deb
 
+# macOS: open Keybund_*_universal.dmg, drag Keybund to Applications
+# (not notarized yet: the first start needs “Open Anyway”, see the installation guide)
+
 # Command line (optional, same data as the app)
 tar -xzf keybund-cli-*-x86_64-linux.tar.gz && install -m 755 keybund ~/.local/bin/
 ```
@@ -75,10 +78,11 @@ first ten minutes: [first steps](https://firsttris.github.io/keybund/getting-sta
 | | | Notes |
 |---|---|---|
 | ✅ | Linux x86_64 with glibc 2.35 or newer – Ubuntu 22.04+, Debian 12+, Fedora, Bazzite, Arch, openSUSE … | KDE, GNOME and others, Wayland and X11 |
+| ✅ | macOS 11 or newer, Apple Silicon and Intel | passphrases in the Keychain, own password dialog |
 | ✅ | GitHub, GitLab (also self-hosted), Bitbucket | “add key” opens the right page, tests show the logged-in account |
 | ✅ | Any SSH server, NAS, Raspberry Pi, Gitea, Forgejo | adds the key like `ssh-copy-id` |
 | ✅ | Terminal, VS Code, JetBrains, Dolphin (`sftp://`), `scp`, `rsync` | anything that uses OpenSSH or Git |
-| ⏳ | macOS, Windows | planned |
+| ⏳ | Windows | not yet |
 
 ## ✨ Features
 

@@ -1,6 +1,6 @@
 # Keybund documentation
 
-Keybund is an SSH key manager for Linux. You keep one SSH key per purpose – your private GitHub
+Keybund is an SSH key manager for Linux and macOS. You keep one SSH key per purpose – your private GitHub
 account, each client, your NAS – and tell Keybund where each key belongs: Git folders, GitHub,
 GitLab or Bitbucket accounts, servers. Keybund turns that into plain OpenSSH and Git configuration,
 so `git`, `ssh`, `scp`, `rsync`, your IDE and Dolphin pick the right key on their own – without
@@ -71,6 +71,6 @@ flowchart LR
 - Anyone with a handful of **servers, a NAS or a Raspberry Pi** who wants `ssh nas` to just work –
   in the terminal and in Dolphin (`sftp://nas`).
 
-Keybund runs on Linux (KDE, GNOME and others, X11 and Wayland). The app speaks English and German
-(it follows the system language); the CLI's messages are German for now. macOS and Windows are not
-supported yet.
+Keybund runs on Linux (KDE, GNOME and others, X11 and Wayland) and on macOS 11 or newer. The app
+speaks English and German (it follows the system language); the CLI's messages are German for now.
+Windows is not supported yet.

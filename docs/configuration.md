@@ -155,6 +155,8 @@ changes) so the generated files follow.
 | `allowed_signers` | generated, for verifying SSH-signed commits |
 | `last-tests.json` | the last connection test per host (`<key>/<host>`), shared by app and CLI |
 | `.askpass-*/` | a private helper (mode `700`) that hands a new key's passphrase to `ssh-keygen`; exists only while a key is being created |
+| `askpass-macos` | macOS only: the password dialog (`osascript`) the app gives ssh as `SSH_ASKPASS`, so a test or “add key” can ask for a passphrase or a server password |
+| `.lock` | held while a process changes `profiles.toml` and the generated files |
 
 Keybund does not use environment variables of its own. It respects `HOME`, `XDG_CONFIG_HOME` and
 `SSH_ASKPASS`, and it warns when `GIT_SSH_COMMAND` or `GIT_CONFIG_GLOBAL` are set, because those

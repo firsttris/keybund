@@ -87,6 +87,10 @@ Why each line is there:
 - **`UserKnownHostsFile`** (servers, when known_hosts per key is on) – new host keys go to the key's
   own file, known ones in `~/.ssh/known_hosts` still count. **`UpdateHostKeys yes`** keeps that file
   current when a server rotates its keys (ssh does this only for the default file otherwise).
+- **`IgnoreUnknown UseKeychain` + `UseKeychain yes`** (macOS only, also in `core.sshCommand`) –
+  Apple's ssh keeps the passphrase in the Keychain, so after a restart the key is unlocked without a
+  prompt. `IgnoreUnknown` comes first because OpenSSH from Homebrew or MacPorts does not know
+  `UseKeychain` and would otherwise refuse the whole file.
 - **`Host *`** at the end – ssh's config parser stays in the last `Host` section until the next one.
   Without it, lines that follow the `Include` in your `~/.ssh/config` would only apply to Keybund's
   last host instead of to all hosts.
@@ -143,7 +147,8 @@ needed for libssh before 0.10.2 (Dolphin/KIO on older distributions), which does
   real path of the repository's `.git` directory – a repository entered through a symlink still
   matches. For linked worktrees Git uses the main repository's `.git` directory: a worktree outside
   the folder still belongs to the key of its main repository, and a worktree *inside* the folder
-  whose main repository lies outside gets no key from the folder.
+  whose main repository lies outside gets no key from the folder. On macOS the rule reads
+  `gitdir/i:` – the file system ignores case by default, so `~/Dev/acme` matches too.
 - **`[user]`** only contains what you set. An empty name or e-mail is left out, so the value from
   `~/.gitconfig` applies.
 - Values that need it are quoted (`"…"`) – for example a key path with spaces.

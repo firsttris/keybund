@@ -3,7 +3,7 @@
 # Locally: pip install -r requirements-docs.txt && mkdocs serve
 site_name: Keybund
 site_description: >-
-  SSH key manager for Linux: one SSH key per GitHub, GitLab or Bitbucket account,
+  SSH key manager for Linux and macOS: one SSH key per GitHub, GitLab or Bitbucket account,
   per client and per server, the right Git identity per folder. Writes plain
   OpenSSH and Git config (Include, includeIf, core.sshCommand) – no agent, no
   daemon. Desktop app and CLI, written in Rust.
