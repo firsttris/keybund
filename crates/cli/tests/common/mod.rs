@@ -65,6 +65,11 @@ impl Sandbox {
             .env("GIT_CONFIG_NOSYSTEM", "1")
             .env_remove("XDG_CONFIG_HOME")
             .env_remove("GIT_CONFIG_GLOBAL")
+            // Config given through the environment (`git -c`, GIT_CONFIG_COUNT) – a
+            // CI machine may rewrite git@github.com: to https there.
+            .env_remove("GIT_CONFIG_PARAMETERS")
+            .env_remove("GIT_CONFIG_COUNT")
+            .env_remove("GIT_SSH_COMMAND")
             .env_remove("SSH_AUTH_SOCK")
             .env_remove("DISPLAY")
             .env_remove("WAYLAND_DISPLAY")
@@ -81,6 +86,11 @@ impl Sandbox {
             .env("GIT_CONFIG_NOSYSTEM", "1")
             .env_remove("XDG_CONFIG_HOME")
             .env_remove("GIT_CONFIG_GLOBAL")
+            // Config given through the environment (`git -c`, GIT_CONFIG_COUNT) – a
+            // CI machine may rewrite git@github.com: to https there.
+            .env_remove("GIT_CONFIG_PARAMETERS")
+            .env_remove("GIT_CONFIG_COUNT")
+            .env_remove("GIT_SSH_COMMAND")
             .env_remove("SSH_AUTH_SOCK")
             .env_remove("DISPLAY")
             .env_remove("WAYLAND_DISPLAY")
@@ -261,6 +271,11 @@ fn wait_for(cond: impl Fn() -> bool) {
 /// account; the key install writes to that same file instead of
 /// `~/.ssh/authorized_keys` (the `KEYBUND_AUTHORIZED_KEYS` test hook).
 pub fn start_sshd(sshd: &Path, dir: &Path, authorized: &Path) -> (Killed, u16) {
+    start_sshd_with(sshd, dir, authorized, "")
+}
+
+/// `start_sshd` with more `sshd_config` lines (`MaxAuthTries`, another `ListenAddress`).
+pub fn start_sshd_with(sshd: &Path, dir: &Path, authorized: &Path, extra: &str) -> (Killed, u16) {
     let host_key = dir.join("host_ed25519");
     assert!(std::process::Command::new("ssh-keygen")
         .args(["-q", "-t", "ed25519", "-N", "", "-f"])
@@ -276,7 +291,7 @@ pub fn start_sshd(sshd: &Path, dir: &Path, authorized: &Path) -> (Killed, u16) {
             "Port {port}\nListenAddress 127.0.0.1\nHostKey {}\nAuthorizedKeysFile {}\nPidFile none\n\
              PasswordAuthentication no\nKbdInteractiveAuthentication no\nPubkeyAuthentication yes\n\
              UsePAM no\nStrictModes no\nPermitRootLogin prohibit-password\n\
-             SetEnv KEYBUND_AUTHORIZED_KEYS={}\n",
+             SetEnv KEYBUND_AUTHORIZED_KEYS={}\n{extra}",
             host_key.display(),
             authorized.display(),
             authorized.display()
