@@ -83,8 +83,7 @@ Keybund can take back everything it wrote **before** you delete the program:
 
 === "App"
 
-    **Einstellungen → Keybund entfernen** (Settings → Remove Keybund) shows exactly what will be
-    removed. Optionally restore `~/.ssh/config` and `~/.gitconfig` from the backups taken before
+    **Settings → Advanced → Remove Keybund** shows exactly what will be removed. Optionally restore `~/.ssh/config` and `~/.gitconfig` from the backups taken before
     Keybund's first change, and delete Keybund's own list of keys.
 
 === "CLI"

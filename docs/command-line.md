@@ -1,8 +1,9 @@
 # Command line
 
 `keybund` does everything the app does, from the terminal. It works on the same
-`~/.config/keybund/profiles.toml`, so you can switch between app and CLI at any time. Messages are in
-German; `keybund --help` and `keybund <command> --help` list every option.
+`~/.config/keybund/profiles.toml`, so you can switch between app and CLI at any time. Its messages
+are in German for now (the app speaks English and German); `keybund --help` and
+`keybund <command> --help` list every option.
 
 ```text
 keybund list [--all]                       keys with fingerprint, Git folders and hosts

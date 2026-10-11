@@ -99,8 +99,10 @@ used.)
 | `known_hosts_per_profile` | `true` | Host keys of each key's servers go to `~/.ssh/known_hosts.d/<id>` (servers only; GitHub & co. stay in `~/.ssh/known_hosts`). |
 | `absolute_ssh_include` | `false` | Write the include in `~/.ssh/config` with the full path instead of `~` – for Dolphin/KIO with libssh before 0.10.2. |
 
-Only values that differ from the default are written. Change them in the app (**Einstellungen**) or
-with `keybund config <name> <value>` (names with `-`: `projects-dir`, …).
+Only values that differ from the default are written. Change them in the app (**Settings**) or
+with `keybund config <name> <value>` (names with `-`: `projects-dir`, …). The app's language is
+not stored here: it is a setting of the app itself (**Settings → Language**), kept per user in the
+app's local storage.
 
 ## Validation
 

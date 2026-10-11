@@ -29,7 +29,7 @@ exactly that key, not everything in the agent. That matters for security as much
 - GitHub cannot log you in as the wrong account because an unrelated key happened to be tried first.
 
 The connection test goes further: it reads from `ssh -v` *which* key the server accepted and
-reports a login with another key as a failure (“Angemeldet, aber mit … statt mit diesem Key”).
+reports a login with another key as a failure (“Logged in, but with … instead of this key”).
 During the test, password and keyboard-interactive logins, Kerberos (GSSAPI), host-based login and
 shared master connections (`ControlPath`) are switched off, so nothing but the key itself can make a
 test pass.
@@ -45,7 +45,7 @@ sees. Keybund does not:
   compare.
 - **Every other host**: before the first connection – a test, adding a key, `keybund trust` – Keybund
   fetches the host keys with `ssh-keyscan` and shows their **SHA256 fingerprints**. Only after you
-  confirm (**Fingerprint stimmt**) are they stored, and ssh connects with
+  confirm (**Fingerprint matches**) are they stored, and ssh connects with
   `StrictHostKeyChecking=yes`. Compare the fingerprint with what the server shows locally:
   `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, or your hoster's console.
 - **A changed host key** is never accepted silently: ssh refuses the connection and the test says
@@ -54,7 +54,7 @@ sees. Keybund does not:
 
 ### known_hosts per key
 
-With **Server-Fingerprints pro Key** (on by default), the host keys of a key's servers are stored in
+With **Server fingerprints per key** (on by default), the host keys of a key's servers are stored in
 `~/.ssh/known_hosts.d/<key>`, and its `Host` blocks read
 
 ```sshconfig

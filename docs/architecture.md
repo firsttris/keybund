@@ -113,9 +113,12 @@ flowchart LR
 - **One writer at a time.** All writing commands take a global lock (`api::writing()`), and on the
   frontend all mutations share one TanStack Query scope, so they run strictly one after another and
   each starts from fresh data. Two quick clicks never work on an outdated `profiles.toml`.
-- **Errors with a kind.** Every core error has a stable `kind` (`duplicate_alias`,
-  `nested_folders`, `key_missing`, …) next to its German message, so the frontend can react to
-  specific errors without parsing text.
+- **Keys, not text.** The backend never sends text for people. Errors, doctor checks, test results and
+  notes are messages – a catalog key with arguments (`{ "key": "probe_connected", "args": { "account":
+  "@octocat" } }`) – and the frontend renders them in the user's language with the same Paraglide
+  catalogs as its own texts. Errors also carry a stable `kind` (`duplicate_alias`, `nested_folders`,
+  …) to react to without parsing anything. The CLI renders the same keys from the same catalogs, so
+  every text exists once per language.
 - **Server state, not client state.** The frontend keeps no copy of the configuration. TanStack
   Query caches what the backend returns and invalidates everything after a write.
 - **The mock backend.** Outside Tauri (browser preview, Vitest, Playwright, the screenshots) the

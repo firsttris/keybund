@@ -70,5 +70,6 @@ flowchart LR
 - Anyone with a handful of **servers, a NAS or a Raspberry Pi** who wants `ssh nas` to just work –
   in the terminal and in Dolphin (`sftp://nas`).
 
-Keybund runs on Linux (KDE, GNOME and others, X11 and Wayland). The app's interface is in German for
-now; the CLI's messages too. macOS and Windows are not supported yet.
+Keybund runs on Linux (KDE, GNOME and others, X11 and Wayland). The app speaks English and German
+(it follows the system language); the CLI's messages are German for now. macOS and Windows are not
+supported yet.

@@ -74,8 +74,9 @@ HOME=$(mktemp -d) cargo run -p keybund-cli -- doctor
 ### A change in the UI
 
 Run `just dev-mock` and open http://localhost:1420 – the full app against demo data, with hot
-reload, in any browser. Texts are German; keep them short and explain in plain words what happens
-(the app is meant for people who are not ssh experts). Components come from shadcn/ui (zinc theme,
+reload, in any browser. Every text is a message in both languages (see [Translations](#translations));
+keep texts short and explain in plain words what happens (the app is meant for people who are not
+ssh experts). Components come from shadcn/ui (zinc theme,
 dark). After a visible change, `just screenshots` updates the documentation pictures.
 
 ### The mock backend
@@ -96,7 +97,34 @@ console, `window.__keybundMock.state` shows and changes its state.
   `app/scripts/screenshots.mjs` with Playwright) from the mock's demo data, with a fixed clock, so an
   unchanged page gives an identical picture. The workflow **Update screenshots** (Actions → Run
   workflow) runs it in the official Playwright image and commits the pictures that changed.
-- The README and the documentation are in English; the app's texts are German.
+- The README, the documentation and the screenshots are in English; the app is English and German.
+
+## Translations
+
+The app speaks English and German. All texts live in two catalogs, **`app/messages/de.json`** and
+**`app/messages/en.json`** ([inlang message format](https://inlang.com/m/reootnfj/plugin-inlang-messageFormat)),
+compiled by [Paraglide JS](https://inlang.com/m/gerre34r/library-inlang-paraglideJs) into typed
+functions in `app/src/paraglide` (generated, not committed; `pnpm i18n` or any Vite run compiles them).
+
+- **Frontend texts**: `m.key()` in components – `m.settings_language()`, `m.home_connected({ when })`.
+  Plurals are message variants on the input `n`; `rich(m.key, { name: <b>…</b> })` puts elements into
+  a text.
+- **Texts from Rust**: the backend sends messages, never text. In Rust, `msg!("doctor_sshDir_bad",
+  mode = "755")` builds a `Msg { key, args }`; an argument can be another message
+  (`.nested("field", msg!("field_alias"))`). The frontend renders it with `t(msg)`, the CLI through
+  `Display`, from the same catalogs (embedded in the binary). Messages used from Rust must be plain
+  strings with `{placeholders}` – no plural variants.
+- **The language** comes from the setting (localStorage `keybund_lang`) or the system: German for
+  `de-*`, English otherwise. Switching re-renders the app without a reload.
+- **Tests read German**: Vitest (`src/test/setup.ts`) and Playwright (`playwright.config.ts`) run in
+  German. `crates/core/tests/i18n.rs` and `src/lib/i18n.test.ts` fail when a key is missing in one
+  language, placeholders differ, a message is unused or Rust uses a key that does not exist;
+  `e2e/i18n.spec.ts` walks the English app looking for German left behind.
+
+To add a text: add the key to both catalogs (`area_name`, e.g. `settings_languageHint`), use it, run
+`pnpm test`. To add a language: add it to `locales` in `app/project.inlang/settings.json`, create
+`app/messages/<lang>.json` with every key, extend `LANGS` and `systemLang()` in `src/lib/i18n.ts` and
+`Lang` in `crates/core/src/i18n.rs`.
 
 ## Continuous integration
 

@@ -30,7 +30,7 @@ added at GitHub, GitLab or Bitbucket by you, in your browser – Keybund copies 
 
 Ed25519: short, fast, secure, and accepted by GitHub, GitLab, Bitbucket and every OpenSSH server of
 the last ten years. You do not need RSA unless a very old server requires it; you can still take
-over an existing RSA or ECDSA key (**Vorhandenen Key nehmen**).
+over an existing RSA or ECDSA key (**Use an existing key**).
 
 ## What happens to my existing `~/.ssh/config` and `~/.gitconfig`?
 
@@ -41,7 +41,7 @@ Details: [What Keybund writes](generated-files.md).
 
 ## Can I go back?
 
-Yes: **Einstellungen → Keybund entfernen** or `keybund uninstall` removes every generated file and
+Yes: **Settings → Advanced → Remove Keybund** or `keybund uninstall` removes every generated file and
 both include lines, optionally restoring the two files from their backups. Your keys stay.
 
 ## Can I edit the generated files?
@@ -70,18 +70,20 @@ before 0.10.2 the doctor offers the include with the full path.
 
 ## Does Keybund support FIDO2 / YubiKey keys (`ed25519-sk`)?
 
-Existing `-sk` keys can be taken over like any other key file. Creating them in Keybund is not
-supported yet.
+Existing `-sk` keys can be taken over like any other key file (**Use an existing key**). Creating them
+in Keybund is not supported yet.
 
 ## Is there a Windows or macOS version?
 
 Not yet. Keybund is developed on Fedora/Bazzite and tested on Ubuntu in CI. macOS and then Windows
 are planned.
 
-## Why is the app in German?
+## Which languages does the app speak?
 
-For now it is German only. The documentation is in English, and an English interface is
-planned – contributions are welcome.
+English and German. It follows the system language (German for `de_*`, English for everything else)
+and can be switched under **Settings → Language**; error messages, doctor checks and connection tests
+follow too. The command line is in German for now. A new language is one more
+`app/messages/<lang>.json` – see [Development](development.md#translations).
 
 ## How is Keybund licensed?
 

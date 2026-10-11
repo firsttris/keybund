@@ -27,6 +27,7 @@ just coverage       # Rust coverage (cargo-llvm-cov)
 | **IPC (Tauri)** | commands called through Tauri's IPC layer with the mock runtime and the real capabilities: JSON in, JSON out | `app/src-tauri/tests/ipc.rs` |
 | **Contract** | `bindings.ts` matches the Rust commands; the mock backend behaves like the core (validation, rendering, errors) | `app/src-tauri/tests/bindings.rs`, `app/src/lib/mock/backend.test.ts` |
 | **Unit & component (frontend)** | Vitest + Testing Library: whole pages and flows against the mock backend – creating keys, adding uses, tests and their fixes, imports, uninstall; 90 % line coverage required | `app/src/**/*.test.ts(x)` |
+| **Translations** | both catalogs complete with the same placeholders, every message used, every key used in Rust present; language detection and switching; an English browser walks every page, dialog and test result looking for German left behind | `crates/core/tests/i18n.rs`, `app/src/lib/i18n.test.ts`, `app/e2e/i18n.spec.ts` |
 | **End-to-end (frontend)** | Playwright in Chromium: every flow on a desktop and a narrow window, including layout checks | `app/e2e/` |
 
 ## Writing tests
@@ -39,7 +40,9 @@ just coverage       # Rust coverage (cargo-llvm-cov)
 - **Snapshots for rendering.** A change in `render.rs` shows up as a snapshot diff; review it like
   code, then `just snapshots`.
 - **Frontend tests click like a user.** Query by role and label (`getByRole("button", { name:
-  "Testen" })`), not by CSS classes; the German labels are part of the contract.
+  "Testen" })`), not by CSS classes. The tests run in German (`src/test/setup.ts`,
+  `playwright.config.ts`); the English texts are covered by `src/lib/i18n.test.ts` and
+  `e2e/i18n.spec.ts`.
 - **Keep the mock honest.** A new backend behaviour gets a contract test in `backend.test.ts` and the
   same behaviour in Rust – otherwise the frontend tests would pass against a backend that does not
   exist.

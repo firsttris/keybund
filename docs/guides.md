@@ -12,9 +12,9 @@ or worse, it works with the wrong account.
 
 **With Keybund.** One key per account, each with its own Git folder:
 
-1. **Neuer Key** “Private” → **Git-Ordner** `~/dev/private/` → **GitHub** → **Key eintragen**, paste it
+1. **New key** “Private” → **Git folder** `~/dev/private/` → **GitHub** → **Add key**, paste it
    into your private account.
-2. **Neuer Key** “Work” → **Git-Ordner** `~/dev/work/` → **GitHub** → **Key eintragen**, paste it into
+2. **New key** “Work” → **Git folder** `~/dev/work/` → **GitHub** → **Add key**, paste it into
    the work account.
 3. Clone work repositories into `~/dev/work/`, private ones into `~/dev/private/`. The remote URL stays
    the normal `git@github.com:org/repo.git`.
@@ -41,7 +41,7 @@ with exactly the work key (`IdentitiesOnly=yes` stops ssh from trying others).
 
 ??? question "And without folders? The alias way"
     If repositories of both accounts must live side by side, give the Git account an **alias**
-    instead (**Git-Konto** → alias `github-work`). Keybund writes
+    instead (**Git account** → alias `github-work`). Keybund writes
 
     ```sshconfig
     Host github-work
@@ -60,8 +60,8 @@ with exactly the work key (`IdentitiesOnly=yes` stops ssh from trying others).
 ## A different Git e-mail per client
 
 Commits in client repositories should carry the client's e-mail, everything else your own. On the
-key's page, the first Git folder asks for **Name in Commits** and **E-Mail in Commits**; later you
-change them under **Git-Identität**. Empty fields mean “as in `~/.gitconfig`”, so you can set only
+key's page, the first Git folder asks for **Name in commits** and **E-mail in commits**; later you
+change them under **Git identity**. Empty fields mean “as in `~/.gitconfig`”, so you can set only
 the e-mail and keep your name.
 
 Your global identity in `~/.gitconfig` is never touched; Keybund only reads it to prefill the form
@@ -70,9 +70,9 @@ type the folder into the sidebar search.
 
 ## A server, a NAS or a Raspberry Pi
 
-**Neuer Key** “NAS” (or take your existing `id_ed25519`) → **Server**: hostname or IP `192.168.1.20`,
-alias `nas`, user `admin`, port if it is not 22 → **Key eintragen** (asks the NAS's password once and
-puts the key into `~/.ssh/authorized_keys` there) → **Testen**.
+**New key** “NAS” (or take your existing `id_ed25519`) → **Server**: hostname or IP `192.168.1.20`,
+alias `nas`, user `admin`, port if it is not 22 → **Add key** (asks the NAS's password once and
+puts the key into `~/.ssh/authorized_keys` there) → **Test**.
 
 ```sshconfig title="~/.ssh/config.d/keybund.conf"
 # Key: NAS
@@ -92,21 +92,21 @@ into its own file `~/.ssh/known_hosts.d/nas` and leaves with the key when you ar
 
 !!! tip "Dolphin does not find `sftp://nas`?"
     Dolphin reads the ssh configuration through libssh. Versions before 0.10.2 (e.g. Ubuntu 22.04)
-    do not understand `~` in `Include`. The doctor detects this and offers **Include mit vollem Pfad**
-    (include with the full path).
+    do not understand `~` in `Include`. The doctor detects this and offers **Include with the full
+    path**.
 
 ## A self-hosted GitLab (or Gitea, Forgejo)
 
-**Git-Konto** → provider GitLab, hostname `gitlab.company.com` (port if it is not 22). Combined with a
-Git folder this works like GitHub above. **Key eintragen** opens
+**Git account** → provider GitLab, hostname `gitlab.company.com` (port if it is not 22). Combined with a
+Git folder this works like GitHub above. **Add key** opens
 `https://gitlab.company.com/-/user_settings/ssh_keys`. For Gitea, Forgejo or any other Git server,
 add it as a **Server** (with its SSH user, usually `git`): Keybund writes a `Host` block for it, and
-you add the public key in its web interface yourself (**Pubkey kopieren** copies it).
+you add the public key in its web interface yourself (**Copy public key** copies it).
 
 ## Signing commits with your SSH key
 
 GitHub and GitLab show commits as **Verified** when they are signed with a key that is registered as
-a *signing key* in your account. On the key page, switch on **Commits signieren** (sign commits);
+a *signing key* in your account. On the key page, switch on **Sign commits**;
 it needs an e-mail in the key's Git identity. Keybund then adds to the key's gitconfig:
 
 ```ini
@@ -128,7 +128,7 @@ automatically.
 ## Cloning into the right folder with the right key
 
 `includeIf "gitdir:…"` only applies once a repository exists – so a plain `git clone` of a client
-repository would still use the wrong key. **Repo klonen** (clone repo) or
+repository would still use the wrong key. **Clone repository** or
 
 ```sh
 keybund clone git@github.com:client-c/app.git
@@ -142,10 +142,10 @@ The key is passed for this one command only; afterwards the folder rule takes ov
 
 ## When a client project ends
 
-On the key's page, **Archivieren** (archive) moves the key pair to `~/.ssh/archive/`, removes its Git
+On the key's page, **Archive** moves the key pair to `~/.ssh/archive/`, removes its Git
 folders and `Host` blocks from the generated files and moves its known_hosts file along. The app (or
 `keybund archive client-c`) then lists the pages where you should delete the key at GitHub, GitLab
-or Bitbucket. Archived keys stay visible under **Archiv** in the sidebar.
+or Bitbucket. Archived keys stay visible under **Archive** in the sidebar.
 
 ## Using the CLI in scripts or dotfiles
 

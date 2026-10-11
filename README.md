@@ -63,9 +63,9 @@ sudo apt install ./keybund_*_amd64.deb
 tar -xzf keybund-cli-*-x86_64-linux.tar.gz && install -m 755 keybund ~/.local/bin/
 ```
 
-Then: **Neuer Key** (new key) → give it a name → say where it is used. Already have a
-`~/.ssh/config` full of `Host` blocks? Keybund offers to take them over in one click and leaves your
-key files where they are. The app's interface is in German for now.
+Then: **New key** → give it a name → say where it is used. Already have a `~/.ssh/config` full of
+`Host` blocks? Keybund offers to take them over in one click and leaves your key files where they are.
+The app speaks English and German and follows your system language.
 
 Requirements, building from source and uninstalling: [installation guide](https://firsttris.github.io/keybund/installation.html) ·
 first ten minutes: [first steps](https://firsttris.github.io/keybund/getting-started.html).
@@ -98,6 +98,7 @@ first ten minutes: [first steps](https://firsttris.github.io/keybund/getting-sta
 | 🗄️ **Archive** | When a project ends: key to `~/.ssh/archive/`, configuration gone, links to remove it at the provider |
 | 🛡️ **Host keys** | Fingerprints confirmed before the first connection, GitHub/GitLab/Bitbucket keys pinned, known_hosts per key |
 | ⌨️ **CLI** | Everything also as `keybund …`, scriptable with `--yes` and exit codes |
+| 🌍 **English and German** | Follows the system language, switchable in the settings – error messages, doctor and connection tests included |
 
 ## 📸 Screenshots
 

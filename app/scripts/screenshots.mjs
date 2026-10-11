@@ -1,8 +1,8 @@
 // Takes the pictures in docs/ (README, documentation, banner, social preview)
 // from the demo data of the mock backend. scripts/screenshots.sh serves the
 // build; by hand: node scripts/screenshots.mjs <docs dir> [base url]
-// The UI is German; the pictures show it as it is. The clock is fixed, so an
-// unchanged page gives an unchanged picture.
+// The pictures show the English UI (the browser's language decides). The clock
+// is fixed, so an unchanged page gives an unchanged picture.
 import { readFileSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
@@ -16,7 +16,7 @@ async function newPage(options = {}) {
   const ctx = await browser.newContext({
     viewport: { width: 1280, height: 800 },
     deviceScaleFactor: 1.5,
-    locale: "de-DE",
+    locale: "en-US",
     timezoneId: "Europe/Berlin",
     colorScheme: "dark",
     ...options,
@@ -43,32 +43,32 @@ const open = async (path) => {
 
 // A key and everything it is used for: the heart of the app.
 await open("/profile/privat");
-await page.getByRole("heading", { name: "Wo wird dieser Key benutzt?" }).waitFor();
+await page.getByRole("heading", { name: "Where is this key used?" }).waitFor();
 await shot(page, "key");
 
 // The connection test explains step by step what ssh did.
 
-await page.getByRole("button", { name: "Testen" }).first().click();
-await page.getByText("Details: Was beim Test passiert ist").first().waitFor();
-await page.getByText("Details: Was beim Test passiert ist").first().click();
+await page.getByRole("button", { name: "Test", exact: true }).first().click();
+await page.getByText("Details: what happened during the test").first().waitFor();
+await page.getByText("Details: what happened during the test").first().click();
 await page
-  .getByText("Selbst ausprobieren")
+  .getByText("Try it yourself")
   .first()
   .evaluate((el) => el.scrollIntoView({ block: "center" }));
 await shot(page, "test", { wait: 600 });
 
 // The config Keybund writes for this key.
 await open("/profile/privat");
-await page.getByRole("tab", { name: "Generierte Config" }).click();
+await page.getByRole("tab", { name: "Generated config" }).click();
 await page.evaluate(() => document.activeElement?.blur());
 await shot(page, "config");
 
 await open("/");
-await page.getByRole("heading", { name: "Deine SSH-Keys" }).waitFor();
+await page.getByRole("heading", { name: "Your SSH keys" }).waitFor();
 await shot(page, "home");
 
 await open("/new");
-await page.getByLabel("Name").first().fill("Kunde C");
+await page.getByLabel("Name").first().fill("Client C");
 await page.evaluate(() => document.activeElement?.blur());
 await shot(page, "new-key");
 
@@ -77,17 +77,17 @@ await page.getByText("acme_ed25519").first().waitFor();
 await shot(page, "which");
 
 await open("/import");
-await page.getByRole("button", { name: /Keys? übernehmen/ }).waitFor();
+await page.getByRole("button", { name: /Take over \d+ keys?/ }).waitFor();
 await shot(page, "import");
 
 await open("/doctor");
-await page.getByRole("button", { name: "Erneut prüfen" }).waitFor();
+await page.getByRole("button", { name: "Check again" }).waitFor();
 await shot(page, "doctor");
 
 await open("/clone");
-await page.getByLabel("Repo-URL").fill("git@github.com:kunde-b/app.git");
-await page.getByRole("button", { name: "Prüfen" }).click();
-await page.getByLabel("Zielordner").waitFor();
+await page.getByLabel("Repository URL").fill("git@github.com:kunde-b/app.git");
+await page.getByRole("button", { name: "Check", exact: true }).click();
+await page.getByLabel("Target folder").waitFor();
 await page.evaluate(() => document.activeElement?.blur());
 await shot(page, "clone");
 
