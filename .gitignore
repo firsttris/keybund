@@ -7,3 +7,4 @@ node_modules/
 /app/playwright-report/
 /app/test-results/
 /app/coverage/
+test-results/
