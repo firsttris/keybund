@@ -39,7 +39,9 @@ just coverage       # Rust coverage (cargo-llvm-cov)
   Tests that need `ssh`, `sshd` or `git` skip themselves when the program is missing.
   ssh reads `~/.ssh/config` from the passwd entry, not from `HOME`: a test in a sandbox that runs
   the real `ssh` through the binary uses `Sandbox::ssh_shim()`, which hands ssh the sandbox's
-  generated files (`-F`), so the developer's own config never leaks in.
+  generated files (`-F`), so the developer's own config never leaks in. In core tests,
+  `Env::with_home` does the same for `Env::ssh_g`: it asks ssh with `-F <home>/.ssh/config` and maps
+  paths ssh expanded below the real home back into the test home.
 - **Snapshots for rendering.** A change in `render.rs` shows up as a snapshot diff; review it like
   code, then `just snapshots`.
 - **Frontend tests click like a user.** Query by role and label (`getByRole("button", { name:

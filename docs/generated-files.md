@@ -233,4 +233,5 @@ back. Removing taken-over blocks after an import uses the same backup.
   `git -c` for that one command.
 - **`~/.ssh/known_hosts`** – except that the pinned host keys of GitHub, GitLab.com and Bitbucket
   are appended when you first test against them, and server host keys you confirmed when known_hosts
-  per key is off.
+  per key is off. If your own config sets `UserKnownHostsFile`, they go to the first file named
+  there instead (`ssh -G` says which), because that is the one ssh reads.

@@ -117,7 +117,8 @@ variables that switch Keybund off, the agent, old entries in `~/.ssh/config`, Do
 
 ## Clone repository
 
-Paste an SSH URL (`git@github.com:org/repo.git` or `ssh://…`), click **Check**, pick the key if
+Paste an SSH URL (`git@github.com:org/repo.git` or `ssh://…`; an IPv6 address goes in brackets,
+`ssh://git@[2001:db8::1]/org/repo.git`), click **Check**, pick the key if
 several fit and adjust the target folder. Keybund clones with that key directly, because `includeIf`
 cannot apply before the repository exists.
 

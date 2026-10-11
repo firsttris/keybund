@@ -52,7 +52,7 @@ also shows archived keys.
 ### `keybund show <KEY>`
 
 Everything about one key: file, fingerprint, age, comment, Git identity, signing, folders, hosts, the
-last connection test and the public key line, ready to paste.
+last connection test of each host and the public key line, ready to paste.
 
 ### `keybund new`
 
@@ -137,8 +137,8 @@ key at the provider. A key file that another active key still uses stays where i
 Tests the connection to each host of the key (or only `H`) with exactly this key
 (`IdentitiesOnly=yes`, no password login). Prints the result per host – “Verbunden als @user” on
 GitHub/GitLab/Bitbucket, “Anmeldung erfolgreich” on a server – and, on failure, the steps of the
-connection, the command to try yourself and the next step (e.g. `keybund install-key …`). The result
-is remembered and shown in the app.
+connection, the command to try yourself and the next step (e.g. `keybund install-key …`). Each
+host's result is remembered (also with `--host`) and shown on its row in the app.
 
 A login that succeeds with a *different* key (one from your own `~/.ssh/config` or the agent) counts
 as a failure: Keybund reads from `ssh -v` which key the server accepted.
