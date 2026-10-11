@@ -92,7 +92,8 @@ jobs:
             target/aarch64-apple-darwin/release/keybund target/x86_64-apple-darwin/release/keybund
       # Ad-hoc signed ("signingIdentity": "-" in tauri.conf.json), not notarized: Gatekeeper asks
       # once, see docs/installation.md.
-      - run: pnpm tauri build --target universal-apple-darwin --bundles dmg
+      # app too: the dmg alone keeps no .app around for the smoke test below.
+      - run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg
         working-directory: app
       # Nobody has to find out on their Mac that the app does not start: both architectures are in
       # it, the CLI answers, and the app opens its window and keeps running (a throw-away HOME,
@@ -100,7 +101,8 @@ jobs:
       - name: Smoke test · CLI and app start on macOS
         run: |
           set -euo pipefail
-          app=$(ls -d target/universal-apple-darwin/release/bundle/macos/*.app | head -1)
+          app=$(find target/universal-apple-darwin/release/bundle -maxdepth 2 -name '*.app' -type d | head -1)
+          [ -n "$app" ] || { echo "No .app in the bundle folder"; find target/universal-apple-darwin/release/bundle -maxdepth 2; exit 1; }
           bin=$(find "$app/Contents/MacOS" -type f -perm -u+x | head -1)
           for b in target/universal/keybund "$bin"; do
             archs=$(lipo -archs "$b")
