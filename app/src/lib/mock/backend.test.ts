@@ -79,7 +79,10 @@ describe("mock backend contract", () => {
     const p = b.state.profiles[0];
     const host = { alias: null, hostname: "github.com", user: null, port: 443, provider: "github" as const };
     await b.invoke("update_profile", { profile: { ...p, hosts: [host] } as Profile });
-    const result = (await b.invoke("test_connection", { id: p.id, host: null })) as { success: boolean; message: unknown };
+    const result = (await b.invoke("test_connection", { id: p.id, host: null })) as {
+      success: boolean;
+      message: unknown;
+    };
     expect(result.success).toBe(false);
     expect(result.message).toMatchObject({ key: "probe_hostKeyUnconfirmed" });
   });
@@ -97,7 +100,10 @@ describe("mock backend contract", () => {
   it("archives and removes the configs", async () => {
     const b = backend();
     const res = await b.invoke("archive_profile", { id: "kunde-b" });
-    expect(res).toMatchObject({ key_path: "~/.ssh/archive/kunde-b_ed25519", remove_key_urls: ["https://github.com/settings/keys"] });
+    expect(res).toMatchObject({
+      key_path: "~/.ssh/archive/kunde-b_ed25519",
+      remove_key_urls: ["https://github.com/settings/keys"],
+    });
     expect(b.state.applied.has("~/.config/keybund/git/kunde-b.gitconfig")).toBe(false);
     expect(((await b.invoke("plan_changes")) as Plan).changes).toEqual([]);
     await expect(b.invoke("archive_profile", { id: "kunde-b" })).rejects.toMatchObject({ kind: "archived" });
@@ -106,8 +112,14 @@ describe("mock backend contract", () => {
   it("resolves folders and hosts", async () => {
     const b = backend();
     expect(await b.invoke("which", { query: "~/dev/acme/repo" })).toMatchObject({ profile_id: "acme", mode: "folder" });
-    expect(await b.invoke("which", { query: "~/elsewhere" })).toMatchObject({ profile_id: "privat", via: { key: "which_viaDefault" } });
-    expect(await b.invoke("which", { query: "meinserver" })).toMatchObject({ profile_id: "privat", hostname: "1.2.3.4" });
+    expect(await b.invoke("which", { query: "~/elsewhere" })).toMatchObject({
+      profile_id: "privat",
+      via: { key: "which_viaDefault" },
+    });
+    expect(await b.invoke("which", { query: "meinserver" })).toMatchObject({
+      profile_id: "privat",
+      hostname: "1.2.3.4",
+    });
   });
 
   it("previews clones", async () => {
@@ -116,7 +128,10 @@ describe("mock backend contract", () => {
       matched: true,
       candidates: [{ profile_id: "acme", target: "~/dev/acme/app" }],
     });
-    expect(await b.invoke("clone_preview", { url: "https://github.com/a/b" })).toMatchObject({ matched: true, repo: { name: "b" } });
+    expect(await b.invoke("clone_preview", { url: "https://github.com/a/b" })).toMatchObject({
+      matched: true,
+      repo: { name: "b" },
+    });
     await expect(b.invoke("clone_preview", { url: "kaputt" })).rejects.toMatchObject({ kind: "invalid_url" });
   });
 
@@ -150,7 +165,9 @@ describe("mock backend contract", () => {
   it("makes a plain git host the default when there is none", async () => {
     const b = backend();
     b.state.defaultProfile = null;
-    b.state.sshBlocks = [{ pattern: "github.com", hostname: "github.com", identity: "~/.ssh/id_ed25519", comment: "Privat" }];
+    b.state.sshBlocks = [
+      { pattern: "github.com", hostname: "github.com", identity: "~/.ssh/id_ed25519", comment: "Privat" },
+    ];
     const [p] = (await b.invoke("import_proposals")) as ImportProposal[];
     expect(p.make_default).toBe(true);
     expect(p.profile.hosts[0].alias).toBeNull();

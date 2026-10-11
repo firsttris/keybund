@@ -24,12 +24,13 @@ test("resolves a folder and a host", async ({ app }) => {
 test("doctor fixes the include position", async ({ app }) => {
   const todo = app.getByRole("list", { name: "Zu tun" });
   await expect(todo).toContainText("Include steht nicht ganz oben");
-  await expect(app.getByLabel("1 Hinweis")).toBeVisible();
+  const doctorLink = app.getByRole("link", { name: /^Doctor/ });
+  await expect(doctorLink).toHaveAccessibleName(/1 Hinweis/);
   await todo.getByRole("link", { name: "Zum Doctor" }).click();
   await app.getByRole("button", { name: "Include steht nicht ganz oben beheben" }).click();
   await expect(app.getByText("Include steht ganz oben in ~/.ssh/config")).toBeVisible();
   await expect(app.getByText("Alles in Ordnung")).toBeVisible();
-  await expect(app.getByLabel("1 Hinweis")).toHaveCount(0);
+  await expect(doctorLink).toHaveAccessibleName("Doctor");
 });
 
 test("clones into the matching profile", async ({ app }) => {
@@ -66,7 +67,9 @@ test("changes the default profile", async ({ app }) => {
   await expect(app.getByText("Git und ssh benutzen es ab sofort.")).toBeVisible();
   await app.goto("/#/");
   await expect(app.getByText("Configs aktuell")).toBeVisible();
-  await expect(app.getByRole("main").getByRole("list", { name: "Acme wird benutzt für" })).toContainText("Standard für Git");
+  await expect(app.getByRole("main").getByRole("list", { name: "Acme wird benutzt für" })).toContainText(
+    "Standard für Git",
+  );
 });
 
 test("lists existing keys with their usage", async ({ app }) => {
@@ -81,7 +84,9 @@ test("layout has no horizontal scrolling", async ({ app }) => {
   for (const route of ["/", "/profile/privat", "/new", "/which", "/clone", "/apply", "/settings", "/doctor"]) {
     await app.goto(`/#${route}`);
     await app.waitForLoadState("networkidle");
-    const overflow = await app.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    const overflow = await app.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
     expect(overflow, route).toBeLessThanOrEqual(0);
   }
 });
@@ -111,7 +116,9 @@ test("takes over the existing ~/.ssh/config", async ({ app }) => {
   await expect(app.getByRole("status")).toContainText("Alles übernommen: 2 Keys, alte Einträge entfernt");
   await app.getByText("Geänderte Dateien").click();
   await expect(app.getByText("Backup: ~/.ssh/config.keybund-backup")).toBeVisible();
-  await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Nebenjob Account/ })).toBeVisible();
+  await expect(
+    app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Nebenjob Account/ }),
+  ).toBeVisible();
   // The banner is gone.
   await app.goto("/#/");
   await expect(app.getByText(/mit eigenem Key, die Keybund/)).toHaveCount(0);

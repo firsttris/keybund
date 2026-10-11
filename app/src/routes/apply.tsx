@@ -42,7 +42,14 @@ export function ApplyPage() {
       {apply.isError && (
         <div className="flex flex-wrap items-center gap-3">
           <FieldError>{errorMessage(apply.error)}</FieldError>
-          <Button variant="outline" size="sm" onClick={() => (apply.reset(), plan.refetch())}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              apply.reset();
+              plan.refetch();
+            }}
+          >
             {m.apply_reload()}
           </Button>
         </div>

@@ -34,7 +34,8 @@ OpenSSH and Git, and for the desktop app the WebKitGTK development files.
 just dev            # the desktop app with hot reload (Tauri + Vite)
 just dev-mock       # only the frontend in the browser, against the in-memory mock backend
 just                # lint + every test (what CI runs)
-just lint           # cargo fmt --check, clippy -D warnings, eslint, tsc
+just lint           # cargo fmt --check, clippy -D warnings, Biome, tsc
+just format         # cargo fmt and Biome (format, organize imports, safe fixes)
 just test-rust      # Rust unit, snapshot, integration and CLI end-to-end tests
 just test-frontend  # Vitest with coverage thresholds
 just e2e            # Playwright against the mock backend
@@ -135,7 +136,7 @@ To add a text: add the key to both catalogs (`area_name`, e.g. `settings_languag
 |---|---|
 | Rust | `cargo fmt --check`, `clippy -D warnings`, `cargo test --workspace` (with a real `sshd`) |
 | Rust coverage | `cargo llvm-cov`; core and CLI must stay above 85 % of lines |
-| Frontend | eslint, `tsc -b`, Vitest with coverage thresholds (90 % lines), `vite build` |
+| Frontend | Biome (`biome check`), `tsc -b`, Vitest with coverage thresholds (90 % lines), `vite build` |
 | Playwright | every end-to-end flow on a desktop and a narrow viewport |
 
 ## Releases
@@ -164,6 +165,8 @@ The shared workflows (`bump-version.yml`, `github-release.yml`, `screenshots.yml
 
 - Rust: `cargo fmt` (see `rustfmt.toml`), clippy clean with `-D warnings`, errors through the core's
   `Error` with a `kind`, no `unwrap` on user data.
+- TypeScript: [Biome](https://biomejs.dev/) formats and lints (`app/biome.json`); `just format` before a
+  commit. A rule is switched off only with a `biome-ignore` comment that says why.
 - Comments explain *why* (an ssh or Git rule, a pitfall), not what the next line does.
 - Every bug fix comes with a test that fails without it.
 - No new runtime dependencies on the user's system beyond OpenSSH and Git.

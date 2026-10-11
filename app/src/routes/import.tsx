@@ -11,9 +11,9 @@ import { FieldError, FieldHint, Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { errorMessage } from "@/lib/api";
 import type { ImportDone, ImportProposal } from "@/lib/bindings";
+import { rich, t } from "@/lib/i18n";
 import { useCleanupApply, useCleanupPreview, useImportProfiles, useImportProposals, useProfiles } from "@/lib/queries";
 import { hostLabel, providerLabel } from "@/lib/utils";
-import { rich, t } from "@/lib/i18n";
 import { m } from "@/paraglide/messages";
 
 type Choice = { selected: boolean; name: string; folder: string };
@@ -54,14 +54,17 @@ function Done({ done }: { done: ImportDone }) {
   const profiles = useProfiles();
   const name = (id: string) => profiles.data?.profiles.find((p) => p.profile.id === id)?.profile.name ?? id;
   return (
-    <div role="status" className="flex flex-col gap-2 rounded-[10px] border border-emerald-500/30 bg-emerald-500/5 p-4 text-[13px]">
+    <div
+      role="status"
+      className="flex flex-col gap-2 rounded-[10px] border border-emerald-500/30 bg-emerald-500/5 p-4 text-[13px]"
+    >
       <span className="flex items-center gap-2 font-medium text-success">
         <Check aria-hidden className="size-4" />
-        {written.includes("~/.ssh/config") ? m.import_doneRemoved({ n: done.ids.length }) : m.import_done({ n: done.ids.length })}
+        {written.includes("~/.ssh/config")
+          ? m.import_doneRemoved({ n: done.ids.length })
+          : m.import_done({ n: done.ids.length })}
       </span>
-      <span className="text-muted-foreground">
-        {m.import_doneHint()}
-      </span>
+      <span className="text-muted-foreground">{m.import_doneHint()}</span>
       <span className="flex flex-wrap gap-x-4 gap-y-1">
         {done.ids.map((id) => (
           <Link key={id} to="/profile/$id" params={{ id }} className="font-medium text-foreground">
@@ -93,16 +96,27 @@ function Proposals({ proposals, onDone }: { proposals: ImportProposal[]; onDone:
   const [edited, setChoices] = useState<Record<string, Choice>>({});
   // Proposals can change while the page is open (refetch): new ones get defaults.
   const choices: Record<string, Choice> = Object.fromEntries(
-    proposals.map((p) => [p.profile.id, edited[p.profile.id] ?? { selected: p.key_exists, name: p.profile.name, folder: "" }]),
+    proposals.map((p) => [
+      p.profile.id,
+      edited[p.profile.id] ?? { selected: p.key_exists, name: p.profile.name, folder: "" },
+    ]),
   );
   const [removeOld, setRemoveOld] = useState(true);
   const importProfiles = useImportProfiles();
-  const set = (id: string, patch: Partial<Choice>) => setChoices((c) => ({ ...c, [id]: { ...choices[id], ...c[id], ...patch } }));
+  const set = (id: string, patch: Partial<Choice>) =>
+    setChoices((c) => ({ ...c, [id]: { ...choices[id], ...c[id], ...patch } }));
   const chosen = proposals
     .filter((p) => choices[p.profile.id]?.selected)
     .map((p) => {
       const c = choices[p.profile.id];
-      return { ...p, profile: { ...p.profile, name: c.name.trim() || p.profile.name, folders: c.folder.trim() ? [c.folder.trim()] : [] } };
+      return {
+        ...p,
+        profile: {
+          ...p.profile,
+          name: c.name.trim() || p.profile.name,
+          folders: c.folder.trim() ? [c.folder.trim()] : [],
+        },
+      };
     });
 
   return (
@@ -161,7 +175,11 @@ function Proposals({ proposals, onDone }: { proposals: ImportProposal[]; onDone:
                   <Label htmlFor={`name-${p.profile.id}`} className="text-xs font-normal text-muted-foreground">
                     {m.newKey_name()}
                   </Label>
-                  <Input id={`name-${p.profile.id}`} value={c.name} onChange={(e) => set(p.profile.id, { name: e.target.value })} />
+                  <Input
+                    id={`name-${p.profile.id}`}
+                    value={c.name}
+                    onChange={(e) => set(p.profile.id, { name: e.target.value })}
+                  />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor={`folder-${p.profile.id}`} className="text-xs font-normal text-muted-foreground">
@@ -184,7 +202,12 @@ function Proposals({ proposals, onDone }: { proposals: ImportProposal[]; onDone:
         })}
       </div>
       <label className="flex max-w-[720px] items-start gap-3 text-[13px]">
-        <input type="checkbox" className="mt-0.5" checked={removeOld} onChange={(e) => setRemoveOld(e.target.checked)} />
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={removeOld}
+          onChange={(e) => setRemoveOld(e.target.checked)}
+        />
         <span className="flex flex-col gap-0.5">
           <span className="font-medium">{m.import_removeOld()}</span>
           <span className="text-muted-foreground">{m.import_removeOldHint()}</span>
@@ -221,7 +244,17 @@ function Cleanup() {
         </div>
       </details>
       {apply.isError && <FieldError>{errorMessage(apply.error)}</FieldError>}
-      <Button variant="destructive" className="self-start" disabled={apply.isPending} onClick={() => apply.mutate(changes.map((c) => c.diff), { onSuccess: () => toast.success(m.import_removed()) })}>
+      <Button
+        variant="destructive"
+        className="self-start"
+        disabled={apply.isPending}
+        onClick={() =>
+          apply.mutate(
+            changes.map((c) => c.diff),
+            { onSuccess: () => toast.success(m.import_removed()) },
+          )
+        }
+      >
         {m.import_removeButton()}
       </Button>
     </section>

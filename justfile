@@ -26,6 +26,11 @@ lint:
     cargo clippy --workspace --all-targets --all-features -- -D warnings
     cd app && pnpm lint && pnpm typecheck
 
+# Format Rust and TypeScript, apply Biome's safe fixes.
+format:
+    cargo fmt --all
+    cd app && pnpm format
+
 # Every test layer: Rust unit/integration/E2E, Vitest, Playwright.
 test: test-rust test-frontend e2e
 

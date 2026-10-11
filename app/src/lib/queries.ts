@@ -2,9 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { m } from "@/paraglide/messages";
 import { api, errorMessage } from "./api";
-import { t } from "./i18n";
-import { ensureHostKey } from "./host-keys";
 import type { Fix, HostEntry, ImportProposal, NewProject, Profile, Settings } from "./bindings";
+import { ensureHostKey } from "./host-keys";
+import { t } from "./i18n";
 
 export const keys = {
   profiles: ["profiles"] as const,
@@ -163,7 +163,8 @@ export function useCleanupPreview() {
 export function useImportProfiles() {
   const invalidate = useInvalidateAll();
   return useMutation({
-    mutationFn: ({ chosen, removeOld }: { chosen: ImportProposal[]; removeOld: boolean }) => api.importProfiles(chosen, removeOld),
+    mutationFn: ({ chosen, removeOld }: { chosen: ImportProposal[]; removeOld: boolean }) =>
+      api.importProfiles(chosen, removeOld),
     scope: writes,
     onSettled: invalidate,
   });

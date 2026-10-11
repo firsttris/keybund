@@ -24,10 +24,7 @@ export function DiffSummary({ changes }: { changes: FileChange[] }) {
     <span className="text-xs">
       <span className="text-success">+{added}</span>
       {removed > 0 && <span className="text-danger"> −{removed}</span>}
-      <span className="text-muted-foreground">
-        {" "}
-        {m.diff_summary({ n: changes.length })}
-      </span>
+      <span className="text-muted-foreground"> {m.diff_summary({ n: changes.length })}</span>
     </span>
   );
 }
@@ -49,6 +46,7 @@ export function DiffView({ changes, className }: { changes: FileChange[]; classN
             </div>
             {diffLines(c.diff).map((l, i) => (
               <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: the lines of a diff have no identity of their own and never move
                 key={i}
                 className={cn(
                   "px-3.5 whitespace-pre",

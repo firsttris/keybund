@@ -21,7 +21,8 @@ function germanOnlyWords(): Set<string> {
 const GERMAN_ONLY = germanOnlyWords();
 
 /** The demo data is German on purpose (names and comments of the "user"); paths and code are not text. */
-const DATA = /\b(privat|acme|kunde|altprojekt|nebenjob|nordlicht|tristan|zentrale|meinserver)\b|\S*[~/=@]\S*|\S*\w[._]\w\S*/gi;
+const DATA =
+  /\b(privat|acme|kunde|altprojekt|nebenjob|nordlicht|tristan|zentrale|meinserver)\b|\S*[~/=@]\S*|\S*\w[._]\w\S*/gi;
 /** The language picker names each language in itself. */
 const ALLOWED = new Set(["Deutsch"]);
 
@@ -33,7 +34,10 @@ async function germanLeftovers(page: Page): Promise<string[]> {
     .filter((line) => !ALLOWED.has(line))
     .filter((line) => {
       const clean = line.replace(DATA, " ");
-      return /[äöüÄÖÜß]/.test(clean) || (clean.match(/[A-Za-zÄÖÜäöüß]{4,}/g) ?? []).some((w) => GERMAN_ONLY.has(w.toLowerCase()));
+      return (
+        /[äöüÄÖÜß]/.test(clean) ||
+        (clean.match(/[A-Za-zÄÖÜäöüß]{4,}/g) ?? []).some((w) => GERMAN_ONLY.has(w.toLowerCase()))
+      );
     });
 }
 
@@ -48,7 +52,10 @@ test("the app follows an English system and leaves no German behind", async ({ a
   await check("overview");
 
   // A key page: test a git account and a server (backend messages and steps).
-  await app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Privat/ }).click();
+  await app
+    .getByRole("navigation", { name: "Keys" })
+    .getByRole("link", { name: /Privat/ })
+    .click();
   await expect(app.getByRole("heading", { name: "Where is this key used?" })).toBeVisible();
   const uses = app.getByRole("list", { name: "Uses" });
   await uses.getByRole("listitem").filter({ hasText: "GitHub account" }).getByRole("button", { name: "Test" }).click();
@@ -60,7 +67,10 @@ test("the app follows an English system and leaves no German behind", async ({ a
   await check("generated config");
 
   // A failing test with its fix, and the host key dialog of a new server.
-  await app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Kunde B/ }).click();
+  await app
+    .getByRole("navigation", { name: "Keys" })
+    .getByRole("link", { name: /Kunde B/ })
+    .click();
   await app.getByRole("list", { name: "Uses" }).getByRole("button", { name: "Test" }).first().click();
   await expect(app.getByTestId("connection-status")).toHaveText("GitHub does not know this key");
   await check("failed test");

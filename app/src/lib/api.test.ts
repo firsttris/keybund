@@ -1,6 +1,6 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { describe, expect, it } from "vitest";
-import { api, ApiError, errorMessage } from "./api";
+import { ApiError, api, errorMessage } from "./api";
 
 describe("api", () => {
   it("returns data of successful commands", async () => {

@@ -71,13 +71,18 @@ describe("sidebar and home", () => {
     expect(first).toHaveTextContent("Standard · ~/dev/privat/ · GitHub · meinserver");
     expect(rest.map((l) => l.textContent)).toEqual(["Acme~/dev/acme/ · GitLab", "Kunde B~/dev/kunde-b/ · GitHub"]);
     expect(within(screen.getByRole("navigation", { name: "Archiv" })).getByText("Altprojekt")).toBeInTheDocument();
-    expect(await screen.findByLabelText("1 Hinweis")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /Doctor.*1 Hinweis/ })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Welcher Key?" })).not.toBeInTheDocument();
   });
 
   it("shows what needs attention on the home page", async () => {
     await renderApp("/", (b) => {
-      b.state.lastTests.set("kunde-b", { success: false, account: null, message: msg("probe_keyUnknown", { provider: "GitHub" }), at: Date.now() });
+      b.state.lastTests.set("kunde-b", {
+        success: false,
+        account: null,
+        message: msg("probe_keyUnknown", { provider: "GitHub" }),
+        at: Date.now(),
+      });
     });
     const todo = await screen.findByRole("list", { name: "Zu tun" });
     await waitFor(() => expect(within(todo).getAllByRole("listitem")).toHaveLength(3));
@@ -93,7 +98,9 @@ describe("sidebar and home", () => {
       b.state.doctorIncludeOnTop = true;
       b.state.sshBlocks = [];
     });
-    expect(await screen.findByText(/Alles in Ordnung – Git und ssh nehmen automatisch den richtigen Key/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Alles in Ordnung – Git und ssh nehmen automatisch den richtigen Key/),
+    ).toBeInTheDocument();
   });
 
   it("answers which key applies from the search", async () => {

@@ -2,11 +2,11 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Activity, Archive, Crosshair, Download, KeyRound, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import type { ProfileView } from "@/lib/bindings";
-import { t } from "@/lib/i18n";
-import { m } from "@/paraglide/messages";
 import { activeKeys, usageParts } from "@/lib/categories";
+import { t } from "@/lib/i18n";
 import { useDoctor, useProfiles } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+import { m } from "@/paraglide/messages";
 import { ColorDot } from "./color-dot";
 import { buttonVariants } from "./ui/button";
 import { Input } from "./ui/input";
@@ -24,7 +24,12 @@ export function Sidebar() {
   const q = filter.trim().toLowerCase();
   const matches = (...texts: (string | null | undefined)[]) => !q || texts.some((t) => t?.toLowerCase().includes(q));
   const keys = activeKeys(data?.profiles ?? []).filter((v) =>
-    matches(v.profile.name, v.profile.key.path, ...v.profile.folders, ...v.profile.hosts.flatMap((h) => [h.alias, h.hostname])),
+    matches(
+      v.profile.name,
+      v.profile.key.path,
+      ...v.profile.folders,
+      ...v.profile.hosts.flatMap((h) => [h.alias, h.hostname]),
+    ),
   );
   const archived = (data?.profiles ?? []).filter((v) => v.profile.archived && matches(v.profile.name));
   const nothing = data && keys.length === 0;
@@ -34,7 +39,13 @@ export function Sidebar() {
     const { profile, last_test } = view;
     const parts = usageParts(view);
     return (
-      <Link key={profile.id} to="/profile/$id" params={{ id: profile.id }} aria-current={current(profile.id)} className={navItem}>
+      <Link
+        key={profile.id}
+        to="/profile/$id"
+        params={{ id: profile.id }}
+        aria-current={current(profile.id)}
+        className={navItem}
+      >
         <ColorDot color={profile.color} />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate">{profile.name}</span>
@@ -43,7 +54,9 @@ export function Sidebar() {
               {m.sidebar_testFailed()}
             </span>
           ) : (
-            <span className={cn("truncate text-xs font-normal", parts.length ? "text-muted-foreground" : "text-warning")}>
+            <span
+              className={cn("truncate text-xs font-normal", parts.length ? "text-muted-foreground" : "text-warning")}
+            >
               {parts.length ? parts.join(" · ") : m.sidebar_unused()}
             </span>
           )}
@@ -73,7 +86,10 @@ export function Sidebar() {
         <label htmlFor="profile-search" className="sr-only">
           {m.sidebar_search()}
         </label>
-        <Search aria-hidden className="pointer-events-none absolute top-[11px] left-[11px] size-[15px] text-muted-foreground" />
+        <Search
+          aria-hidden
+          className="pointer-events-none absolute top-[11px] left-[11px] size-[15px] text-muted-foreground"
+        />
         <Input
           id="profile-search"
           placeholder={m.sidebar_searchPlaceholder()}
@@ -90,7 +106,11 @@ export function Sidebar() {
       <nav aria-label={m.sidebar_keys()} className="flex flex-col gap-0.5">
         <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">{m.sidebar_yourKeys()}</span>
         {keys.map(keyLink)}
-        {nothing && <span className="px-2.5 text-xs text-muted-foreground">{filter ? m.sidebar_noMatch() : m.sidebar_noKeys()}</span>}
+        {nothing && (
+          <span className="px-2.5 text-xs text-muted-foreground">
+            {filter ? m.sidebar_noMatch() : m.sidebar_noKeys()}
+          </span>
+        )}
         {q && (
           <Link to="/which" search={{ q: filter.trim() }} className={cn(navItem, "text-muted-foreground")}>
             <Crosshair aria-hidden />
@@ -103,7 +123,12 @@ export function Sidebar() {
         <nav aria-label={m.sidebar_archive()} className="flex flex-col gap-0.5">
           <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">{m.sidebar_archive()}</span>
           {archived.map(({ profile }) => (
-            <Link key={profile.id} to="/profile/$id" params={{ id: profile.id }} className={cn(navItem, "text-muted-foreground")}>
+            <Link
+              key={profile.id}
+              to="/profile/$id"
+              params={{ id: profile.id }}
+              className={cn(navItem, "text-muted-foreground")}
+            >
               <Archive aria-hidden />
               <span className="flex-1 truncate">{profile.name}</span>
             </Link>
@@ -120,11 +145,9 @@ export function Sidebar() {
           <Activity aria-hidden />
           <span className="flex-1">Doctor</span>
           {problems > 0 && (
-            <span
-              aria-label={m.sidebar_hints({ n: problems })}
-              className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-[11.5px] font-semibold text-warning"
-            >
-              {problems}
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-[11.5px] font-semibold text-warning">
+              <span aria-hidden>{problems}</span>
+              <span className="sr-only">{m.sidebar_hints({ n: problems })}</span>
             </span>
           )}
         </Link>

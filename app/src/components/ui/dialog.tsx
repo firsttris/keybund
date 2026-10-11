@@ -1,5 +1,5 @@
 import { AlertDialog as Primitive } from "radix-ui";
-import * as React from "react";
+import type * as React from "react";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "./button";
 
@@ -28,7 +28,9 @@ export function AlertDialogTitle({ className, ...props }: React.ComponentProps<t
 }
 
 export function AlertDialogDescription({ className, ...props }: React.ComponentProps<typeof Primitive.Description>) {
-  return <Primitive.Description className={cn("text-[13px] leading-relaxed text-muted-foreground", className)} {...props} />;
+  return (
+    <Primitive.Description className={cn("text-[13px] leading-relaxed text-muted-foreground", className)} {...props} />
+  );
 }
 
 export function AlertDialogFooter({ className, ...props }: React.ComponentProps<"div">) {

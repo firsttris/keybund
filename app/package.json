@@ -11,7 +11,8 @@
     "dev:mock": "vite --mode mock",
     "build": "tsc -b && vite build",
     "typecheck": "pnpm i18n && tsc -b",
-    "lint": "pnpm i18n && eslint .",
+    "lint": "pnpm i18n && biome check .",
+    "format": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
@@ -35,7 +36,7 @@
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@biomejs/biome": "2.5.15",
     "@inlang/paraglide-js": "^2.27.0",
     "@inlang/plugin-message-format": "^4.5.0",
     "@playwright/test": "^1.64.0",
@@ -49,13 +50,9 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "@vitest/coverage-v8": "^5.0.3",
-    "eslint": "^10.12.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "globals": "^17.13.0",
     "jsdom": "^30.1.2",
     "tailwindcss": "^4.3.3",
     "typescript": "~5.9.3",
-    "typescript-eslint": "^8.71.1",
     "vite": "^8.3.4",
     "vitest": "^5.0.3"
   }

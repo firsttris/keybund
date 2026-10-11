@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { FileChange } from "@/lib/bindings";
-import { DiffSummary, diffLines, DiffView } from "./diff-view";
+import { DiffSummary, DiffView, diffLines } from "./diff-view";
 
 const change: FileChange = {
   path: "~/.ssh/config",
@@ -20,7 +20,11 @@ describe("diffLines", () => {
 
 describe("DiffView", () => {
   it("renders files, kinds and totals", () => {
-    render(<DiffView changes={[change, { ...change, path: "~/.gitconfig", kind: "create", user_file: false, removed: 0 }]} />);
+    render(
+      <DiffView
+        changes={[change, { ...change, path: "~/.gitconfig", kind: "create", user_file: false, removed: 0 }]}
+      />,
+    );
     expect(screen.getAllByTestId("diff-file")).toHaveLength(2);
     expect(screen.getByText("· geändert")).toBeInTheDocument();
     expect(screen.getByText("· neu")).toBeInTheDocument();

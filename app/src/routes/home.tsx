@@ -5,11 +5,11 @@ import { HowItWorks } from "@/components/how-it-works";
 import { ConfigStatus } from "@/components/pending-banner";
 import { buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { errorMessage } from "@/lib/api";
 import type { ProfileView } from "@/lib/bindings";
 import { activeKeys, gitAccounts, servers, usageParts } from "@/lib/categories";
-import { errorMessage } from "@/lib/api";
-import { useDoctor, useProfiles } from "@/lib/queries";
 import { rich, t } from "@/lib/i18n";
+import { useDoctor, useProfiles } from "@/lib/queries";
 import { cn, formatRelative, providerLabel } from "@/lib/utils";
 import { m } from "@/paraglide/messages";
 
@@ -32,7 +32,10 @@ export function HomePage() {
               <Plus aria-hidden />
               {m.sidebar_newKey()}
             </Link>
-            <Link to={data && data.import_available > 0 ? "/import" : "/settings"} className={cn(buttonVariants({ variant: "outline" }), "no-underline")}>
+            <Link
+              to={data && data.import_available > 0 ? "/import" : "/settings"}
+              className={cn(buttonVariants({ variant: "outline" }), "no-underline")}
+            >
               {m.home_takeOver()}
             </Link>
           </div>
@@ -42,7 +45,10 @@ export function HomePage() {
           <h2 id="keys-title" className="m-0 text-[15px] font-semibold">
             {m.home_yourKeys()}
           </h2>
-          <ul aria-label={m.sidebar_keys()} className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 p-0">
+          <ul
+            aria-label={m.sidebar_keys()}
+            className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 p-0"
+          >
             {keys.map((v) => (
               <KeyCard key={v.profile.id} view={v} />
             ))}
@@ -139,7 +145,10 @@ function Todo() {
   if (keys.length === 0 && items.length === 0) return null;
   if (items.length === 0) {
     return (
-      <p role="status" className="m-0 flex items-center gap-2.5 rounded-[10px] border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-[13px]">
+      <p
+        role="status"
+        className="m-0 flex items-center gap-2.5 rounded-[10px] border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-[13px]"
+      >
         <CheckCircle2 aria-hidden className="size-4 text-success" />
         {m.home_allFine()}
       </p>
@@ -152,11 +161,17 @@ function Todo() {
       <h2 id="todo-title" className="m-0 text-[15px] font-semibold">
         {m.home_todo()}
       </h2>
-      <ul aria-labelledby="todo-title" className="m-0 flex list-none flex-col overflow-hidden rounded-[10px] border border-border p-0">
+      <ul
+        aria-labelledby="todo-title"
+        className="m-0 flex list-none flex-col overflow-hidden rounded-[10px] border border-border p-0"
+      >
         {items.map((item) => {
           const Icon = icon[item.tone];
           return (
-            <li key={item.id} className="flex flex-wrap items-center gap-3 border-b border-border-subtle bg-card px-4 py-3 last:border-b-0">
+            <li
+              key={item.id}
+              className="flex flex-wrap items-center gap-3 border-b border-border-subtle bg-card px-4 py-3 last:border-b-0"
+            >
               <Icon aria-hidden className={cn("size-4 shrink-0", color[item.tone])} />
               <span className="min-w-[200px] flex-1 text-[13px]">{item.text}</span>
               {item.link}
@@ -173,7 +188,10 @@ function KeyCard({ view }: { view: ProfileView }) {
   const usages = [
     ...(view.is_default ? [{ icon: Star, text: m.usage_defaultForGit() }] : []),
     ...profile.folders.map((f) => ({ icon: Folder, text: f })),
-    ...gitAccounts(profile).map((h) => ({ icon: GitBranch, text: `${providerLabel(h.provider)}${h.alias ? ` (${h.alias})` : ""}` })),
+    ...gitAccounts(profile).map((h) => ({
+      icon: GitBranch,
+      text: `${providerLabel(h.provider)}${h.alias ? ` (${h.alias})` : ""}`,
+    })),
     ...servers(profile).map((h) => ({ icon: Server, text: `ssh ${h.alias ?? h.hostname}` })),
   ];
   return (

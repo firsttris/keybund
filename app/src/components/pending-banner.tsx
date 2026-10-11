@@ -23,9 +23,7 @@ export function ConfigStatus() {
   return (
     <footer className="mt-auto flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
       <RefreshCw aria-hidden className="size-3.5 text-warning" />
-      <span className="flex-1">
-        {m.status_pending({ n: data.pending_changes })}
-      </span>
+      <span className="flex-1">{m.status_pending({ n: data.pending_changes })}</span>
       <Link to="/apply" className="font-medium text-foreground underline-offset-4 hover:underline">
         {m.status_review()}
       </Link>

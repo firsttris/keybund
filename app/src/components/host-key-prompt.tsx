@@ -34,9 +34,7 @@ export function HostKeyPrompt() {
             <ShieldQuestion aria-hidden className="size-4 text-warning" />
             {m.hostKey_title({ host: pending.check.host })}
           </AlertDialogTitle>
-          <AlertDialogDescription>
-            {m.hostKey_explain()}
-          </AlertDialogDescription>
+          <AlertDialogDescription>{m.hostKey_explain()}</AlertDialogDescription>
           <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
             {pending.check.keys.map((k) => (
               <li key={k.fingerprint} className="flex flex-col gap-0.5 rounded-lg bg-muted px-3 py-2">

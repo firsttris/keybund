@@ -9,9 +9,9 @@ import { FieldError, FieldHint, Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
 import type { ClonePreview } from "@/lib/bindings";
+import { rich } from "@/lib/i18n";
 import { useProfiles } from "@/lib/queries";
 import { cn } from "@/lib/utils";
-import { rich } from "@/lib/i18n";
 import { m } from "@/paraglide/messages";
 
 export function ClonePage() {
@@ -51,9 +51,17 @@ export function ClonePage() {
         >
           <Label htmlFor="clone-url">{m.clone_url()}</Label>
           <div className="flex flex-wrap gap-2">
-            <Input id="clone-url" className="flex-[1_1_280px] font-mono" placeholder="git@github.com:team/repo.git" value={url}
+            <Input
+              id="clone-url"
+              className="flex-[1_1_280px] font-mono"
+              placeholder="git@github.com:team/repo.git"
+              value={url}
               // A changed URL needs a new check: key and folder came from the old one.
-              onChange={(e) => (setUrl(e.target.value), preview.reset(), clone.reset())}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                preview.reset();
+                clone.reset();
+              }}
             />
             <Button type="submit" variant="outline" disabled={!url.trim()}>
               {m.clone_check()}
@@ -71,8 +79,19 @@ export function ClonePage() {
               {preview.data.candidates.map((c) => {
                 const color = profiles.data?.profiles.find((p) => p.profile.id === c.profile_id)?.profile.color;
                 return (
-                  <label key={c.profile_id} className={cn("flex items-center gap-3 rounded-lg border p-3", profileId === c.profile_id ? "border-foreground" : "border-border")}>
-                    <input type="radio" name="clone-profile" checked={profileId === c.profile_id} onChange={() => choose(c.profile_id)} />
+                  <label
+                    key={c.profile_id}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg border p-3",
+                      profileId === c.profile_id ? "border-foreground" : "border-border",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="clone-profile"
+                      checked={profileId === c.profile_id}
+                      onChange={() => choose(c.profile_id)}
+                    />
                     <ColorDot color={color} />
                     <span className="flex-1">{c.profile_name}</span>
                     <span className="font-mono text-xs text-muted-foreground">{c.target ?? m.clone_noFolder()}</span>
@@ -82,9 +101,18 @@ export function ClonePage() {
             </fieldset>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="clone-target">{m.clone_target()}</Label>
-              <Input id="clone-target" className="font-mono" value={target} onChange={(e) => setTarget(e.target.value)} />
+              <Input
+                id="clone-target"
+                className="font-mono"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+              />
             </div>
-            <Button className="self-end" disabled={!profileId || !target.trim() || clone.isPending} onClick={() => clone.mutate()}>
+            <Button
+              className="self-end"
+              disabled={!profileId || !target.trim() || clone.isPending}
+              onClick={() => clone.mutate()}
+            >
               {clone.isPending && <Spinner className="size-3.5" />}
               {m.clone_button()}
             </Button>

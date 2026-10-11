@@ -1,8 +1,8 @@
 import { AlertTriangle, Check, X } from "lucide-react";
 import type { Check as CheckT } from "@/lib/bindings";
 import { t } from "@/lib/i18n";
-import { m } from "@/paraglide/messages";
 import { useDoctor, useFixDoctor } from "@/lib/queries";
+import { m } from "@/paraglide/messages";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardHeader, CardTitle } from "./ui/card";
@@ -27,7 +27,9 @@ function Problem({ check }: { check: CheckT }) {
         )}
         <div className="flex flex-col gap-1">
           <span className="text-[13px] font-medium">{t(check.title)}</span>
-          {check.detail && <span className="text-[12.5px] leading-normal text-secondary-foreground">{t(check.detail)}</span>}
+          {check.detail && (
+            <span className="text-[12.5px] leading-normal text-secondary-foreground">{t(check.detail)}</span>
+          )}
         </div>
       </div>
       {check.fix && (
@@ -72,7 +74,10 @@ export function DoctorPanel({ className }: { className?: string }) {
       )}
       <ul aria-label={m.doctor_passed()} className="m-0 flex list-none flex-col p-0">
         {ok.map((c) => (
-          <li key={c.id} className="flex min-h-10 items-center gap-2.5 border-b border-border-subtle text-[13px] last:border-b-0">
+          <li
+            key={c.id}
+            className="flex min-h-10 items-center gap-2.5 border-b border-border-subtle text-[13px] last:border-b-0"
+          >
             <Check aria-hidden className="size-[15px] text-success" strokeWidth={2.6} />
             <span className="flex-1">{t(c.title)}</span>
             {c.detail && <span className="text-xs text-muted-foreground">{t(c.detail)}</span>}

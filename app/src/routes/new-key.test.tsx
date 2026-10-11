@@ -18,13 +18,21 @@ describe("new key", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Kunde C" })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/profile/kunde-c");
     const created = backend.state.profiles.find((p) => p.id === "kunde-c")!;
-    expect(created).toMatchObject({ name: "Kunde C", folders: [], hosts: [], git: null, key: { path: "~/.ssh/kunde-c_ed25519" } });
+    expect(created).toMatchObject({
+      name: "Kunde C",
+      folders: [],
+      hosts: [],
+      git: null,
+      key: { path: "~/.ssh/kunde-c_ed25519" },
+    });
     expect(created.color).not.toBe("emerald");
     // An unused key starts with the choices.
     const usage = screen.getByRole("region", { name: "Wo wird dieser Key benutzt?" });
     expect(within(usage).getByRole("button", { name: /^Git-Ordner/ })).toBeInTheDocument();
     expect(within(usage).getByRole("button", { name: /^Server/ })).toBeInTheDocument();
-    expect(within(screen.getByRole("navigation", { name: "Keys" })).getByText("noch nicht benutzt")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("navigation", { name: "Keys" })).getByText("noch nicht benutzt"),
+    ).toBeInTheDocument();
   });
 
   it("refuses a name that is taken", async () => {

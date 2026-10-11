@@ -18,8 +18,12 @@ test("creates a key and sets it up for a GitHub folder", async ({ app }) => {
 
   // The key exists; now say what it is for.
   await expect(app.getByRole("heading", { level: 1, name: "Kunde C" })).toBeVisible();
-  await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Kunde C.*noch nicht benutzt/ })).toBeVisible();
-  await usage(app).getByRole("button", { name: /^Git-Ordner/ }).click();
+  await expect(
+    app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Kunde C.*noch nicht benutzt/ }),
+  ).toBeVisible();
+  await usage(app)
+    .getByRole("button", { name: /^Git-Ordner/ })
+    .click();
   const form = app.getByRole("form", { name: "Git-Ordner hinzufügen" });
   await expect(form.getByLabel("Ordner", { exact: true })).toHaveAttribute("placeholder", "~/dev/kunde-c/");
   await expect(form.getByLabel("Name in Commits")).toHaveValue("Tristan Teufel");
@@ -34,18 +38,26 @@ test("creates a key and sets it up for a GitHub folder", async ({ app }) => {
   expect(await mockState<string>(app, "clipboard")).toMatch(/^ssh-ed25519 /);
   await github.getByRole("button", { name: "Erledigt – jetzt testen" }).click();
   await expect(github.getByTestId("connection-status")).toHaveText("Verbunden als @tristan");
-  await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Kunde C.*~\/dev\/kunde-c\/ · GitHub/ })).toBeVisible();
+  await expect(
+    app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Kunde C.*~\/dev\/kunde-c\/ · GitHub/ }),
+  ).toBeVisible();
 });
 
 test("takes an existing key for a server", async ({ app }) => {
   await app.getByRole("link", { name: "Einstellungen" }).click();
-  await app.getByRole("listitem").filter({ hasText: /^~\/\.ssh\/id_ed25519/ }).getByRole("link", { name: "Als Key übernehmen" }).click();
+  await app
+    .getByRole("listitem")
+    .filter({ hasText: /^~\/\.ssh\/id_ed25519/ })
+    .getByRole("link", { name: "Als Key übernehmen" })
+    .click();
   await expect(app.getByRole("radio", { name: /Vorhandenen Key nehmen/ })).toHaveAttribute("aria-checked", "true");
   await app.getByLabel("Name").fill("NAS");
   await app.getByRole("button", { name: /Key anlegen/ }).click();
 
   await expect(app.getByRole("heading", { level: 1, name: "NAS" })).toBeVisible();
-  await usage(app).getByRole("button", { name: /^Server/ }).click();
+  await usage(app)
+    .getByRole("button", { name: /^Server/ })
+    .click();
   const form = app.getByRole("form", { name: "Server hinzufügen" });
   await form.getByLabel("Hostname oder IP").fill("192.168.1.20");
   await form.getByLabel(/Alias/).fill("backup");

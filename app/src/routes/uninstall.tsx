@@ -14,11 +14,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/dialog";
-import { m } from "@/paraglide/messages";
 import { FieldError } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
 import type { UninstallOptions } from "@/lib/bindings";
+import { m } from "@/paraglide/messages";
 
 export function UninstallPage() {
   const [opts, setOpts] = useState<UninstallOptions>({ restore_backups: false, purge: false });
@@ -85,12 +85,12 @@ export function UninstallPage() {
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogTitle>{m.uninstall_confirmTitle()}</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {m.uninstall_confirmText()}
-                </AlertDialogDescription>
+                <AlertDialogDescription>{m.uninstall_confirmText()}</AlertDialogDescription>
                 <AlertDialogFooter>
                   <AlertDialogCancel>{m.common_cancel()}</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => run.mutate(changes.map((c) => c.diff))}>{m.uninstall_confirm()}</AlertDialogAction>
+                  <AlertDialogAction onClick={() => run.mutate(changes.map((c) => c.diff))}>
+                    {m.uninstall_confirm()}
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>

@@ -8,7 +8,9 @@ const usage = () => screen.findByRole("region", { name: "Wo wird dieser Key benu
 /** The usage row whose text matches. */
 async function row(text: RegExp | string): Promise<HTMLElement> {
   const items = await within(await usage()).findAllByRole("listitem");
-  const match = items.find((li) => (typeof text === "string" ? li.textContent?.includes(text) : text.test(li.textContent ?? "")));
+  const match = items.find((li) =>
+    typeof text === "string" ? li.textContent?.includes(text) : text.test(li.textContent ?? ""),
+  );
   if (!match) throw new Error(`Keine Zeile ${text}`);
   return match;
 }
@@ -64,7 +66,10 @@ describe("key page", () => {
 
   it("follows ~/.gitconfig when the folder keeps the suggested identity", async () => {
     const { user, backend } = await renderApp("/profile/neu", (b) => {
-      b.state.profiles.push({ ...structuredClone(emptyKey), hosts: [{ provider: "github", hostname: "github.com", alias: null, user: null, port: null }] });
+      b.state.profiles.push({
+        ...structuredClone(emptyKey),
+        hosts: [{ provider: "github", hostname: "github.com", alias: null, user: null, port: null }],
+      });
     });
     await user.click(within(await usage()).getByRole("button", { name: /^Git-Ordner/ }));
     await user.click(screen.getByRole("button", { name: "Ordner speichern" }));
@@ -144,7 +149,9 @@ describe("key page", () => {
     expect(dialog).toHaveTextContent(/SHA256:/);
     expect(dialog).toHaveTextContent("Wird gespeichert in ~/.ssh/known_hosts.d/kunde-b");
     await user.click(within(dialog).getByRole("button", { name: "Abbrechen" }));
-    expect(await within(server).findByText("Host-Key nicht bestätigt – keine Verbindung aufgebaut.")).toBeInTheDocument();
+    expect(
+      await within(server).findByText("Host-Key nicht bestätigt – keine Verbindung aufgebaut."),
+    ).toBeInTheDocument();
     expect(backend.state.installedKeys).toEqual([]);
 
     await user.click(within(server).getByRole("button", { name: "Key eintragen" }));
@@ -172,7 +179,9 @@ describe("key page", () => {
     expect(await within(server).findByText("meinserver ist nicht erreichbar")).toBeInTheDocument();
     await user.click(within(server).getByRole("button", { name: "Testen" }));
     expect(await within(server).findByTestId("connection-status")).toHaveTextContent("Server kennt diesen Key nicht");
-    expect(within(server).getByRole("list", { name: "Ablauf" })).toHaveTextContent("Keine Verbindung: Connection timed out");
+    expect(within(server).getByRole("list", { name: "Ablauf" })).toHaveTextContent(
+      "Keine Verbindung: Connection timed out",
+    );
   });
 
   it("tests a git account and shows what happened", async () => {
@@ -184,7 +193,9 @@ describe("key page", () => {
     expect(steps).toHaveTextContent("Anmelden als Benutzer „git“");
     expect(within(account).getByRole("button", { name: "Befehl kopieren" })).toBeInTheDocument();
     // The failed test shows up in the sidebar.
-    expect(await within(screen.getByRole("navigation", { name: "Keys" })).findByText("Test fehlgeschlagen")).toBeInTheDocument();
+    expect(
+      await within(screen.getByRole("navigation", { name: "Keys" })).findByText("Test fehlgeschlagen"),
+    ).toBeInTheDocument();
   });
 
   it("adds and removes a git account", async () => {
@@ -196,9 +207,16 @@ describe("key page", () => {
     expect(within(form).getByLabelText("Hostname")).toHaveValue("gitlab.com");
     await user.click(within(form).getByRole("button", { name: "Konto speichern" }));
     const gitlab = await row("GitLab-Konto");
-    expect(backend.state.profiles.find((p) => p.id === "kunde-b")!.hosts.map((h) => h.provider)).toEqual(["github", "gitlab"]);
+    expect(backend.state.profiles.find((p) => p.id === "kunde-b")!.hosts.map((h) => h.provider)).toEqual([
+      "github",
+      "gitlab",
+    ]);
     await user.click(within(gitlab).getByRole("button", { name: "Konto gitlab.com entfernen" }));
-    await waitFor(() => expect(within(screen.getByRole("list", { name: "Verwendungen" })).queryByText(/GitLab-Konto/)).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("list", { name: "Verwendungen" })).queryByText(/GitLab-Konto/),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   it("rejects a host that another key already has", async () => {
@@ -207,7 +225,9 @@ describe("key page", () => {
     await user.click(within(card).getByRole("button", { name: "Server" }));
     await user.type(screen.getByLabelText("Hostname oder IP"), "1.2.3.4");
     await user.click(screen.getByRole("button", { name: "Server speichern" }));
-    expect(await within(card).findByRole("alert")).toHaveTextContent("Host „1.2.3.4“ gehört schon zu einem anderen Key");
+    expect(await within(card).findByRole("alert")).toHaveTextContent(
+      "Host „1.2.3.4“ gehört schon zu einem anderen Key",
+    );
   });
 
   it("cancels the host form", async () => {
@@ -227,7 +247,9 @@ describe("key page", () => {
         hosts: [{ provider: "github", hostname: "github.com", alias: "nebenjob", user: null, port: null }],
       });
     });
-    expect(await row("GitHub-Konto nebenjob")).toHaveTextContent("Repos mit git@nebenjob:… nutzen diesen Key (github.com)");
+    expect(await row("GitHub-Konto nebenjob")).toHaveTextContent(
+      "Repos mit git@nebenjob:… nutzen diesen Key (github.com)",
+    );
   });
 
   it("shows no git identity for a key that only serves servers", async () => {
@@ -306,7 +328,9 @@ describe("key page", () => {
 
   it("offers to install the key on a server when the test fails", async () => {
     const { user, backend } = await renderApp("/profile/kunde-b", (b) => {
-      b.state.profiles.find((p) => p.id === "kunde-b")!.hosts.push({ provider: "generic", hostname: "10.0.0.9", alias: "build", user: "ci", port: null });
+      b.state.profiles
+        .find((p) => p.id === "kunde-b")!
+        .hosts.push({ provider: "generic", hostname: "10.0.0.9", alias: "build", user: "ci", port: null });
       b.state.knownHosts.push("10.0.0.9");
     });
     const server = await row("Server build");
@@ -341,7 +365,9 @@ describe("key page", () => {
     const card = await row(/Konto/);
     await user.click(within(card).getByRole("button", { name: "Key eintragen" }));
     const hint = await within(card).findByRole("status");
-    expect(hint).toHaveTextContent("Auf der GitLab-Seite „New SSH key“ wählen, einfügen und speichern – angemeldet mit dem Konto für „Acme“.");
+    expect(hint).toHaveTextContent(
+      "Auf der GitLab-Seite „New SSH key“ wählen, einfügen und speichern – angemeldet mit dem Konto für „Acme“.",
+    );
     expect(hint).not.toHaveTextContent("Signing Key");
     expect(backend.state.clipboard).toMatch(/tristan@zentrale-acme$/);
     await user.click(within(hint).getByRole("button", { name: "Seite nochmal öffnen" }));
@@ -353,7 +379,13 @@ describe("key page", () => {
 
   it("reminds of the signing key on GitHub and opens Bitbucket's page", async () => {
     const { user, backend } = await renderApp("/profile/privat", (b) => {
-      b.state.profiles.find((p) => p.id === "kunde-b")!.hosts[0] = { provider: "bitbucket", hostname: "bitbucket.org", alias: null, user: null, port: null };
+      b.state.profiles.find((p) => p.id === "kunde-b")!.hosts[0] = {
+        provider: "bitbucket",
+        hostname: "bitbucket.org",
+        alias: null,
+        user: null,
+        port: null,
+      };
     });
     const card = await row(/GitHub-Konto/);
     await user.click(within(card).getByRole("button", { name: "Key eintragen" }));

@@ -36,16 +36,16 @@ describe("formatting", () => {
     expect(formatRelative(now - 3 * 86_400_000, now)).toBe("vor 3 Tagen");
     expect(formatRelative(null)).toBe("");
   });
-
 });
 
 describe("hosts and colors", () => {
-
   it("labels hosts", () => {
     expect(hostLabel({ alias: "srv", hostname: "1.2.3.4", user: "t", port: 2222, provider: "generic" })).toBe(
       "Server · 1.2.3.4 · User t · Port 2222",
     );
-    expect(hostLabel({ alias: null, hostname: "gitlab.kunde.de", user: null, port: null, provider: "gitlab" })).toBe("GitLab · Port 22");
+    expect(hostLabel({ alias: null, hostname: "gitlab.kunde.de", user: null, port: null, provider: "gitlab" })).toBe(
+      "GitLab · Port 22",
+    );
   });
 
   it("maps colors with a fallback", () => {

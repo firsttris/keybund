@@ -112,13 +112,22 @@ export function NewKeyPage({ existingKey }: { existingKey?: string }) {
             />
           </div>
 
-          <div role="radiogroup" aria-label={m.newKey_key()} className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
+          <div
+            role="radiogroup"
+            aria-label={m.newKey_key()}
+            className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3"
+          >
             {(
               [
-                { value: "generate", title: m.newKey_generate(), text: id ? `ed25519 · ${keyPath}` : m.newKey_generateHint() },
+                {
+                  value: "generate",
+                  title: m.newKey_generate(),
+                  text: id ? `ed25519 · ${keyPath}` : m.newKey_generateHint(),
+                },
                 { value: "existing", title: m.newKey_existing(), text: m.newKey_existingHint() },
               ] as const
             ).map((o) => (
+              // biome-ignore lint/a11y/useSemanticElements: a card that acts as a radio button, styled as a whole
               <button
                 key={o.value}
                 type="button"
@@ -130,10 +139,22 @@ export function NewKeyPage({ existingKey }: { existingKey?: string }) {
                   mode === o.value ? "border-foreground bg-muted" : "border-border bg-transparent",
                 )}
               >
-                <span className={cn("mt-px size-[18px] shrink-0 rounded-full border", mode === o.value ? "border-[5px] border-foreground" : "border-zinc-600")} />
+                <span
+                  className={cn(
+                    "mt-px size-[18px] shrink-0 rounded-full border",
+                    mode === o.value ? "border-[5px] border-foreground" : "border-zinc-600",
+                  )}
+                />
                 <span className="flex min-w-0 flex-col gap-1">
                   <span className="font-medium">{o.title}</span>
-                  <span className={cn("text-[12.5px] break-all text-muted-foreground", o.value === "generate" && id && "font-mono")}>{o.text}</span>
+                  <span
+                    className={cn(
+                      "text-[12.5px] break-all text-muted-foreground",
+                      o.value === "generate" && id && "font-mono",
+                    )}
+                  >
+                    {o.text}
+                  </span>
                 </span>
               </button>
             ))}
@@ -143,13 +164,22 @@ export function NewKeyPage({ existingKey }: { existingKey?: string }) {
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="key-pass">
-                  {m.newKey_passphrase()} <span className="font-normal text-muted-foreground">{m.newKey_passphraseOptional()}</span>
+                  {m.newKey_passphrase()}{" "}
+                  <span className="font-normal text-muted-foreground">{m.newKey_passphraseOptional()}</span>
                 </Label>
-                <Input id="key-pass" type="password" autoComplete="new-password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
+                <Input
+                  id="key-pass"
+                  type="password"
+                  autoComplete="new-password"
+                  value={passphrase}
+                  onChange={(e) => setPassphrase(e.target.value)}
+                />
                 <FieldHint>{m.newKey_passphraseHint()}</FieldHint>
               </div>
               <details>
-                <summary className="cursor-pointer text-[13px] text-muted-foreground hover:text-foreground">{m.newKey_moreOptions()}</summary>
+                <summary className="cursor-pointer text-[13px] text-muted-foreground hover:text-foreground">
+                  {m.newKey_moreOptions()}
+                </summary>
                 <div className="mt-3 flex flex-col gap-1.5">
                   <Label htmlFor="key-comment">{m.newKey_comment()}</Label>
                   <Input
@@ -170,9 +200,17 @@ export function NewKeyPage({ existingKey }: { existingKey?: string }) {
               {unused.map((k) => (
                 <label
                   key={k.key.path}
-                  className={cn("flex items-center gap-3 rounded-lg border p-3", existingPath === k.key.path ? "border-foreground" : "border-border")}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg border p-3",
+                    existingPath === k.key.path ? "border-foreground" : "border-border",
+                  )}
                 >
-                  <input type="radio" name="existing-key" checked={existingPath === k.key.path} onChange={() => setExistingPath(k.key.path)} />
+                  <input
+                    type="radio"
+                    name="existing-key"
+                    checked={existingPath === k.key.path}
+                    onChange={() => setExistingPath(k.key.path)}
+                  />
                   <span className="flex min-w-0 flex-col gap-0.5">
                     <span className={mono}>{k.key.path}</span>
                     <span className="truncate font-mono text-xs text-muted-foreground">

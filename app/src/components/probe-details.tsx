@@ -22,15 +22,26 @@ export function ProbeDetails({ result }: { result: ProbeResult }) {
         {result.steps.length > 0 ? (
           <ol aria-label={m.probe_steps()} className="m-0 flex list-none flex-col gap-1.5 p-0">
             {result.steps.map((step, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: the steps of one test result never change order
               <li key={i} className="flex items-start gap-2">
                 {step.ok === true ? (
-                  <Check aria-label={m.probe_stepOk()} className="mt-0.5 size-3.5 shrink-0 text-success" strokeWidth={2.6} />
+                  <Check
+                    aria-label={m.probe_stepOk()}
+                    className="mt-0.5 size-3.5 shrink-0 text-success"
+                    strokeWidth={2.6}
+                  />
                 ) : step.ok === false ? (
-                  <X aria-label={m.probe_stepFailed()} className="mt-0.5 size-3.5 shrink-0 text-danger" strokeWidth={2.6} />
+                  <X
+                    aria-label={m.probe_stepFailed()}
+                    className="mt-0.5 size-3.5 shrink-0 text-danger"
+                    strokeWidth={2.6}
+                  />
                 ) : (
                   <Info aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                 )}
-                <span className={cn("[overflow-wrap:anywhere]", step.ok === false && "text-red-300")}>{t(step.text)}</span>
+                <span className={cn("[overflow-wrap:anywhere]", step.ok === false && "text-red-300")}>
+                  {t(step.text)}
+                </span>
               </li>
             ))}
           </ol>
@@ -57,7 +68,9 @@ export function ProbeDetails({ result }: { result: ProbeResult }) {
         </div>
         {result.log && (
           <details>
-            <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">{m.probe_fullOutput()}</summary>
+            <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+              {m.probe_fullOutput()}
+            </summary>
             <pre className="m-0 mt-2 max-h-72 overflow-auto rounded-md bg-muted p-2.5 font-mono text-[11.5px] leading-relaxed text-muted-foreground">
               {result.log}
             </pre>

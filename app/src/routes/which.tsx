@@ -34,55 +34,54 @@ export function WhichPage({ initial }: { initial?: string }) {
   }, [initial, mutate]);
 
   return (
-    <>
-      <div className="flex w-full max-w-[1040px] flex-wrap items-start gap-6">
-        <section className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <h1 className="m-0 text-[22px] font-semibold tracking-tight">{m.which_title()}</h1>
-            <p className="m-0 text-muted-foreground">{m.which_intro()}</p>
+    <div className="flex w-full max-w-[1040px] flex-wrap items-start gap-6">
+      <section className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="m-0 text-[22px] font-semibold tracking-tight">{m.which_title()}</h1>
+          <p className="m-0 text-muted-foreground">{m.which_intro()}</p>
+        </div>
+        <form
+          className="flex flex-wrap gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(query);
+          }}
+        >
+          <label htmlFor="which-input" className="sr-only">
+            {m.which_input()}
+          </label>
+          <Input
+            id="which-input"
+            className="h-10 flex-[1_1_280px] font-mono"
+            placeholder={m.which_placeholder()}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <Button type="submit" size="lg" disabled={!query.trim() || resolve.isPending}>
+            {m.which_resolve()}
+          </Button>
+        </form>
+        {examples.length > 0 && (
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="self-center text-muted-foreground">{m.which_examples()}</span>
+            {examples.map((ex) => (
+              <button
+                key={ex}
+                type="button"
+                onClick={() => run(ex)}
+                className="h-[30px] rounded-full border border-border bg-transparent px-2.5 font-mono text-xs text-secondary-foreground hover:bg-muted"
+              >
+                {ex}
+              </button>
+            ))}
           </div>
-          <form
-            className="flex flex-wrap gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              run(query);
-            }}
-          >
-            <label htmlFor="which-input" className="sr-only">
-              {m.which_input()}
-            </label>
-            <Input
-              id="which-input"
-              className="h-10 flex-[1_1_280px] font-mono"
-              placeholder={m.which_placeholder()}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <Button type="submit" size="lg" disabled={!query.trim() || resolve.isPending}>
-              {m.which_resolve()}
-            </Button>
-          </form>
-          {examples.length > 0 && (
-            <div className="flex flex-wrap gap-2 text-xs">
-              <span className="self-center text-muted-foreground">{m.which_examples()}</span>
-              {examples.map((ex) => (
-                <button
-                  key={ex}
-                  onClick={() => run(ex)}
-                  className="h-[30px] rounded-full border border-border bg-transparent px-2.5 font-mono text-xs text-secondary-foreground hover:bg-muted"
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
-          )}
-          {resolve.isPending && <Spinner label={m.which_resolving()} />}
-          {resolve.isError && <FieldError>{errorMessage(resolve.error)}</FieldError>}
-          {resolve.data && <WhichCard result={resolve.data} />}
-        </section>
-        <DoctorPanel className="min-w-0 flex-[1_1_340px]" />
-      </div>
-    </>
+        )}
+        {resolve.isPending && <Spinner label={m.which_resolving()} />}
+        {resolve.isError && <FieldError>{errorMessage(resolve.error)}</FieldError>}
+        {resolve.data && <WhichCard result={resolve.data} />}
+      </section>
+      <DoctorPanel className="min-w-0 flex-[1_1_340px]" />
+    </div>
   );
 }
 
@@ -90,15 +89,36 @@ function WhichCard({ result }: { result: WhichResult }) {
   const profiles = useProfiles();
   const profile = profiles.data?.profiles.find((p) => p.profile.id === result.profile_id)?.profile;
   const rows: [string, React.ReactNode][] = [];
-  if (result.source) rows.push([m.which_source(), <span className="font-mono text-[12.5px] [overflow-wrap:anywhere]">{result.source}{result.via ? ` · via ${t(result.via)}` : ""}</span>]);
+  if (result.source)
+    rows.push([
+      m.which_source(),
+      <span key="source" className="font-mono text-[12.5px] [overflow-wrap:anywhere]">
+        {result.source}
+        {result.via ? ` · via ${t(result.via)}` : ""}
+      </span>,
+    ]);
   if (result.git_email) rows.push([m.which_identity(), `${result.git_name ?? ""} <${result.git_email}>`]);
-  if (result.hostname) rows.push([m.which_target(), <span className="font-mono text-[12.5px]">{result.user ? `${result.user}@` : ""}{result.hostname}{result.port ? `:${result.port}` : ""}</span>]);
-  if (result.identities_only != null) rows.push(["IdentitiesOnly", result.identities_only ? m.which_identitiesOnlyYes() : m.which_identitiesOnlyNo()]);
+  if (result.hostname)
+    rows.push([
+      m.which_target(),
+      <span key="target" className="font-mono text-[12.5px]">
+        {result.user ? `${result.user}@` : ""}
+        {result.hostname}
+        {result.port ? `:${result.port}` : ""}
+      </span>,
+    ]);
+  if (result.identities_only != null)
+    rows.push(["IdentitiesOnly", result.identities_only ? m.which_identitiesOnlyYes() : m.which_identitiesOnlyNo()]);
   if (result.agent_loaded != null)
     rows.push([
       "Agent",
-      <span className="flex items-center gap-2">
-        <span aria-hidden className={result.agent_loaded ? "size-[7px] rounded-full bg-emerald-500" : "size-[7px] rounded-full bg-amber-500"} />
+      <span key="agent" className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className={
+            result.agent_loaded ? "size-[7px] rounded-full bg-emerald-500" : "size-[7px] rounded-full bg-amber-500"
+          }
+        />
         {result.agent_loaded ? m.which_agentLoaded() : m.which_agentNotLoaded()}
       </span>,
     ]);
@@ -110,7 +130,9 @@ function WhichCard({ result }: { result: WhichResult }) {
           <KeyRound aria-hidden className="size-[18px]" />
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="font-mono text-sm font-medium">{result.key_path?.split("/").pop() ?? m.which_noFixedKey()}</span>
+          <span className="font-mono text-sm font-medium">
+            {result.key_path?.split("/").pop() ?? m.which_noFixedKey()}
+          </span>
           <span className="text-[13px] text-muted-foreground">
             {result.mode === "folder" ? m.which_forFolder() : m.which_forHost({ host: result.query })}
           </span>

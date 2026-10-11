@@ -12,10 +12,18 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@/lib/api";
 import type { Settings } from "@/lib/bindings";
+import { LANGS, type Lang, rich, setLang, storedLang, systemLang } from "@/lib/i18n";
 import { openExternal } from "@/lib/open";
-import { toastSaved, usePaths, useProfiles, useScanKeys, useSetDefault, useSettings, useUpdateSettings } from "@/lib/queries";
+import {
+  toastSaved,
+  usePaths,
+  useProfiles,
+  useScanKeys,
+  useSetDefault,
+  useSettings,
+  useUpdateSettings,
+} from "@/lib/queries";
 import { formatAge } from "@/lib/utils";
-import { LANGS, rich, setLang, storedLang, systemLang, type Lang } from "@/lib/i18n";
 import { m } from "@/paraglide/messages";
 
 const REPO_URL = "https://github.com/firsttris/keybund";
@@ -71,11 +79,15 @@ export function SettingsPage() {
           {keys.isPending && <Spinner />}
           <ul className="m-0 flex list-none flex-col p-0">
             {keys.data?.map((k) => (
-              <li key={k.key.path} className="flex flex-wrap items-center gap-3 border-b border-border-subtle py-3 last:border-b-0">
+              <li
+                key={k.key.path}
+                className="flex flex-wrap items-center gap-3 border-b border-border-subtle py-3 last:border-b-0"
+              >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="font-mono text-[13px]">{k.key.path}</span>
                   <span className="truncate font-mono text-xs text-muted-foreground">
-                    {k.key.fingerprint} {k.key.comment ? `· ${k.key.comment}` : ""} {k.key.age_days != null ? `· ${formatAge(k.key.age_days)}` : ""}
+                    {k.key.fingerprint} {k.key.comment ? `· ${k.key.comment}` : ""}{" "}
+                    {k.key.age_days != null ? `· ${formatAge(k.key.age_days)}` : ""}
                   </span>
                 </div>
                 {k.used_by ? (
@@ -134,12 +146,20 @@ export function SettingsPage() {
           <CardTitle id="about-title">{m.settings_about()}</CardTitle>
           <p className="m-0 text-[13px] leading-relaxed text-muted-foreground">
             Keybund {version.data ? `${version.data} ` : ""}by Tristan Teufel ·{" "}
-            <button className="text-foreground underline-offset-4 hover:underline" onClick={() => openExternal(REPO_URL)}>
+            <button
+              type="button"
+              className="text-foreground underline-offset-4 hover:underline"
+              onClick={() => openExternal(REPO_URL)}
+            >
               {m.settings_source()}
             </button>
             <br />
             {m.settings_license()}{" "}
-            <button className="text-foreground underline-offset-4 hover:underline" onClick={() => openExternal("https://teufel-it.de")}>
+            <button
+              type="button"
+              className="text-foreground underline-offset-4 hover:underline"
+              onClick={() => openExternal("https://teufel-it.de")}
+            >
               teufel-it.de
             </button>
           </p>
@@ -180,12 +200,26 @@ function FoldersForm({ saved }: { saved: Settings }) {
       >
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="projects-dir">{m.settings_projectsDir()}</Label>
-          <Input id="projects-dir" className={mono} value={draft.projects_dir} onChange={(e) => set({ projects_dir: e.target.value })} />
-          <FieldHint>{m.settings_projectsDirHint({ example: `${draft.projects_dir.replace(/\/+$/, "")}/${m.settings_exampleFolder()}/` })}</FieldHint>
+          <Input
+            id="projects-dir"
+            className={mono}
+            value={draft.projects_dir}
+            onChange={(e) => set({ projects_dir: e.target.value })}
+          />
+          <FieldHint>
+            {m.settings_projectsDirHint({
+              example: `${draft.projects_dir.replace(/\/+$/, "")}/${m.settings_exampleFolder()}/`,
+            })}
+          </FieldHint>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="keys-dir">{m.settings_keysDir()}</Label>
-          <Input id="keys-dir" className={mono} value={draft.keys_dir} onChange={(e) => set({ keys_dir: e.target.value })} />
+          <Input
+            id="keys-dir"
+            className={mono}
+            value={draft.keys_dir}
+            onChange={(e) => set({ keys_dir: e.target.value })}
+          />
           <FieldHint>{m.settings_keysDirHint()}</FieldHint>
         </div>
         <ErrorSlot message={update.isError && errorMessage(update.error)} />

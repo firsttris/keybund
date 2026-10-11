@@ -1,5 +1,5 @@
 import { m } from "@/paraglide/messages";
-import { commands, type CmdError, type Msg } from "./bindings";
+import { type CmdError, commands, type Msg } from "./bindings";
 import { t } from "./i18n";
 
 /** Error thrown by every command wrapper; carries the backend's kind. */
@@ -36,7 +36,12 @@ export const api = new Proxy({} as Unwrapped, {
     const fn = (commands as Record<string, (...args: unknown[]) => Promise<unknown>>)[name];
     return async (...args: unknown[]) => {
       const value = await fn(...args);
-      if (value && typeof value === "object" && "status" in value && (value.status === "ok" || value.status === "error")) {
+      if (
+        value &&
+        typeof value === "object" &&
+        "status" in value &&
+        (value.status === "ok" || value.status === "error")
+      ) {
         return unwrap(Promise.resolve(value as Result<unknown>));
       }
       return value;

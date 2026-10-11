@@ -1,6 +1,6 @@
 import { m } from "@/paraglide/messages";
-import { providerLabel } from "./utils";
 import type { HostEntry, Profile, ProfileView } from "./bindings";
+import { providerLabel } from "./utils";
 
 /** A server (ssh, scp, sftp) as opposed to a git hosting account. */
 export function isServer(host: HostEntry): boolean {
@@ -29,7 +29,6 @@ export function usageParts(view: ProfileView): string[] {
   else if (srv.length > 1) parts.push(m.usage_servers({ n: srv.length }));
   return parts;
 }
-
 
 /** Active keys, the standard key first. */
 export function activeKeys(views: ProfileView[]): ProfileView[] {

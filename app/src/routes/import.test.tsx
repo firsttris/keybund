@@ -27,7 +27,7 @@ describe("import from ~/.ssh/config", () => {
     const status = await screen.findByRole("status");
     expect(status).toHaveTextContent("Alles übernommen: 2 Keys, alte Einträge entfernt");
     expect(within(status).getByText("Backup: ~/.ssh/config.keybund-backup")).toBeInTheDocument();
-    expect((await within(status).findByRole("link", { name: "Pflege ABC öffnen" }))).toBeInTheDocument();
+    expect(await within(status).findByRole("link", { name: "Pflege ABC öffnen" })).toBeInTheDocument();
     expect(backend.state.profiles.find((p) => p.id === "nebenjob")).toMatchObject({
       name: "Pflege ABC",
       hosts: [{ alias: "nebenjob", hostname: "github.com" }],
@@ -56,7 +56,9 @@ describe("import from ~/.ssh/config", () => {
     await user.click(await screen.findByText("Änderung ansehen"));
     expect(screen.getByText("-Host nebenjob")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Alte Einträge entfernen" }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Alte Einträge entfernen" })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Alte Einträge entfernen" })).not.toBeInTheDocument(),
+    );
     expect(backend.state.sshBlocks).toEqual([]);
   });
 
@@ -95,6 +97,8 @@ describe("connection test with another key", () => {
     const { user } = await renderApp("/profile/acme");
     const account = await testAccount(user);
     expect(await within(account).findByTestId("connection-status")).toHaveTextContent("Verbunden als @tristan");
-    expect(within(account).getByRole("list", { name: "Ablauf" })).toHaveTextContent("Server akzeptiert ~/.ssh/acme_ed25519");
+    expect(within(account).getByRole("list", { name: "Ablauf" })).toHaveTextContent(
+      "Server akzeptiert ~/.ssh/acme_ed25519",
+    );
   });
 });

@@ -1,4 +1,4 @@
-import { clsx, type ClassValue } from "clsx";
+import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { m } from "@/paraglide/messages";
 import type { HostEntry, Provider } from "./bindings";
@@ -43,7 +43,9 @@ export const PROVIDERS: Provider[] = ["github", "gitlab", "bitbucket", "generic"
 export const GIT_PROVIDERS: Provider[] = ["github", "gitlab", "bitbucket"];
 
 export function providerLabel(provider: Provider): string {
-  return provider === "generic" ? m.provider_generic() : { github: "GitHub", gitlab: "GitLab", bitbucket: "Bitbucket" }[provider];
+  return provider === "generic"
+    ? m.provider_generic()
+    : { github: "GitHub", gitlab: "GitLab", bitbucket: "Bitbucket" }[provider];
 }
 
 export function defaultHostname(provider: Provider): string {
@@ -111,7 +113,8 @@ export function formatDay(at: number, now: Date = new Date()): string {
 export function slugify(name: string): string {
   let out = "";
   for (const ch of name.toLowerCase()) {
-    const mapped = ({ ä: "ae", ö: "oe", ü: "ue", ß: "ss" } as Record<string, string>)[ch] ?? (/[a-z0-9]/.test(ch) ? ch : "-");
+    const mapped =
+      ({ ä: "ae", ö: "oe", ü: "ue", ß: "ss" } as Record<string, string>)[ch] ?? (/[a-z0-9]/.test(ch) ? ch : "-");
     if (mapped === "-" && (out === "" || out.endsWith("-"))) continue;
     out += mapped;
   }
@@ -121,4 +124,3 @@ export function slugify(name: string): string {
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
-

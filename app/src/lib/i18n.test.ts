@@ -85,14 +85,22 @@ describe("messages/*.json", () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(de).sort());
     const empty = keys.filter((k) => [de[k], en[k]].some((v) => typeof v === "string" && !v.trim()));
     expect(empty).toEqual([]);
-    const differ = keys.filter((k) => JSON.stringify([...placeholders(de[k])].sort()) !== JSON.stringify([...placeholders(en[k])].sort()));
+    const differ = keys.filter(
+      (k) => JSON.stringify([...placeholders(de[k])].sort()) !== JSON.stringify([...placeholders(en[k])].sort()),
+    );
     expect(differ).toEqual([]);
   });
 
   it("every message is used (frontend or Rust), every used key exists", () => {
     const files = (dir: string, ext: RegExp): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((e): string[] =>
-        e.isDirectory() ? (e.name === "paraglide" || e.name === "target" ? [] : files(join(dir, e.name), ext)) : ext.test(e.name) ? [join(dir, e.name)] : [],
+        e.isDirectory()
+          ? e.name === "paraglide" || e.name === "target"
+            ? []
+            : files(join(dir, e.name), ext)
+          : ext.test(e.name)
+            ? [join(dir, e.name)]
+            : [],
       );
     const ts = files("src", /\.tsx?$/).filter((f) => !f.endsWith(".test.ts") && !f.endsWith(".test.tsx"));
     const rust = [...files("../crates", /\.rs$/), ...files("src-tauri/src", /\.rs$/)];

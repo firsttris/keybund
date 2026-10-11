@@ -45,7 +45,10 @@ export function HowItWorks({ forceOpen = false }: { forceOpen?: boolean }) {
     );
   }
   return (
-    <section aria-label={m.howItWorks_title()} className="relative flex flex-col gap-4 rounded-xl border border-border bg-card p-5">
+    <section
+      aria-label={m.howItWorks_title()}
+      className="relative flex flex-col gap-4 rounded-xl border border-border bg-card p-5"
+    >
       <div className="flex items-start justify-between gap-3">
         <h2 className="m-0 text-[15px] font-semibold">{m.howItWorks_title()}</h2>
         {!forceOpen && (
@@ -64,6 +67,7 @@ export function HowItWorks({ forceOpen = false }: { forceOpen?: boolean }) {
       </div>
       <ol className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4 p-0">
         {STEPS.map(({ icon: Icon, title, text }, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list
           <li key={i} className="flex gap-3">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <Icon aria-hidden className="size-4" />

@@ -8,7 +8,10 @@ const row = (app: Page, text: string | RegExp) =>
 test("navigates to a key and shows where it is used", async ({ app }) => {
   await app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Acme/ }).click();
   await expect(app.getByRole("heading", { level: 1, name: "Acme" })).toBeVisible();
-  await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Acme/ })).toHaveAttribute("aria-current", "page");
+  await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Acme/ })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
   await expect(app.getByText("~/.ssh/acme_ed25519", { exact: true }).first()).toBeVisible();
   await expect(row(app, "GitLab-Konto")).toContainText("gitlab.kunde.de");
   await expect(row(app, "~/dev/acme/")).toBeVisible();
@@ -42,7 +45,9 @@ test("connection test shows success and failure with the steps", async ({ app })
   await expect(failing.getByText("Pubkey ist kopiert.")).toBeVisible();
   expect(await mockState<string[]>(app, "openedUrls")).toEqual(["https://github.com/settings/ssh/new"]);
   await app.evaluate(() => {
-    (window as unknown as { __keybundMock: { state: { accountKeys: string[] } } }).__keybundMock.state.accountKeys.push("github.com:~/.ssh/kunde-b_ed25519");
+    (window as unknown as { __keybundMock: { state: { accountKeys: string[] } } }).__keybundMock.state.accountKeys.push(
+      "github.com:~/.ssh/kunde-b_ed25519",
+    );
   });
   await failing.getByRole("button", { name: "Erledigt – jetzt testen" }).click();
   await expect(failing.getByTestId("connection-status")).toHaveText("Verbunden als @tristan");
@@ -54,7 +59,9 @@ test("opens the provider page", async ({ app }) => {
   const accounts = row(app, "GitLab-Konto");
   await accounts.getByRole("button", { name: "Key eintragen" }).click();
   await expect(accounts.getByText("Pubkey ist kopiert.")).toBeVisible();
-  await expect.poll(() => mockState<string[]>(app, "openedUrls")).toEqual(["https://gitlab.kunde.de/-/user_settings/ssh_keys"]);
+  await expect
+    .poll(() => mockState<string[]>(app, "openedUrls"))
+    .toEqual(["https://gitlab.kunde.de/-/user_settings/ssh_keys"]);
   expect(await mockState<string>(app, "clipboard")).toMatch(/tristan@zentrale-acme$/);
 });
 
@@ -62,7 +69,9 @@ test("shows the generated config", async ({ app }) => {
   await app.goto("/#/profile/privat");
   await app.getByRole("tab", { name: "Generierte Config" }).click();
   await expect(app.getByText("~/.config/keybund/git/privat.gitconfig", { exact: true })).toBeVisible();
-  await expect(app.getByText(/sshCommand = ssh -i ~\/.ssh\/privat_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes/)).toBeVisible();
+  await expect(
+    app.getByText(/sshCommand = ssh -i ~\/.ssh\/privat_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes/),
+  ).toBeVisible();
   await expect(app.getByText(/Host meinserver/)).toBeVisible();
 });
 
@@ -117,7 +126,9 @@ test("adds a server and installs the key", async ({ app }) => {
   await expect(dialog).toContainText("Erste Verbindung zu 10.0.0.7");
   await dialog.getByRole("button", { name: "Fingerprint stimmt" }).click();
   await expect(card.getByText("Key auf kundenserver eingetragen")).toBeVisible();
-  await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Kunde B.*kundenserver/ })).toBeVisible();
+  await expect(
+    app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Kunde B.*kundenserver/ }),
+  ).toBeVisible();
 });
 
 test("adds a git account", async ({ app }) => {
@@ -126,7 +137,9 @@ test("adds a git account", async ({ app }) => {
   await app.getByLabel("Anbieter").selectOption("gitlab");
   await app.getByRole("button", { name: "Konto speichern" }).click();
   await expect(row(app, "GitLab-Konto")).toContainText("gitlab.com");
-  await expect(app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Kunde B.*GitHub · GitLab/ })).toBeVisible();
+  await expect(
+    app.getByRole("navigation", { name: "Keys" }).getByRole("link", { name: /Kunde B.*GitHub · GitLab/ }),
+  ).toBeVisible();
 });
 
 test("archives a profile and removes its configs", async ({ app }) => {
@@ -137,11 +150,13 @@ test("archives a profile and removes its configs", async ({ app }) => {
 
   await expect(app.getByRole("heading", { name: "Übersicht" })).toBeVisible();
   await expect(app.getByText("Configs aktuell")).toBeVisible();
-  expect(await app.evaluate(() =>
-    (window as unknown as { __keybundMock: { state: { applied: Map<string, string> } } }).__keybundMock.state.applied.has(
-      "~/.config/keybund/git/kunde-b.gitconfig",
+  expect(
+    await app.evaluate(() =>
+      (
+        window as unknown as { __keybundMock: { state: { applied: Map<string, string> } } }
+      ).__keybundMock.state.applied.has("~/.config/keybund/git/kunde-b.gitconfig"),
     ),
-  )).toBe(false);
+  ).toBe(false);
 
   await expect(app.getByRole("navigation", { name: "Keys" }).getByText("Kunde B")).toHaveCount(0);
   await expect(app.getByRole("navigation", { name: "Archiv" }).getByText("Kunde B")).toBeVisible();
