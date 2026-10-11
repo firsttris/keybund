@@ -103,6 +103,8 @@ pub fn run(env: &Env) -> Report {
     checks.push(agent_check(env));
     checks.extend(add_keys_check(env, &config));
     checks.extend(ssh_config_checks(env, &config));
+    checks.extend(global_identity_file_check(env));
+    checks.extend(own_ssh_command_check(env, &config));
     checks.extend(key_age_checks(env, &config));
     checks.extend(folder_checks(env, &config));
     let dolphin = process::find_program("dolphin").is_some() || kio_sftp_installed();
@@ -239,8 +241,13 @@ fn include_checks(env: &Env) -> Vec<Check> {
         Check::new("ssh-include", Status::Warn, "Include fehlt in ~/.ssh/config").fix(Fix::Apply)
     });
     let git = fsutil::read_optional(&env.gitconfig()).ok().flatten().unwrap_or_default();
-    checks.push(if apply::git_include_present(&git, &env.contract(&env.index_gitconfig())) {
+    let index = env.contract(&env.index_gitconfig());
+    checks.push(if apply::git_include_last(&git, &index) {
         Check::new("git-include", Status::Ok, "~/.gitconfig bindet Keybund ein")
+    } else if apply::git_include_present(&git, &index) {
+        Check::new("git-include", Status::Warn, "Keybund steht nicht mehr am Ende von ~/.gitconfig")
+            .detail("Was danach steht (z. B. von git config --global), überschreibt die Einstellungen deiner Keys.")
+            .fix(Fix::Apply)
     } else {
         Check::new("git-include", Status::Warn, "Include fehlt in ~/.gitconfig").fix(Fix::Apply)
     });
@@ -362,6 +369,61 @@ fn ssh_config_checks(env: &Env, config: &Config) -> Vec<Check> {
     checks
 }
 
+/// `IdentityFile` lines in `~/.ssh/config` that apply to every host (global,
+/// `Host *`, `Match`): ssh adds them to Keybund's hosts as well, and a key
+/// loaded in the agent is offered first – the login can then succeed with
+/// the wrong account. IdentitiesOnly does not stop that.
+pub fn global_identity_files(ssh_config: &str) -> Vec<String> {
+    let mut wide = true; // before the first Host/Match: global
+    let mut out = Vec::new();
+    for line in ssh_config.lines() {
+        let t = line.trim();
+        if t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        let (key, value) = t.split_once(|c: char| c.is_whitespace() || c == '=').unwrap_or((t, ""));
+        let value = value.trim_start_matches(|c: char| c.is_whitespace() || c == '=').trim();
+        match key.to_ascii_lowercase().as_str() {
+            "host" => wide = value.split_whitespace().any(|p| p.contains(['*', '?'])),
+            "match" => wide = true,
+            "identityfile" if wide => out.push(value.trim_matches('"').to_string()),
+            _ => {}
+        }
+    }
+    out
+}
+
+fn global_identity_file_check(env: &Env) -> Vec<Check> {
+    let ssh = fsutil::read_optional(&env.ssh_config()).ok().flatten().unwrap_or_default();
+    let files = global_identity_files(&ssh);
+    if files.is_empty() {
+        return Vec::new();
+    }
+    vec![Check::new("ssh-global-identity", Status::Warn, "IdentityFile für alle Hosts in ~/.ssh/config")
+        .detail(format!(
+            "{} wird bei jeder Verbindung zusätzlich angeboten, auch zu den Hosts deiner Keys. Ist er im ssh-agent, kommt er zuerst – die Anmeldung kann dann mit dem falschen Konto gelingen. Besser nur in den Host-Blöcken angeben, die ihn brauchen.",
+            files.join(", ")
+        ))]
+}
+
+/// The user's own `core.sshCommand` in `~/.gitconfig` is replaced by the
+/// standard key outside the git folders – worth knowing.
+fn own_ssh_command_check(env: &Env, config: &Config) -> Vec<Check> {
+    let Some(def) = config.default_entry() else { return Vec::new() };
+    let mut cmd = env.command("git");
+    cmd.arg("config").arg("--file").arg(env.gitconfig()).args(["--get", "core.sshCommand"]);
+    let Ok(own) = crate::process::stdout(cmd) else { return Vec::new() };
+    let own = own.trim();
+    if own.is_empty() {
+        return Vec::new();
+    }
+    vec![Check::new("git-own-ssh-command", Status::Warn, "Standard-Key ersetzt dein core.sshCommand")
+        .detail(format!(
+            "~/.gitconfig setzt „{own}“, außerhalb der Git-Ordner gilt aber der Standard-Key „{}“. Entferne die Zeile oder nimm den Standard zurück.",
+            def.name
+        ))]
+}
+
 fn key_age_checks(env: &Env, config: &Config) -> Vec<Check> {
     config
         .active_profiles()
@@ -428,6 +490,14 @@ pub fn fix(env: &Env, fix: &Fix) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn finds_identity_files_for_every_host() {
+        let cfg = "Include ~/.ssh/config.d/keybund.conf\nIdentityFile ~/.ssh/global\nHost github.com\n  IdentityFile ~/.ssh/gh\nHost *.corp *\n  IdentityFile ~/.ssh/star\nMatch host x\n  IdentityFile=~/.ssh/match\n";
+        assert_eq!(global_identity_files(cfg), ["~/.ssh/global", "~/.ssh/star", "~/.ssh/match"]);
+        assert!(global_identity_files("Host a\n  IdentityFile ~/.ssh/a\n").is_empty());
+    }
+
     use super::*;
 
     #[test]

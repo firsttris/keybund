@@ -127,8 +127,11 @@ enum Command {
     },
     /// Standard-Key setzen (für Repos außerhalb aller Git-Ordner)
     Default {
-        #[arg(value_name = "KEY")]
-        profile: String,
+        #[arg(value_name = "KEY", required_unless_present = "unset")]
+        profile: Option<String>,
+        /// Keinen Standard-Key mehr (ssh wählt außerhalb der Git-Ordner selbst)
+        #[arg(long, conflicts_with = "profile")]
+        unset: bool,
     },
     /// Einstellungen zeigen oder ändern, z. B. `keybund config projects-dir ~/work`
     Config { key: Option<String>, value: Option<String> },
@@ -169,7 +172,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Doctor { fix } => commands::doctor(&env, fix),
         Command::Keys => commands::keys(&env),
         Command::Import { all, yes, keep_old } => commands::import(&env, all, yes, keep_old),
-        Command::Default { profile } => commands::set_default(&env, &profile),
+        Command::Default { profile, .. } => commands::set_default(&env, profile.as_deref()),
         Command::Config { key, value } => commands::config(&env, key.as_deref(), value.as_deref()),
         Command::Uninstall { restore_backups, purge, yes } => commands::uninstall(&env, restore_backups, purge, yes),
         Command::Archive { profile, yes } => commands::archive(&env, &profile, yes),

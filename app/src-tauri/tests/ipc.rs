@@ -88,7 +88,7 @@ fn wizard_flow_over_ipc() {
     let res = invoke(&webview, "load_profiles", json!({})).unwrap();
     let p = &res["profiles"][0];
     assert_eq!(p["profile"]["id"], "c");
-    assert_eq!(p["is_default"], true);
+    assert_eq!(p["is_default"], false);
     assert_eq!(p["add_key_urls"][0]["url"], "https://gitlab.kunde.de/-/user_settings/ssh_keys");
     assert!(p["key"]["fingerprint"].as_str().unwrap().starts_with("SHA256:"));
 

@@ -20,11 +20,14 @@ In Keybund legst du **Keys** an – „Privat“, „Kunde C“, „NAS“ – u
 | **Git-Ordner** | Repos in `~/dev/kunde-c/` nutzen diesen Key und Name/E-Mail für Commits | `includeIf "gitdir:…"` |
 | **Git-Konto** | GitHub, GitLab, Bitbucket – dort muss der Pubkey stehen („Key eintragen“) | Ordner oder Alias (`git@github-kunde:…`) |
 | **Server** | `ssh`, `scp`, `sftp`, `rsync` auf einen Host oder eine IP | `Host`-Block mit Alias und Hostname |
-| **Standard** | Git überall dort, wo kein anderer Key gilt | `core.sshCommand` in `index.gitconfig` |
+| **Standard** (optional) | Git überall dort, wo kein anderer Key gilt – ersetzt dort ssh's eigene Key-Wahl | `core.sshCommand` in `index.gitconfig` |
 
 **Git-Identität:** Deine Identität aus `~/.gitconfig` bleibt, wie sie ist – Keybund liest sie nur. Ein Key mit
 Git-Ordner kann eine eigene haben (z. B. die E-Mail eines Kunden); sie gilt dann nur in diesen Ordnern. Leere Felder
-heißen „wie in `~/.gitconfig`“. Für den Standard-Key setzt Keybund nur den SSH-Key, nicht die Identität.
+heißen „wie in `~/.gitconfig`“. Für den Standard-Key setzt Keybund nur den SSH-Key, nicht die Identität. Einen
+Standard-Key gibt es nur, wenn du einen festlegst; der Doctor warnt, wenn er ein eigenes `core.sshCommand` überdeckt.
+Keybunds Include steht immer als Letztes in `~/.gitconfig` (sonst würde ein später angehängter Eintrag, z. B. von
+`git config --global`, die Einstellungen deiner Keys überschreiben) – Keybund rückt es beim Schreiben wieder ans Ende.
 
 Ein Key kann alles zugleich sein – z. B. „Privat“ als Standard, mit GitHub und deinem Heimserver. Neuer Key: Name
 eingeben, „Key anlegen“ – wo er gilt, legst du danach auf seiner Seite fest. Bei jeder Verwendung gibt es „Testen“
@@ -100,7 +103,7 @@ Daraus schreibt Keybund:
 | `~/.ssh/config.d/keybund.conf` | `Host`-Blöcke für Server mit Alias, je `IdentityFile` + `IdentitiesOnly yes` | `Include` ganz oben in `~/.ssh/config` |
 | `~/.config/keybund/git/index.gitconfig` | `core.sshCommand` des Standard-Keys, ein `includeIf "gitdir:…/"` pro Ordner | `[include]` in `~/.gitconfig` |
 | `~/.config/keybund/git/<id>.gitconfig` | `user.name`, `user.email`, `core.sshCommand = ssh -i <key> -o IdentitiesOnly=yes -o AddKeysToAgent=yes`, Signing | `index.gitconfig` |
-| `~/.config/keybund/allowed_signers` | E-Mail + Pubkey je signierendem Key | `gpg.ssh.allowedSignersFile` |
+| `~/.config/keybund/allowed_signers` | E-Mail + Pubkey je signierendem Key | `gpg.ssh.allowedSignersFile` in `<id>.gitconfig` (nur in den Ordnern signierender Keys) |
 
 ## Umstieg mit bestehender `~/.ssh/config`
 
@@ -138,7 +141,7 @@ keybund doctor [--fix]           Alle Checks, Exit-Code ≠ 0 bei Problemen
 keybund keys                     Vorhandene Keys in ~/.ssh
 keybund import [--all] [-y]      Bestehende ~/.ssh/config übernehmen, alte Einträge danach entfernen
 keybund uninstall [--restore-backups] [--purge]   Alles entfernen, was Keybund geschrieben hat (Keys bleiben)
-keybund default <key>            Standard-Key setzen
+keybund default <key> | --unset  Standard-Key setzen oder entfernen
 keybund archive <key>            Key nach ~/.ssh/archive, Configs entfernen
 ```
 

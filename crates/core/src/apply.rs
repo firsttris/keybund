@@ -293,20 +293,52 @@ pub fn git_include_present(content: &str, index_path: &str) -> bool {
     false
 }
 
-/// Appends an `[include]` for Keybund's index at the end of `~/.gitconfig`,
-/// so the per-folder settings win over global ones.
+/// `true` if nothing is set after Keybund's include in `~/.gitconfig`: git
+/// takes the last value, so a `[user]` appended later (e.g. by
+/// `git config --global`) would override every key's settings.
+pub fn git_include_last(content: &str, index_path: &str) -> bool {
+    let mut seen = false;
+    let mut in_include = false;
+    for line in content.lines() {
+        let t = line.trim();
+        if t.is_empty() || t.starts_with('#') || t.starts_with(';') {
+            continue;
+        }
+        if t.starts_with('[') {
+            // A section header alone sets nothing; its first setting decides.
+            in_include = t.trim_start_matches('[').trim_end_matches(']').trim().eq_ignore_ascii_case("include");
+            continue;
+        }
+        let is_ours = in_include
+            && t.split_once('=').is_some_and(|(k, v)| {
+                k.trim().eq_ignore_ascii_case("path") && v.trim().trim_matches('"') == index_path
+            });
+        if is_ours {
+            seen = true;
+        } else if seen {
+            return false;
+        }
+    }
+    seen
+}
+
+/// Makes sure `~/.gitconfig` includes Keybund's index as its last setting,
+/// so the per-folder settings win over global ones. An include that is no
+/// longer last is moved to the end.
 pub fn ensure_git_include(content: &str, index_path: &str) -> String {
-    if git_include_present(content, index_path) {
+    if git_include_last(content, index_path) {
         return content.to_string();
     }
-    let mut out = content.to_string();
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
-    }
+    let content = if git_include_present(content, index_path) {
+        crate::uninstall::without_git_include(content, index_path)
+    } else {
+        content.to_string()
+    };
+    let mut out = content.trim_end_matches('\n').to_string();
     if !out.is_empty() {
-        out.push('\n');
+        out.push_str("\n\n");
     }
-    out.push_str(&format!("# Added by Keybund\n[include]\n\tpath = {index_path}\n"));
+    out.push_str(&format!("# Added by Keybund\n[include]\n\tpath = {}\n", crate::render::git_value(index_path)));
     out
 }
 
@@ -314,6 +346,22 @@ pub fn ensure_git_include(content: &str, index_path: &str) -> String {
 mod tests {
     use super::*;
     use crate::render::SSH_INCLUDE_LINE;
+
+    #[test]
+    fn git_include_stays_last() {
+        let idx = "~/.config/keybund/git/index.gitconfig";
+        let first = ensure_git_include("[user]\n\tname = T\n", idx);
+        assert!(git_include_last(&first, idx));
+        assert_eq!(ensure_git_include(&first, idx), first);
+        // `git config --global user.email …` appends after it.
+        let later = format!("{first}[user]\n\temail = me@global.com\n");
+        assert!(git_include_present(&later, idx) && !git_include_last(&later, idx));
+        let fixed = ensure_git_include(&later, idx);
+        assert!(git_include_last(&fixed, idx), "{fixed}");
+        assert_eq!(fixed.matches("keybund/git/index.gitconfig").count(), 1);
+        assert!(fixed.contains("email = me@global.com"));
+        assert!(fixed.find("me@global.com").unwrap() < fixed.find("index.gitconfig").unwrap());
+    }
 
     #[test]
     fn ssh_include_goes_first() {

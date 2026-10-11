@@ -201,7 +201,9 @@ fn with_new_profile(env: &Env, project: &NewProject) -> CmdResult<Config> {
         profile.key = KeyRef { path: env.contract(&env.expand(path)), comment: None };
     }
     config.profiles.push(profile);
-    if project.make_default || config.default_profile.is_none() {
+    // Only on request: a standard key replaces ssh's own key choice (and an own
+    // core.sshCommand) for every repo outside the git folders.
+    if project.make_default {
         config.default_profile = Some(project.profile.id.clone());
     }
     store::validate(&config)?;
@@ -488,7 +490,7 @@ pub fn generated_config(env: &Env, id: &str) -> CmdResult<Vec<GeneratedFile>> {
     let p = config.profile(id)?;
     let mut files = vec![GeneratedFile {
         path: env.contract(&env.profile_gitconfig(id)),
-        content: keybund_core::render::profile_gitconfig(p),
+        content: keybund_core::render::profile_gitconfig(p, env),
         excerpt: false,
     }];
     if !p.folders.is_empty() {
@@ -603,7 +605,7 @@ mod tests {
 
         let created = create_project(&env, &p).unwrap();
         assert!(created.public_key.starts_with("ssh-ed25519 "));
-        assert!(created.profile.is_default, "first profile becomes default");
+        assert!(!created.profile.is_default, "the standard key is only set on request");
         assert_eq!(created.profile.add_key_urls[0].url, "https://github.com/settings/ssh/new");
         assert!(env.home.join("dev/c").is_dir());
         assert!(plan_changes(&env).unwrap().is_empty());

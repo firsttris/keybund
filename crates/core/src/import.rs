@@ -117,6 +117,12 @@ pub struct ImportProposal {
     pub notes: Vec<String>,
 }
 
+/// A git host several keys may use: the public ones, or one another key has.
+fn shared_host(config: &Config, hostname: &str) -> bool {
+    ["github.com", "gitlab.com", "bitbucket.org"].iter().any(|h| h.eq_ignore_ascii_case(hostname))
+        || config.profiles.iter().any(|p| p.hosts.iter().any(|h| h.hostname.eq_ignore_ascii_case(hostname)))
+}
+
 /// Turns a key path into a profile id: `~/.ssh/privat_ed25519` → `privat`.
 fn id_from_key(path: &str) -> Option<String> {
     let stem = Path::new(path).file_name()?.to_string_lossy().into_owned();
@@ -171,6 +177,7 @@ pub fn proposals(env: &Env, config: &Config, ssh_config: &str) -> Vec<ImportProp
 
         let mut notes = Vec::new();
         let mut make_default = false;
+        let mut needs_folder = false;
         let hosts: Vec<HostEntry> = blocks
             .iter()
             .map(|b| {
@@ -184,8 +191,14 @@ pub fn proposals(env: &Env, config: &Config, ssh_config: &str) -> Vec<ImportProp
                     default_given = true;
                     make_default = true;
                     None
-                } else if same_name && !provider.is_git_host() {
+                } else if same_name && (!provider.is_git_host() || shared_host(config, &hostname)) {
                     // A server without alias: Keybund's block matches its hostname anyway.
+                    // A plain github.com while another key is default: never a
+                    // `Host github.com` block – it would add this key to every
+                    // connection to github.com, also those of other keys.
+                    if provider.is_git_host() {
+                        needs_folder = true;
+                    }
                     None
                 } else {
                     Some(b.pattern.clone())
@@ -194,6 +207,9 @@ pub fn proposals(env: &Env, config: &Config, ssh_config: &str) -> Vec<ImportProp
                 HostEntry { alias, hostname, user, port: b.port.filter(|p| *p != 22), provider }
             })
             .collect();
+        if needs_folder {
+            notes.push("Ein anderer Key ist schon Standard – dieser gilt erst mit einem Git-Ordner.".into());
+        }
         if make_default {
             notes.push(format!(
                 "Wird Standard-Key: gilt für {} in allen Ordnern ohne eigenen Key",
@@ -460,7 +476,8 @@ Match host foo
         let p = proposals(&env, &Config::default(), text);
         assert_eq!(p.len(), 1);
         assert_eq!(p[0].blocks, ["github.com", "gitlab.com"]);
-        assert_eq!(p[0].profile.hosts[1].alias.as_deref(), Some("gitlab.com"));
-        assert_eq!(p[0].profile.hosts[1].port, Some(2222));
+        // gitlab.com is shared by many keys: no `Host gitlab.com` block, it works through a folder.
+        assert_eq!(p[0].profile.hosts[1].alias, None);
+        assert!(p[0].notes.iter().any(|n| n.contains("erst mit einem Git-Ordner")));
     }
 }

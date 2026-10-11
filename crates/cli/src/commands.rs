@@ -335,7 +335,8 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
         hosts: vec![host.clone()],
     };
     config.profiles.push(profile.clone());
-    if args.default || config.default_profile.is_none() && config.profiles.len() == 1 {
+    // Only on request: a standard key replaces ssh's own key choice outside the git folders.
+    if args.default {
         config.default_profile = Some(id.clone());
     }
     store::save(env, &config)?;
@@ -365,11 +366,7 @@ pub fn new(env: &Env, args: NewArgs) -> Result<ExitCode> {
             let _ = system::open_url(&url);
         }
     } else if provider == Provider::Generic {
-        ui::hint(&format!(
-            "Key auf dem Server eintragen: ssh-copy-id -i {} {}",
-            profile.key.pub_path(),
-            host.target_name()
-        ));
+        ui::hint(&format!("Key auf dem Server eintragen: keybund install-key {}", profile.id));
     }
 
     // 8. „Ich hab ihn eingetragen“ → Verbindungstest
@@ -633,7 +630,11 @@ pub fn apply(env: &Env, dry_run: bool, yes: bool) -> Result<ExitCode> {
         }
         return Ok(ExitCode::SUCCESS);
     }
-    let yes = yes || !interactive();
+    // Writing the user's own files needs a yes: asked, or --yes.
+    if !yes && !interactive() && !plan.is_empty() {
+        print_plan(&plan);
+        bail!("Ohne Terminal nur mit --yes");
+    }
     confirm_and_apply(env, &plan, yes)?;
     Ok(ExitCode::SUCCESS)
 }
@@ -690,12 +691,19 @@ pub fn keys(env: &Env) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-pub fn set_default(env: &Env, id: &str) -> Result<ExitCode> {
+pub fn set_default(env: &Env, id: Option<&str>) -> Result<ExitCode> {
     let mut config = store::load(env)?;
-    config.profile(id)?;
-    config.default_profile = Some(id.to_string());
+    if let Some(id) = id {
+        if config.profile(id)?.archived {
+            bail!("Key „{id}“ ist archiviert");
+        }
+    }
+    config.default_profile = id.map(str::to_string);
     store::save(env, &config)?;
-    ui::success(&format!("Standard-Key: {id}"));
+    match id {
+        Some(id) => ui::success(&format!("Standard-Key: {id}")),
+        None => ui::success("Kein Standard-Key mehr – außerhalb der Git-Ordner wählt ssh den Key selbst"),
+    }
     ui::hint("Mit `keybund apply` übernehmen.");
     Ok(ExitCode::SUCCESS)
 }

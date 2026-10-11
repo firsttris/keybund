@@ -9,9 +9,6 @@ expression: "index_gitconfig(&sample(), &Env::with_home(\"/home/t\"))"
 [core]
 	sshCommand = ssh -i ~/.ssh/privat_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes
 
-[gpg "ssh"]
-	allowedSignersFile = ~/.config/keybund/allowed_signers
-
 [includeIf "gitdir:~/dev/privat/"]
 	path = ~/.config/keybund/git/privat.gitconfig
 

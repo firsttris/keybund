@@ -189,11 +189,13 @@ pub struct GlobalIdentity {
     pub email: Option<String>,
 }
 
-/// Reads `user.name` and `user.email` with `git config --global`, which does
-/// not follow includes – so Keybund's own files never count.
+/// Reads `user.name` and `user.email` with `git config --global`.
 pub fn global_identity(env: &Env) -> GlobalIdentity {
     let mut cmd = env.command("git");
-    cmd.args(["config", "--global", "--get-regexp", r"^user\.(name|email)$"]);
+    // With includes (the user may keep the identity in an included file), run
+    // outside any repository, so no `includeIf "gitdir:…"` – Keybund's
+    // folders – applies.
+    cmd.current_dir("/").args(["config", "--global", "--includes", "--get-regexp", r"^user\.(name|email)$"]);
     // Exit code 1: neither is set.
     let out = crate::process::stdout(cmd).unwrap_or_default();
     let mut id = GlobalIdentity::default();
@@ -214,7 +216,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_the_global_identity_without_includes() {
+    fn reads_the_global_identity_outside_any_folder() {
         // These point git at another global config than the temporary HOME.
         if ["GIT_CONFIG_GLOBAL", "XDG_CONFIG_HOME"].iter().any(|v| std::env::var_os(v).is_some()) {
             return;
@@ -227,14 +229,15 @@ mod tests {
         let env = Env::with_home(dir.path());
         assert_eq!(global_identity(&env), GlobalIdentity::default());
         std::fs::write(dir.path().join("other.gitconfig"), "[user]\n\temail = included@x.de\n").unwrap();
+        std::fs::write(dir.path().join("folder.gitconfig"), "[user]\n\temail = folder@x.de\n").unwrap();
         std::fs::write(
             dir.path().join(".gitconfig"),
-            "[user]\n\tname = Tristan Teufel\n[include]\n\tpath = ~/other.gitconfig\n",
+            "[user]\n\tname = Tristan Teufel\n[include]\n\tpath = ~/other.gitconfig\n[includeIf \"gitdir:/\"]\n\tpath = ~/folder.gitconfig\n",
         )
         .unwrap();
         let id = global_identity(&env);
         assert_eq!(id.name.as_deref(), Some("Tristan Teufel"));
-        assert_eq!(id.email, None, "includes (Keybund's files) do not count");
+        assert_eq!(id.email.as_deref(), Some("included@x.de"), "plain includes count, folder rules do not");
     }
 
     fn kv(list: &[(&str, &str)]) -> Vec<(String, String)> {

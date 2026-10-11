@@ -88,10 +88,12 @@ pub fn clone(env: &Env, profile: &Profile, url: &str, target: Option<PathBuf>) -
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
     }
+    // `git -c` (not `clone -c`): the key is used for this clone only and not
+    // stored in the repo, so includeIf keeps deciding later (key changes, archive).
     let mut cmd = env.command("git");
-    cmd.arg("clone")
-        .arg("-c")
+    cmd.arg("-c")
         .arg(format!("core.sshCommand={}", ssh_command(&profile.key.path)))
+        .arg("clone")
         .arg("--")
         .arg(url.trim())
         .arg(&target)

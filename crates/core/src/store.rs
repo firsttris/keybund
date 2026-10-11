@@ -221,7 +221,7 @@ fn check_values(p: &Profile) -> Result<()> {
     let token = |field: &str, value: &str| {
         let bad = value.is_empty()
             || value.starts_with('-')
-            || value.chars().any(|c| c.is_whitespace() || c.is_control() || "*?!,\"'#".contains(c));
+            || value.chars().any(|c| c.is_whitespace() || c.is_control() || "*?!,\"'#%[]".contains(c));
         if bad {
             Err(invalid(field, value))
         } else {
@@ -230,13 +230,18 @@ fn check_values(p: &Profile) -> Result<()> {
     };
     printable("Name", &p.name)?;
     printable("Key", &p.key.path)?;
+    // ssh expands % and ${…} in IdentityFile, and a quote would end the quoted path.
+    if p.key.path.contains(['"', '%']) || p.key.path.contains("${") {
+        return Err(invalid("Key", &p.key.path));
+    }
     if let Some(g) = &p.git {
         printable("Git-Name", &g.name)?;
         printable("Git-E-Mail", &g.email)?;
     }
     for f in &p.folders {
         printable("Ordner", f)?;
-        if f.contains('"') || !(f.starts_with('/') || f.starts_with("~/")) {
+        // gitdir: patterns are globs: * ? [ \ would match other folders.
+        if f.contains(['"', '*', '?', '[', '\\']) || !(f.starts_with('/') || f.starts_with("~/")) {
             return Err(Error::InvalidPath(f.clone()));
         }
     }
@@ -487,6 +492,32 @@ provider = "gitlab"
             ..Default::default()
         });
         assert!(matches!(validate(&cfg), Err(Error::SignWithoutEmail(id)) if id == "s"));
+
+        // Values ssh or git would misread.
+        let host = |hostname: &str| Profile {
+            id: "h".into(),
+            name: "H".into(),
+            hosts: vec![HostEntry { hostname: hostname.into(), ..Default::default() }],
+            ..Default::default()
+        };
+        for bad in ["fe80::1%eth0", "[2001:db8::3]", "-oProxyCommand=x", "a b", "*"] {
+            let cfg = Config { profiles: vec![host(bad)], ..Default::default() };
+            assert!(matches!(validate(&cfg), Err(Error::InvalidValue { .. })), "{bad}");
+        }
+        let cfg = Config { profiles: vec![host("2001:db8::3")], ..Default::default() };
+        validate(&cfg).unwrap();
+        for bad in ["~/dev/[c]/", "~/dev/star*/", "dev/rel/"] {
+            let p = Profile { id: "f".into(), name: "F".into(), folders: vec![bad.into()], ..Default::default() };
+            let cfg = Config { profiles: vec![p], ..Default::default() };
+            assert!(validate(&cfg).is_err(), "{bad}");
+        }
+        let p = Profile {
+            id: "k".into(),
+            name: "K".into(),
+            key: KeyRef { path: "~/.ssh/100%done".into(), comment: None },
+            ..Default::default()
+        };
+        assert!(validate(&Config { profiles: vec![p], ..Default::default() }).is_err());
         // Two profiles on github.com are fine: no Host block for it.
         let mut cfg = parse(SAMPLE).unwrap();
         cfg.profiles[0].hosts.push(HostEntry {

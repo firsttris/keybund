@@ -70,7 +70,11 @@ fn new_generates_key_and_writes_configs() {
     assert!(sb.path("dev/kunde-c").is_dir());
     let toml = sb.read(".config/keybund/profiles.toml");
     assert!(toml.contains("id = \"kunde-c\""));
-    assert!(toml.contains("default_profile = \"kunde-c\""), "first profile becomes default");
+    assert!(!toml.contains("default_profile"), "the standard key is only set on request");
+    sb.cmd().args(["default", "kunde-c"]).assert().success();
+    assert!(sb.read(".config/keybund/profiles.toml").contains("default_profile = \"kunde-c\""));
+    sb.cmd().args(["default", "--unset"]).assert().success();
+    assert!(!sb.read(".config/keybund/profiles.toml").contains("default_profile"));
     assert!(sb.read(".ssh/config").starts_with("Include ~/.ssh/config.d/keybund.conf"));
     assert!(sb.read(".config/keybund/git/index.gitconfig").contains("[includeIf \"gitdir:~/dev/kunde-c/\"]"));
     assert!(sb.read(".config/keybund/git/kunde-c.gitconfig").contains("email = t@c.de"));

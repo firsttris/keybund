@@ -246,7 +246,7 @@ export function renderProfileGitconfig(p: Profile): string {
     if (p.git.sign) out += `\tsigningkey = ${p.key.path}.pub\n`;
   }
   out += `[core]\n\tsshCommand = ${sshCommand(p.key.path)}\n`;
-  if (p.git?.sign) out += "[gpg]\n\tformat = ssh\n[commit]\n\tgpgsign = true\n[tag]\n\tgpgsign = true\n";
+  if (p.git?.sign) out += '[gpg]\n\tformat = ssh\n[commit]\n\tgpgsign = true\n[gpg "ssh"]\n\tallowedSignersFile = ~/.config/keybund/allowed_signers\n';
   return out;
 }
 
@@ -369,14 +369,20 @@ function proposals(state: MockState): ImportProposal[] {
       for (let n = 2; taken.has(id); n++) id = `${id.replace(/-\d+$/, "")}-${n}`;
       taken.add(id);
       const provider = detectProvider(b.hostname);
-      const asDefault = b.pattern === b.hostname && provider !== "generic" && !defaultGiven;
+      const plainGit = b.pattern === b.hostname && provider !== "generic";
+      const asDefault = plainGit && !defaultGiven;
       if (asDefault) defaultGiven = true;
+      // A shared git host (github.com …) never gets a Host block of its own (mirrors import.rs shared_host).
+      const shared =
+        ["github.com", "gitlab.com", "bitbucket.org"].includes(b.hostname) ||
+        state.profiles.some((p) => p.hosts.some((h) => h.hostname === b.hostname));
+      const noAlias = asDefault || (plainGit && shared) || (b.pattern === b.hostname && provider === "generic");
       return {
         profile: profile({
           id,
           name: b.comment ?? b.pattern,
           key: { path: b.identity, comment: null },
-          hosts: [host(b.hostname, provider, { alias: asDefault ? null : b.pattern })],
+          hosts: [host(b.hostname, provider, { alias: noAlias ? null : b.pattern })],
         }),
         make_default: asDefault,
         blocks: [b.pattern],
@@ -716,7 +722,7 @@ export function createMockBackend(state: MockState = seedState()) {
           throw new MockError("key_missing", `Key fehlt: ${p.key.path}`);
         }
         state.profiles = profiles;
-        if (project.make_default || !state.defaultProfile) state.defaultProfile = p.id;
+        if (project.make_default) state.defaultProfile = p.id;
         const plan = planFor(state);
         markApplied(state);
         const v = view(state, p);

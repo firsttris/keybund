@@ -85,16 +85,13 @@ pub fn ssh_config(config: &Config) -> String {
     out
 }
 
-/// `~/.config/keybund/git/index.gitconfig`: default key, allowed signers
-/// and one `includeIf "gitdir:…"` per profile folder.
+/// `~/.config/keybund/git/index.gitconfig`: default key and one
+/// `includeIf "gitdir:…"` per profile folder.
 pub fn index_gitconfig(config: &Config, env: &Env) -> String {
     let mut out = format!("{MANAGED}\n# Included from ~/.gitconfig.\n");
     if let Some(def) = config.default_entry() {
         let _ = writeln!(out, "\n# Standard-Key: {}", def.name);
         let _ = writeln!(out, "[core]\n\tsshCommand = {}", git_value(&ssh_command(&def.key.path)));
-    }
-    if config.active_profiles().any(signs) {
-        let _ = writeln!(out, "\n[gpg \"ssh\"]\n\tallowedSignersFile = {}", env.contract(&env.allowed_signers()));
     }
     for p in config.active_profiles() {
         out.push('\n');
@@ -105,10 +102,12 @@ pub fn index_gitconfig(config: &Config, env: &Env) -> String {
 
 /// The `includeIf` sections of one profile in `index.gitconfig`.
 pub fn include_if_blocks(profile: &Profile, env: &Env) -> String {
-    let path = env.contract(&env.profile_gitconfig(&profile.id));
+    let path = git_value(&env.contract(&env.profile_gitconfig(&profile.id)));
     profile
         .folders
         .iter()
+        // Without the trailing slash git would match only that exact directory.
+        .map(|f| if f.ends_with('/') { f.clone() } else { format!("{f}/") })
         .map(|f| format!("[includeIf \"gitdir:{f}\"]\n\tpath = {path}\n"))
         .collect::<Vec<_>>()
         .join("\n")
@@ -137,7 +136,7 @@ pub fn ssh_host_blocks(settings: &Settings, profile: &Profile) -> String {
 }
 
 /// `~/.config/keybund/git/<id>.gitconfig`.
-pub fn profile_gitconfig(profile: &Profile) -> String {
+pub fn profile_gitconfig(profile: &Profile, env: &Env) -> String {
     let mut out = format!("{MANAGED}\n# Key: {}\n", profile.name);
     // Empty name or e-mail: git keeps the one from ~/.gitconfig.
     if let Some(git) =
@@ -156,7 +155,12 @@ pub fn profile_gitconfig(profile: &Profile) -> String {
     }
     let _ = writeln!(out, "[core]\n\tsshCommand = {}", git_value(&ssh_command(&profile.key.path)));
     if signs(profile) {
-        out.push_str("[gpg]\n\tformat = ssh\n[commit]\n\tgpgsign = true\n[tag]\n\tgpgsign = true\n");
+        // Commits only: `git tag -s` signs a tag on request, while tag.gpgsign
+        // would turn every lightweight `git tag v1` into an annotated one.
+        out.push_str("[gpg]\n\tformat = ssh\n[commit]\n\tgpgsign = true\n");
+        // Only in this key's folders, so a user's own allowedSignersFile still applies elsewhere.
+        let _ =
+            writeln!(out, "[gpg \"ssh\"]\n\tallowedSignersFile = {}", git_value(&env.contract(&env.allowed_signers())));
     }
     out
 }
@@ -179,7 +183,7 @@ pub fn render_all(config: &Config, env: &Env, pubkeys: &BTreeMap<String, String>
         RenderedFile { path: env.index_gitconfig(), content: index_gitconfig(config, env) },
     ];
     for p in config.active_profiles() {
-        files.push(RenderedFile { path: env.profile_gitconfig(&p.id), content: profile_gitconfig(p) });
+        files.push(RenderedFile { path: env.profile_gitconfig(&p.id), content: profile_gitconfig(p, env) });
     }
     if config.active_profiles().any(signs) {
         files.push(RenderedFile { path: env.allowed_signers(), content: allowed_signers(config, pubkeys) });
@@ -201,7 +205,7 @@ fn ssh_path(path: &str) -> String {
 }
 
 /// Quotes a gitconfig value if needed.
-fn git_value(v: &str) -> String {
+pub fn git_value(v: &str) -> String {
     if v.starts_with(char::is_whitespace) || v.ends_with(char::is_whitespace) || v.contains(['#', ';', '"', '\\']) {
         format!("\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\""))
     } else {
@@ -259,14 +263,14 @@ mod tests {
     #[test]
     fn snapshot_profile_gitconfigs() {
         let cfg = sample();
-        insta::assert_snapshot!("profile_signing", profile_gitconfig(&cfg.profiles[0]));
-        insta::assert_snapshot!("profile_plain", profile_gitconfig(&cfg.profiles[1]));
+        insta::assert_snapshot!("profile_signing", profile_gitconfig(&cfg.profiles[0], &Env::with_home("/home/t")));
+        insta::assert_snapshot!("profile_plain", profile_gitconfig(&cfg.profiles[1], &Env::with_home("/home/t")));
         // Without own name and e-mail git keeps the global identity.
         let mut p = cfg.profiles[1].clone();
         p.git = Some(GitIdentity { name: String::new(), email: "t@kunde.de".into(), sign: false });
-        assert!(profile_gitconfig(&p).contains("[user]\n\temail = t@kunde.de\n[core]"));
+        assert!(profile_gitconfig(&p, &Env::with_home("/home/t")).contains("[user]\n\temail = t@kunde.de\n[core]"));
         p.git = Some(GitIdentity { name: " ".into(), email: String::new(), sign: false });
-        assert!(!profile_gitconfig(&p).contains("[user]"));
+        assert!(!profile_gitconfig(&p, &Env::with_home("/home/t")).contains("[user]"));
     }
 
     #[test]

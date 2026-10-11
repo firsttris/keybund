@@ -38,8 +38,19 @@ pub fn askpass_program() -> Option<String> {
         .or_else(|| ASKPASS.iter().find(|p| Path::new(p).exists()).map(|p| p.to_string()))
 }
 
+/// ssh's default keys: with Keybund's Host block setting an IdentityFile,
+/// ssh no longer tries them on its own.
+const DEFAULT_KEYS: [&str; 6] = ["id_rsa", "id_ecdsa", "id_ecdsa_sk", "id_ed25519", "id_ed25519_sk", "id_dsa"];
+
+/// `true` if the user's own `~/.ssh/config` has a `Host` block for `alias`.
+fn user_has_block(env: &Env, alias: &str) -> bool {
+    std::fs::read_to_string(env.ssh_config())
+        .map(|c| crate::import::parse_ssh_config(&c).iter().any(|b| b.pattern.eq_ignore_ascii_case(alias)))
+        .unwrap_or(false)
+}
+
 /// Arguments for `ssh` (without the program name).
-pub fn ssh_args(host: &HostEntry) -> Vec<String> {
+pub fn ssh_args(env: &Env, host: &HostEntry) -> Vec<String> {
     let mut args: Vec<String> = [
         "-T",
         // Keybund's own Host block would only offer the new key, which the
@@ -54,13 +65,32 @@ pub fn ssh_args(host: &HostEntry) -> Vec<String> {
     .iter()
     .map(|s| s.to_string())
     .collect();
+    // Every login that already works: also ssh's default keys (agent keys come anyway).
+    for name in DEFAULT_KEYS {
+        let path = env.ssh_dir().join(name);
+        if path.exists() {
+            args.push("-i".into());
+            args.push(path.display().to_string());
+        }
+    }
+    // By hostname, so the user's existing `Host <ip>` settings apply – unless
+    // the user has an own block for the alias (e.g. with ProxyJump): then by
+    // alias, with HostName and port given in case the configs are not written yet.
     if let Some(port) = host.port {
         args.push("-p".into());
         args.push(port.to_string());
     }
+    let name = match &host.alias {
+        Some(alias) if user_has_block(env, alias) => {
+            args.push("-o".into());
+            args.push(format!("HostName={}", host.hostname));
+            alias.clone()
+        }
+        _ => host.hostname.clone(),
+    };
     let target = match &host.user {
-        Some(u) => format!("{u}@{}", host.hostname),
-        None => host.hostname.clone(),
+        Some(u) => format!("{u}@{name}"),
+        None => name,
     };
     // `--`: a host can never be read as an ssh option.
     args.push("--".into());
@@ -74,7 +104,7 @@ pub fn ssh_args(host: &HostEntry) -> Vec<String> {
 pub fn install_with(env: &Env, profile: &Profile, host: &HostEntry, extra_args: &[String]) -> Result<InstallResult> {
     let public = keygen::read_public(env, &profile.key)?.line();
     let mut cmd = env.command("ssh");
-    cmd.args(extra_args).args(ssh_args(host)).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.args(extra_args).args(ssh_args(env, host)).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     if let Some(askpass) = askpass_program() {
         cmd.env("SSH_ASKPASS", askpass).env("SSH_ASKPASS_REQUIRE", "prefer");
     }
@@ -141,11 +171,21 @@ mod tests {
     }
 
     #[test]
-    fn connects_by_hostname_with_user_and_port() {
-        let args = ssh_args(&server());
+    fn connects_by_alias_or_hostname_with_user_and_port() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = Env::with_home(dir.path());
+        std::fs::create_dir_all(env.ssh_dir()).unwrap();
+        std::fs::write(env.ssh_dir().join("id_ed25519"), "x").unwrap();
+        let args = ssh_args(&env, &server());
         assert!(args.windows(2).any(|w| w == ["-p", "2222"]));
-        assert!(args.contains(&"IdentitiesOnly=no".to_string()));
         assert_eq!(args[args.len() - 2], "admin@192.168.1.5");
+        assert!(args.windows(2).any(|w| w[0] == "-i" && w[1].ends_with(".ssh/id_ed25519")), "{args:?}");
+        assert!(args.contains(&"IdentitiesOnly=no".to_string()));
+        // The user's own block for the alias (ProxyJump …) must apply: by alias.
+        std::fs::write(env.ssh_config(), "Host nas\n    ProxyJump bastion\n").unwrap();
+        let args = ssh_args(&env, &server());
+        assert!(args.contains(&"HostName=192.168.1.5".to_string()));
+        assert_eq!(args[args.len() - 2], "admin@nas");
         assert!(args.last().unwrap().starts_with("sh -c '"));
         assert!(!REMOTE_SCRIPT.contains('\''), "the script is wrapped in single quotes");
     }

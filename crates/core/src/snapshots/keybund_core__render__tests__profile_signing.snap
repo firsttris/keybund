@@ -1,6 +1,6 @@
 ---
 source: crates/core/src/render.rs
-expression: "profile_gitconfig(&cfg.profiles[0])"
+expression: "profile_gitconfig(&cfg.profiles[0], &Env::with_home(\"/home/t\"))"
 ---
 # Managed by Keybund – manual changes will be overwritten.
 # Key: Privat
@@ -14,5 +14,5 @@ expression: "profile_gitconfig(&cfg.profiles[0])"
 	format = ssh
 [commit]
 	gpgsign = true
-[tag]
-	gpgsign = true
+[gpg "ssh"]
+	allowedSignersFile = ~/.config/keybund/allowed_signers
