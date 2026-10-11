@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
 const OUT = process.argv[2] ?? "../docs";
-const BASE = process.argv[3] ?? "http://localhost:4317";
+const BASE = process.argv[3] ?? "http://127.0.0.1:4317";
 const NOW = new Date("2026-06-15T09:42:00+02:00");
 
 const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM_PATH || undefined });
