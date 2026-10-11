@@ -149,3 +149,143 @@ fn doctor_fix_repairs_permissions_and_include() {
         assert!(sb.read(".ssh/config").starts_with("Include ~/.ssh/config.d/keybund.conf\n"));
     }
 }
+
+/// A real user with a NAS: from the first contact (host key) over putting the
+/// key on the server to the connection test and git over ssh – all through
+/// the binary, against a throw-away `sshd`, with the generated `Host` block
+/// doing the work. Plus the folder rules a real checkout tree exercises:
+/// symlinks, a sibling folder with the same prefix, repos outside every folder.
+#[test]
+#[cfg(unix)]
+fn a_server_from_first_contact_to_git_over_ssh() {
+    use common::{sshd_path, start_sshd, user};
+    if !has_tools() {
+        return;
+    }
+    let Some(sshd) = sshd_path() else { return };
+    let sb = Sandbox::new();
+    sb.ssh_shim();
+    sb.real_keyscan();
+    fs::create_dir_all(sb.path(".ssh")).unwrap();
+    fs::write(sb.path(".gitconfig"), "[user]\n\tname = Global\n\temail = global@example.org\n").unwrap();
+
+    // The user already reaches the server with their old default key.
+    let old_key = sb.path(".ssh/id_ed25519");
+    assert!(std::process::Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", "", "-C", "old", "-f"])
+        .arg(&old_key)
+        .status()
+        .unwrap()
+        .success());
+    let server = sb.dir.path().join("server");
+    fs::create_dir_all(&server).unwrap();
+    let authorized = server.join("authorized_keys");
+    fs::write(&authorized, sb.read(".ssh/id_ed25519.pub")).unwrap();
+    let (_sshd, port) = start_sshd(&sshd, &server, &authorized);
+    let port_s = port.to_string();
+    let me = user();
+
+    // 1. A key for the NAS, a private default with a folder.
+    sb.new_profile(
+        "Privat",
+        &["--provider", "github", "--folder", "~/dev/privat", "--git-email", "t@privat.de", "--default"],
+    );
+    sb.new_profile(
+        "NAS",
+        &["--provider", "generic", "--host", "127.0.0.1", "--alias", "nas", "--user", &me, "--port", &port_s],
+    );
+    let nas_pub = sb.read(".ssh/nas_ed25519.pub");
+    assert!(nas_pub.starts_with("ssh-ed25519 "));
+
+    // 2. ssh resolves the alias and the IP to the same key, user and port.
+    for target in ["nas", "127.0.0.1", &format!("{me}@127.0.0.1")] {
+        let g = sb.ssh_g(target);
+        assert!(g.contains(&format!("\nuser {me}\n")), "{target}: {g}");
+        assert!(g.contains("\nhostname 127.0.0.1\n"), "{target}: {g}");
+        assert!(g.contains(&format!("\nport {port}\n")), "{target}: {g}");
+        assert!(g.contains("\nidentitiesonly yes\n"), "{target}: {g}");
+        assert!(g.contains(&format!("\nidentityfile {}\n", sb.path(".ssh/nas_ed25519").display())), "{target}: {g}");
+        // The server's host key goes to the key's own file; the global one still counts.
+        assert!(
+            g.contains(&format!(
+                "\nuserknownhostsfile {} {}\n",
+                sb.path(".ssh/known_hosts.d/nas").display(),
+                sb.path(".ssh/known_hosts").display()
+            )),
+            "{target}: {g}"
+        );
+    }
+    // Other hosts keep ssh's defaults: no Keybund key leaks there.
+    assert!(sb.ssh_g("example.org").contains("\nidentitiesonly no\n"));
+
+    // 3. First contact: without a terminal the host key must be confirmed explicitly.
+    sb.cmd().args(["test", "nas"]).assert().code(1).stderr(predicate::str::contains("keybund trust nas"));
+    assert!(!sb.path(".ssh/known_hosts.d/nas").exists());
+    sb.cmd()
+        .args(["trust", "nas", "--yes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("SHA256:").and(predicate::str::contains("known_hosts.d/nas")));
+    let known = sb.read(".ssh/known_hosts.d/nas");
+    assert!(known.starts_with(&format!("[127.0.0.1]:{port} ssh-ed25519 ")), "{known}");
+
+    // 4. The server does not know the new key yet: the test says so and points to install-key.
+    sb.cmd().args(["test", "nas"]).assert().code(1).stdout(
+        predicate::str::contains("Server kennt diesen Key nicht").and(predicate::str::contains("install-key nas")),
+    );
+
+    // 5. install-key logs in with what already works and appends the key once.
+    sb.cmd().args(["install-key", "nas"]).assert().success().stdout(predicate::str::contains("eingetragen"));
+    let lines: Vec<String> = fs::read_to_string(&authorized).unwrap().lines().map(String::from).collect();
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert_eq!(lines[1], nas_pub.trim());
+    sb.cmd().args(["install-key", "nas"]).assert().success().stdout(predicate::str::contains("schon eingetragen"));
+    assert_eq!(fs::read_to_string(&authorized).unwrap().lines().count(), 2);
+
+    // 6. Now the connection test proves this key logs in, and remembers it.
+    sb.cmd().args(["test", "nas"]).assert().success().stdout(predicate::str::contains("Anmeldung erfolgreich"));
+    let last = sb.read(".config/keybund/last-tests.json");
+    assert!(last.contains("\"nas\"") && last.contains("\"success\": true"), "{last}");
+    sb.cmd().arg("list").assert().success().stdout(predicate::str::contains("nas → 127.0.0.1"));
+
+    // 7. git over ssh through the alias: the generated Host block carries key, user and port.
+    let remote = server.join("remote.git");
+    sb.git(&server, &["init", "-q", "--bare", "remote.git"]);
+    sb.git(&sb.home, &["ls-remote", &format!("ssh://nas{}", remote.display())]);
+
+    // 8. Access revoked on the server: the test fails again instead of pretending.
+    fs::write(&authorized, sb.read(".ssh/id_ed25519.pub")).unwrap();
+    sb.cmd().args(["test", "nas"]).assert().code(1).stdout(predicate::str::contains("Server kennt diesen Key nicht"));
+    assert!(sb.read(".config/keybund/last-tests.json").contains("\"success\": false"));
+
+    // 9. Folder rules on a real checkout tree.
+    let repo = |rel: &str| {
+        let dir = sb.path(rel);
+        fs::create_dir_all(&dir).unwrap();
+        sb.git(&dir, &["init", "-q"]);
+        dir
+    };
+    let privat = repo("dev/privat/app");
+    let sibling = repo("dev/privat-old/app"); // same prefix, not inside the folder
+    let outside = repo("Downloads/quick");
+    std::os::unix::fs::symlink(sb.path("dev/privat"), sb.path("work")).unwrap();
+    sb.git(&privat, &["commit", "-q", "--allow-empty", "-m", "init"]);
+    sb.git(&privat, &["worktree", "add", "-q", &sb.path("dev/privat/app-wt").display().to_string()]);
+    let email = |dir: &std::path::Path| sb.git(dir, &["config", "user.email"]);
+    assert_eq!(email(&privat), "t@privat.de");
+    assert_eq!(email(&sb.path("work/app")), "t@privat.de", "through a symlink");
+    assert_eq!(email(&sb.path("dev/privat/app-wt")), "t@privat.de", "in a linked worktree");
+    assert_eq!(email(&sibling), "global@example.org", "a sibling with the same prefix");
+    assert_eq!(email(&outside), "global@example.org");
+    // The default key applies to git everywhere, the folder key inside the folder.
+    assert!(sb.git(&outside, &["config", "core.sshCommand"]).contains("privat_ed25519"));
+    assert!(sb.git(&sibling, &["config", "core.sshCommand"]).contains("privat_ed25519"));
+    sb.cmd()
+        .args(["which", "~/work/app"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("includeIf \"gitdir:~/dev/privat/\""));
+    sb.cmd().args(["which", "nas"]).assert().success().stdout(
+        predicate::str::contains("nas_ed25519").and(predicate::str::contains(format!("{me}@127.0.0.1:{port}"))),
+    );
+}

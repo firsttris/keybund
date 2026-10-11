@@ -1,7 +1,10 @@
 #![allow(dead_code)]
 
 use std::fs;
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::process::{Child, Stdio};
+use std::time::Duration;
 
 use assert_cmd::Command;
 
@@ -117,6 +120,47 @@ impl Sandbox {
     pub fn new_profile(&self, name: &str, extra: &[&str]) {
         self.cmd().arg("new").arg("--name").arg(name).args(extra).arg("--yes").assert().success();
     }
+
+    /// Removes the fake `ssh-keyscan`: the test talks to a real server.
+    pub fn real_keyscan(&self) {
+        let _ = fs::remove_file(self.bin.join("ssh-keyscan"));
+    }
+
+    /// An `ssh` that reads the sandbox's configuration. ssh takes `~/.ssh/config`
+    /// from the passwd entry, not from `HOME`, so without this every `keybund
+    /// test` in a sandbox would read the developer's own config. The shim hands
+    /// the real ssh the generated files with `~` expanded – the Include first,
+    /// then the user's config, in the order ssh itself reads them.
+    #[cfg(unix)]
+    pub fn ssh_shim(&self) {
+        use std::os::unix::fs::PermissionsExt;
+        let real = real_tool("ssh").expect("ssh in PATH");
+        let script = self.bin.join("ssh");
+        fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\numask 077\ncfg=\"$HOME/.ssh/.test-config\"\n\
+                 sed \"s|~/|$HOME/|g\" \"$HOME/.ssh/config.d/keybund.conf\" \"$HOME/.ssh/config\" 2>/dev/null \
+                 | grep -v '^Include ' > \"$cfg\"\nexec '{}' -F \"$cfg\" \"$@\"\n",
+                real.display()
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    /// `ssh -G <host>` through the shim: what ssh resolves from the generated files.
+    pub fn ssh_g(&self, host: &str) -> String {
+        let mut cmd = Command::new(self.bin.join("ssh"));
+        self.isolate(&mut cmd);
+        let out = cmd.args(["-G", host]).output().unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    }
+}
+
+/// The first `name` in PATH (the test's own PATH, without the sandbox).
+pub fn real_tool(name: &str) -> Option<PathBuf> {
+    std::env::var_os("PATH").and_then(|p| std::env::split_paths(&p).map(|d| d.join(name)).find(|f| f.is_file()))
 }
 
 /// Tests that need git and ssh-keygen are skipped locally when they are
@@ -125,4 +169,82 @@ pub fn has_tools() -> bool {
     let ok = ["git", "ssh-keygen"].iter().all(|t| std::process::Command::new(t).arg("--help").output().is_ok());
     assert!(ok || std::env::var_os("CI").is_none(), "git and ssh-keygen are required in CI");
     ok
+}
+
+/// `sshd`, for tests against a real server; skipped locally when missing, never in CI.
+pub fn sshd_path() -> Option<PathBuf> {
+    let found = ["/usr/sbin/sshd", "/usr/bin/sshd"].iter().map(PathBuf::from).find(|p| p.exists());
+    assert!(found.is_some() || std::env::var_os("CI").is_none(), "sshd is required in CI");
+    found
+}
+
+/// A child process that dies with the test.
+pub struct Killed(pub Child);
+impl Drop for Killed {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn free_port() -> u16 {
+    TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+}
+
+fn wait_for(cond: impl Fn() -> bool) {
+    for _ in 0..100 {
+        if cond() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    panic!("timed out");
+}
+
+/// A throw-away `sshd` on localhost that accepts the keys in `authorized`
+/// (a file the test may change later). Logins land in the current user's
+/// account; the key install writes to that same file instead of
+/// `~/.ssh/authorized_keys` (the `KEYBUND_AUTHORIZED_KEYS` test hook).
+pub fn start_sshd(sshd: &Path, dir: &Path, authorized: &Path) -> (Killed, u16) {
+    let host_key = dir.join("host_ed25519");
+    assert!(std::process::Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", "", "-f"])
+        .arg(&host_key)
+        .status()
+        .unwrap()
+        .success());
+    let port = free_port();
+    let config = dir.join("sshd_config");
+    fs::write(
+        &config,
+        format!(
+            "Port {port}\nListenAddress 127.0.0.1\nHostKey {}\nAuthorizedKeysFile {}\nPidFile none\n\
+             PasswordAuthentication no\nKbdInteractiveAuthentication no\nPubkeyAuthentication yes\n\
+             UsePAM no\nStrictModes no\nPermitRootLogin prohibit-password\n\
+             SetEnv KEYBUND_AUTHORIZED_KEYS={}\n",
+            host_key.display(),
+            authorized.display(),
+            authorized.display()
+        ),
+    )
+    .unwrap();
+    // Privilege separation directory, only needed when tests run as root.
+    if std::process::Command::new("id").arg("-u").output().map(|o| o.stdout.starts_with(b"0")).unwrap_or(false) {
+        let _ = fs::create_dir_all("/run/sshd");
+    }
+    let child = std::process::Command::new(sshd)
+        .arg("-D")
+        .arg("-e")
+        .arg("-f")
+        .arg(&config)
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_for(|| TcpStream::connect(("127.0.0.1", port)).is_ok());
+    (Killed(child), port)
+}
+
+/// The user sshd logs in as.
+pub fn user() -> String {
+    String::from_utf8(std::process::Command::new("id").arg("-un").output().unwrap().stdout).unwrap().trim().to_string()
 }
