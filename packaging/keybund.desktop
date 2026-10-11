@@ -2,7 +2,7 @@
 Type=Application
 Name=Keybund
 GenericName=SSH-Key-Verwaltung
-Comment=SSH-Keys pro Projekt
+Comment=Der richtige SSH-Key, automatisch
 Exec=@BIN_DIR@/Keybund.AppImage
 Icon=keybund
 Terminal=false

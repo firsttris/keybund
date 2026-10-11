@@ -1,6 +1,6 @@
 [package]
 name = "keybund-core"
-description = "Core library of Keybund: profiles, config rendering, apply, doctor, probe"
+description = "Core library of Keybund, the SSH key manager: profiles, OpenSSH and Git config rendering, apply, doctor, connection tests"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

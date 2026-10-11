@@ -8,3 +8,5 @@ node_modules/
 /app/test-results/
 /app/coverage/
 test-results/
+/.venv-docs/
+/site/

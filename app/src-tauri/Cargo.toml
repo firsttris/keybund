@@ -1,6 +1,6 @@
 [package]
 name = "keybund-app"
-description = "Keybund desktop app (Tauri)"
+description = "Keybund – SSH key manager for Linux (desktop app)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

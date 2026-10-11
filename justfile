@@ -54,6 +54,15 @@ bindings: _dist
 snapshots:
     INSTA_UPDATE=always cargo test -p keybund-core render
 
+# Pictures in docs/ (README, documentation, banner, social preview) from the mock backend's demo data.
+screenshots:
+    bash scripts/screenshots.sh
+
+# Serve the documentation (MkDocs Material) on http://127.0.0.1:8000 with live reload.
+docs:
+    python3 -m venv .venv-docs && .venv-docs/bin/pip install -q -r requirements-docs.txt
+    .venv-docs/bin/mkdocs serve
+
 # Release builds of the CLI and the AppImage.
 build:
     cargo build --release -p keybund-cli

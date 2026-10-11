@@ -1,0 +1,130 @@
+# Documentation as a website: https://firsttris.github.io/keybund/
+# Source is docs/, built with MkDocs Material (.github/workflows/docs.yml).
+# Locally: pip install -r requirements-docs.txt && mkdocs serve
+site_name: Keybund
+site_description: >-
+  SSH key manager for Linux: one SSH key per GitHub, GitLab or Bitbucket account,
+  per client and per server, the right Git identity per folder. Writes plain
+  OpenSSH and Git config (Include, includeIf, core.sshCommand) – no agent, no
+  daemon. Desktop app and CLI, written in Rust.
+site_url: https://firsttris.github.io/keybund/
+repo_url: https://github.com/firsttris/keybund
+repo_name: firsttris/keybund
+edit_uri: edit/main/docs/
+copyright: License GPL-3.0 · © Tristan Teufel and contributors
+
+docs_dir: docs
+# Pages as app.html instead of app/: keeps the relative image paths right,
+# which also have to work on GitHub
+use_directory_urls: false
+exclude_docs: |
+  social-preview.png
+  banner.png
+# --strict also fails on links to missing headings
+validation:
+  anchors: warn
+
+nav:
+  - Overview: README.md
+  - Getting started:
+      - Installation: installation.md
+      - First steps: getting-started.md
+      - Common setups: guides.md
+  - Using it:
+      - The app: app.md
+      - Command line: command-line.md
+      - Configuration: configuration.md
+      - Troubleshooting: troubleshooting.md
+      - FAQ: faq.md
+  - How it works:
+      - What Keybund writes: generated-files.md
+      - Security and host keys: security.md
+      - Architecture: architecture.md
+      - Modules: modules.md
+  - Development:
+      - Development: development.md
+      - Testing: testing.md
+
+theme:
+  name: material
+  language: en
+  logo: assets/icon.svg
+  favicon: assets/icon.svg
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    # Follows the system setting, switchable
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - toc.follow
+    - content.code.copy
+    - content.action.edit
+    - content.tabs.link
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+plugins:
+  - search:
+      lang: en
+  - git-revision-date-localized:
+      type: date
+      locale: en
+      fallback_to_build_date: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      # Same anchors as on GitHub (lowercase, Unicode kept)
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/firsttris/keybund
+      name: Source on GitHub
+    - icon: material/download
+      link: https://github.com/firsttris/keybund/releases/latest
+      name: Latest release

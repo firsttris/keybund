@@ -1,6 +1,6 @@
 [package]
 name = "keybund-cli"
-description = "Keybund command line interface"
+description = "keybund – SSH key manager for Linux: the right SSH key and Git identity per folder, account and server (command line)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

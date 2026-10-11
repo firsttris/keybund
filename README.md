@@ -1,273 +1,244 @@
-# Keybund
+<div align="center">
 
-**Der richtige SSH-Key, automatisch.** In Keybund legst du Keys an und sagst bei jedem, wo er gilt – Git-Ordner,
-GitHub/GitLab-Konten, Server. Daraus schreibt Keybund Standard-Configs für OpenSSH und Git. Danach nehmen Terminal, Git und Dolphin automatisch den richtigen Key,
-ohne dass Keybund läuft.
+<img src="docs/banner.png" alt="Keybund: SSH key manager for Linux – the right SSH key, automatically" width="900">
 
-- **Kein eigener Agent, kein eigenes Protokoll.** Keybund erzeugt nur `~/.ssh/config`-Blöcke und Gitconfig-Snippets.
-- **Eigene Dateien statt Fremdeingriff.** In deine Configs kommt genau je eine Include-Zeile, mit einmaligem Backup.
-- **Private Keys werden nie gelesen.** Keybund kennt nur Pfade, Fingerprints und Public Keys; erzeugt wird per `ssh-keygen`.
-- **Sofort wirksam, nachvollziehbar.** Die App schreibt jede Änderung gleich (atomar, deine eigenen Dateien vorher mit
-  Backup); die generierte Config jedes Keys ist jederzeit einsehbar. Die CLI zeigt vor dem Schreiben den Diff.
-- **Ein Rust-Core, zwei Oberflächen:** CLI und GUI (Tauri). KRunner folgt.
+**The right SSH key, automatically – an SSH key manager for Linux.**<br>
+One key per GitHub, GitLab or Bitbucket account, per client and per server, the right Git e-mail per folder.<br>
+Plain OpenSSH and Git config underneath: no agent, no daemon, nothing that has to keep running.
 
-## Der Key steht im Mittelpunkt
+[![CI](https://github.com/firsttris/keybund/actions/workflows/ci.yml/badge.svg)](https://github.com/firsttris/keybund/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/firsttris/keybund?logo=github&label=release)](https://github.com/firsttris/keybund/releases/latest)
+[![Docs](https://img.shields.io/badge/docs-firsttris.github.io%2Fkeybund-0a0a0a?logo=materialformkdocs&logoColor=white)](https://firsttris.github.io/keybund/)
+[![Rust](https://img.shields.io/badge/built%20with-Rust-dea584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Tauri](https://img.shields.io/badge/app-Tauri%202-24c8db?logo=tauri&logoColor=white)](https://tauri.app/)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
-In Keybund legst du **Keys** an – „Privat“, „Kunde C“, „NAS“ – und sagst bei jedem, **wo er benutzt wird**:
+[Why](#-why-keybund) •
+[Install](#-install) •
+[Features](#-features) •
+[Screenshots](#-screenshots) •
+[How it works](#️-how-it-works) •
+[FAQ](#-faq) •
+[Documentation](https://firsttris.github.io/keybund/) •
+[Development](#️-development)
 
-| Verwendung | Bedeutet | so wählt Git/ssh den Key |
-| --- | --- | --- |
-| **Git-Ordner** | Repos in `~/dev/kunde-c/` nutzen diesen Key und Name/E-Mail für Commits | `includeIf "gitdir:…"` |
-| **Git-Konto** | GitHub, GitLab, Bitbucket – dort muss der Pubkey stehen („Key eintragen“) | Ordner oder Alias (`git@github-kunde:…`) |
-| **Server** | `ssh`, `scp`, `sftp`, `rsync` auf einen Host oder eine IP | `Host`-Block mit Alias und Hostname |
-| **Standard** (optional) | Git überall dort, wo kein anderer Key gilt – ersetzt dort ssh's eigene Key-Wahl | `core.sshCommand` in `index.gitconfig` |
+<img src="docs/screenshot-key.png" alt="Keybund app: a key and where it is used – default key for Git, the Git folder ~/dev/privat/, a GitHub account and a server, each with “add key” and “test”" width="900">
 
-**Git-Identität:** Deine Identität aus `~/.gitconfig` bleibt, wie sie ist – Keybund liest sie nur. Ein Key mit
-Git-Ordner kann eine eigene haben (z. B. die E-Mail eines Kunden); sie gilt dann nur in diesen Ordnern. Leere Felder
-heißen „wie in `~/.gitconfig`“. Für den Standard-Key setzt Keybund nur den SSH-Key, nicht die Identität. Einen
-Standard-Key gibt es nur, wenn du einen festlegst; der Doctor warnt, wenn er ein eigenes `core.sshCommand` überdeckt.
-Keybunds Include steht immer als Letztes in `~/.gitconfig` (sonst würde ein später angehängter Eintrag, z. B. von
-`git config --global`, die Einstellungen deiner Keys überschreiben) – Keybund rückt es beim Schreiben wieder ans Ende.
+</div>
 
-Ein Key kann alles zugleich sein – z. B. „Privat“ als Standard, mit GitHub und deinem Heimserver. Neuer Key: Name
-eingeben, „Key anlegen“ – wo er gilt, legst du danach auf seiner Seite fest. Bei jeder Verwendung gibt es „Testen“
-(mit einer verständlichen Schritt-für-Schritt-Erklärung, was ssh gemacht hat) und, wo es geht, „Key eintragen“.
-Schlägt ein Test fehl, weil der Server den Key nicht kennt, steht der passende Knopf gleich daneben („Pubkey kopieren
-& GitHub-Seite öffnen“, „Key auf nas eintragen“). Gespeichert wird in `~/.config/keybund/profiles.toml`.
+## 💡 Why Keybund?
 
-## Key bei GitHub, GitLab und Bitbucket eintragen
+You have a private GitHub account and a work account. Or one key per client, a NAS and two servers.
+And sooner or later `git push` answers `Permission denied (publickey)`, pushes with the wrong account,
+or a commit goes out with the wrong e-mail. The fix is always the same handful of `~/.ssh/config`
+blocks, `includeIf` rules and `core.sshCommand` lines – easy to get subtly wrong, hard to keep tidy.
 
-Keybund verwaltet die Keys auf deinem Rechner und meldet sich nirgends an. „Key eintragen“ beim Git-Konto eines Keys
-(oder `keybund install-key`) kopiert den Pubkey in die Zwischenablage und öffnet die Seite, auf der du ihn einfügst –
-bei GitHub, GitLab (auch selbst gehostet) und Bitbucket. Dort „New SSH key“ wählen, einfügen, speichern; danach
-„Erledigt – jetzt testen“. Achte darauf, im Browser mit dem richtigen Konto angemeldet zu sein: Der Test zeigt, als
-wer du angemeldet wurdest.
+- **Say where a key belongs, not how.** Create a key, add a Git folder (`~/dev/client-a/`), a GitHub
+  account or a server. Keybund writes the `Host` blocks, `includeIf "gitdir:…"` rules and Git
+  identities – correctly ordered, with `IdentitiesOnly`, quoted and validated.
+- **Works without Keybund.** The result is standard OpenSSH and Git configuration. Terminal, IDE,
+  Dolphin and cron jobs pick the right key on their own; close Keybund, or remove it, and everything
+  keeps working.
+- **Your config stays yours.** Keybund writes its own files and adds exactly one `Include` line to
+  `~/.ssh/config` and one to `~/.gitconfig`, after a backup. `keybund uninstall` takes it all back.
+- **It checks, instead of guessing.** “Which key applies here?” asks `git` and `ssh -G`. The
+  connection test reads `ssh -v` to see which key the server *really* accepted. The doctor finds the
+  classic traps: a stray `IdentityFile` under `Host *`, `GIT_SSH_COMMAND` in your `.bashrc`, an
+  `Include` in the wrong place.
+- **Safe by default.** Private keys are never read, passphrases never touch the command line, host
+  keys are confirmed by fingerprint instead of trusted on first use.
 
-Auf **Servern** trägt Keybund den Key selbst ein, wie `ssh-copy-id` – der Server fragt dafür einmal nach dem Passwort.
+## 🚀 Install
 
-## Host-Keys
-
-Keybund vertraut keinem Server stillschweigend. Die veröffentlichten Host-Keys von GitHub, GitLab.com und
-Bitbucket sind eingebaut und werden ohne Rückfrage nach `~/.ssh/known_hosts` geschrieben. Bei jedem anderen Host
-zeigt Keybund vor der ersten Verbindung den Fingerprint (App: Dialog, CLI: Rückfrage oder `keybund trust`), und
-erst nach der Bestätigung verbindet sich ssh – mit `StrictHostKeyChecking=yes`.
-
-Die Host-Keys der Server eines Keys landen in einer eigenen Datei `~/.ssh/known_hosts.d/<key>` (der
-`Host`-Block bekommt `UserKnownHostsFile ~/.ssh/known_hosts.d/<key> ~/.ssh/known_hosts`) und wandern beim
-Archivieren mit nach `~/.ssh/archive/`. Abschaltbar in den Einstellungen bzw. mit
-`keybund config known-hosts-per-profile false`.
-
-## Dolphin (sftp://)
-
-Dolphin/KIO liest die ssh-Config über libssh. libssh vor 0.10.2 (z. B. Ubuntu 22.04) versteht `~` in `Include`
-nicht und sähe Keybunds Host-Blöcke nicht. Der Doctor erkennt das an der installierten libssh und schreibt auf
-Wunsch das `Include` mit vollem Pfad (Einstellung „Include mit vollem Pfad“, `keybund config absolute-ssh-include true`).
-
-## Wie es funktioniert
-
-`~/.config/keybund/profiles.toml` ist die einzige Quelle der Wahrheit:
-
-```toml
-default_profile = "privat"
-
-[[profile]]
-id = "privat"
-name = "Privat"
-color = "emerald"
-key = { path = "~/.ssh/privat_ed25519", comment = "tristan@zentrale" }
-git = { name = "Tristan", email = "tristan@privat.de", sign = true }
-folders = ["~/dev/privat/"]
-
-[[profile.host]]
-alias = "meinserver"
-hostname = "1.2.3.4"
-user = "tristan"
-provider = "generic"
-
-[[profile]]
-id = "sparkasse"
-name = "Sparkasse"
-key = { path = "~/.ssh/sparkasse_ed25519" }
-git = { name = "Tristan", email = "tristan@kunde.de" }
-folders = ["~/dev/sparkasse/"]
-
-[[profile.host]]
-hostname = "gitlab.kunde.de"
-provider = "gitlab"
-```
-
-Daraus schreibt Keybund:
-
-| Datei | Inhalt | eingebunden über |
-| --- | --- | --- |
-| `~/.ssh/config.d/keybund.conf` | `Host`-Blöcke für Server mit Alias, je `IdentityFile` + `IdentitiesOnly yes` | `Include` ganz oben in `~/.ssh/config` |
-| `~/.config/keybund/git/index.gitconfig` | `core.sshCommand` des Standard-Keys, ein `includeIf "gitdir:…/"` pro Ordner | `[include]` in `~/.gitconfig` |
-| `~/.config/keybund/git/<id>.gitconfig` | `user.name`, `user.email`, `core.sshCommand = ssh -i <key> -o IdentitiesOnly=yes -o AddKeysToAgent=yes`, Signing | `index.gitconfig` |
-| `~/.config/keybund/allowed_signers` | E-Mail + Pubkey je signierendem Key | `gpg.ssh.allowedSignersFile` in `<id>.gitconfig` (nur in den Ordnern signierender Keys) |
-
-## Umstieg mit bestehender `~/.ssh/config`
-
-Hast du schon Einträge wie `Host github.com` mit `IdentityFile`, übernimmt Keybund sie: in der App unter
-**Bestehende SSH-Config übernehmen** (die Startseite weist darauf hin) oder mit `keybund import`.
-
-In der App ist das ein Klick („2 Keys übernehmen“), der alle drei Schritte macht:
-
-1. Aus jedem `Host`-Block mit eigenem Key wird ein Key in Keybund – die Key-Dateien bleiben, wo sie sind.
-   Ein `Host github.com` wird zum Standard-Key, Aliase wie `Host pflegeabc` bleiben Aliase.
-2. Keybund schreibt seine Configs.
-3. Die übernommenen Blöcke werden aus `~/.ssh/config` entfernt (vorher mit Backup; abwählbar). Das ist wichtig: Solange
-   dort ein `IdentityFile` für github.com steht, bietet ssh diesen Key zusätzlich zum Key aus Keybund an, und eine Anmeldung kann
-   mit dem falschen Key gelingen. Der Verbindungstest prüft deshalb, welcher Key tatsächlich akzeptiert wurde, und der
-   Doctor meldet solche Einträge.
-
-## CLI
-
-```text
-keybund list                     Keys mit Fingerprint, Git-Ordnern, Hosts
-keybund show <key>               Details und Pubkey
-keybund edit <key> …             Name, Git-Ordner, Hosts, Git-Identität, Signieren, Key-Datei ändern (siehe --help)
-keybund new                      Neuen Key anlegen, Fragen im Terminal (oder alles über Optionen, siehe --help)
-keybund copy <key> [--print]     Pubkey in die Zwischenablage (wl-copy, xclip oder xsel)
-keybund test <key> [--host h]    Verbindungstest, Exit-Code 0 bei Erfolg
-keybund install-key <key> [--host h]
-                                 Pubkey eintragen: Server wie ssh-copy-id; GitHub/GitLab/Bitbucket:
-                                 Pubkey kopieren und die Seite zum Einfügen öffnen
-keybund trust <key> [--host h]   Host-Keys prüfen und bestätigen (Fingerprint)
-keybund config [key] [wert]      Einstellungen: projects-dir, keys-dir, known-hosts-per-profile, absolute-ssh-include
-keybund which [pfad|host]        Welcher Key wird hier benutzt – und warum?
-keybund clone <url> [--key id]   Klont in den Git-Ordner des passenden Keys
-keybund apply [--dry-run] [-y]   Diff zeigen bzw. schreiben
-keybund doctor [--fix]           Alle Checks, Exit-Code ≠ 0 bei Problemen
-keybund keys                     Vorhandene Keys in ~/.ssh
-keybund import [--all] [-y]      Bestehende ~/.ssh/config übernehmen, alte Einträge danach entfernen
-keybund uninstall [--restore-backups] [--purge]   Alles entfernen, was Keybund geschrieben hat (Keys bleiben)
-keybund default <key> | --unset  Standard-Key setzen oder entfernen
-keybund archive <key>            Key nach ~/.ssh/archive, Configs entfernen
-```
-
-Beispiel ohne Rückfragen:
+Download from the [latest release](https://github.com/firsttris/keybund/releases/latest):
 
 ```sh
-keybund new --name "Kunde C" --provider github --folder ~/dev/kunde-c \
-  --git-name Tristan --git-email tristan@kunde-c.de --yes
+# Desktop app – any distribution
+chmod +x Keybund_*_amd64.AppImage && ./Keybund_*_amd64.AppImage
+
+# … or on Debian/Ubuntu
+sudo apt install ./keybund_*_amd64.deb
+
+# Command line (optional, same data as the app)
+tar -xzf keybund-cli-*-x86_64-linux.tar.gz && install -m 755 keybund ~/.local/bin/
 ```
 
-## GUI
+Then: **Neuer Key** (new key) → give it a name → say where it is used. Already have a
+`~/.ssh/config` full of `Host` blocks? Keybund offers to take them over in one click and leaves your
+key files where they are. The app's interface is in German for now.
 
-Seitenleiste mit deinen Keys (und wofür sie gelten) und einer Suche, die auch beantwortet, welcher Key für einen
-Ordner oder Server gilt (Enter). Die Startseite zeigt, was zu tun ist – fehlgeschlagene Tests, Hinweise vom Doctor,
-unbenutzte Keys – oder „Alles in Ordnung“, dazu eine kurze Erklärung, wie Keybund funktioniert. „Neuer Key“ ist ein
-einziges kurzes Formular, die Key-Seite zeigt „Wo wird dieser Key benutzt?“ (Git-Ordner, Git-Konten, Server, Standard –
-jeweils mit Testen und Key eintragen), Git-Identität und generierte Config. Änderungen gelten sofort. Dazu Doctor,
-Clone-Helfer, Übernehmen einer bestehenden `~/.ssh/config` und Einstellungen (Spezielles unter „Erweitert“).
+Requirements, building from source and uninstalling: [installation guide](https://firsttris.github.io/keybund/installation.html) ·
+first ten minutes: [first steps](https://firsttris.github.io/keybund/getting-started.html).
 
-## Aufbau
+### 🐧 Runs on
 
-```text
-crates/core/        keybund-core: store, keygen, render, apply, doctor, which, probe, clone, provider, archive
-crates/cli/         keybund (clap) – dünne Schicht über dem Core
-app/src-tauri/      Tauri-Commands (api.rs testbar, commands.rs dünne Wrapper)
-app/src/            React + TanStack Router/Query + shadcn/ui (Zinc)
-app/src/lib/bindings.ts   von tauri-specta generiert (`just bindings`)
-app/src/lib/mock/   In-Memory-Backend mit allen Commands (Browser-Vorschau, Tests)
-packaging/          .desktop-Datei, Fedora-Toolbox-Setup
+| | | Notes |
+|---|---|---|
+| ✅ | Linux x86_64 with glibc 2.35 or newer – Ubuntu 22.04+, Debian 12+, Fedora, Bazzite, Arch, openSUSE … | KDE, GNOME and others, Wayland and X11 |
+| ✅ | GitHub, GitLab (also self-hosted), Bitbucket | “add key” opens the right page, tests show the logged-in account |
+| ✅ | Any SSH server, NAS, Raspberry Pi, Gitea, Forgejo | adds the key like `ssh-copy-id` |
+| ✅ | Terminal, VS Code, JetBrains, Dolphin (`sftp://`), `scp`, `rsync` | anything that uses OpenSSH or Git |
+| ⏳ | macOS, Windows | planned |
+
+## ✨ Features
+
+| | |
+|---|---|
+| 🔑 **One key per purpose** | Create Ed25519 keys (with an optional passphrase) or take over existing ones from `~/.ssh` – nothing is moved |
+| 📁 **Git folders** | Every repository below `~/dev/client-a/` pushes with that client's key and commits with its e-mail – with the normal `git@github.com:…` URL |
+| 👥 **Multiple accounts** | Two or ten GitHub/GitLab/Bitbucket accounts on one machine, by folder or by alias (`git@github-work:org/repo.git`) |
+| 🖥️ **Servers** | `ssh nas`, `ssh 192.168.1.20`, `scp`, `rsync` and `sftp://nas` all use the right key; “add key” works like `ssh-copy-id` |
+| ⭐ **Default key** | Optional: one key for every repository outside your Git folders |
+| ✅ **Connection test** | Step by step in plain words: connection, host key, offered key, accepted key, logged in as `@account` – and the fix when something is wrong |
+| 🔍 **Which key?** | Type a folder or host: Keybund asks Git and ssh what they really use, and why |
+| 🩺 **Doctor** | Permissions, include positions, the agent, overriding environment variables, old entries, Dolphin's libssh – with one-click fixes |
+| 📥 **Take over your ~/.ssh/config** | Existing `Host` blocks become keys in one click; old entries are removed after a backup |
+| ✍️ **Commit signing** | Sign commits with the SSH key per folder (`gpg.format=ssh`), with an allowed-signers file for local verification |
+| 📦 **Clone helper** | Clones into the right folder with the right key – even before `includeIf` can apply |
+| 🗄️ **Archive** | When a project ends: key to `~/.ssh/archive/`, configuration gone, links to remove it at the provider |
+| 🛡️ **Host keys** | Fingerprints confirmed before the first connection, GitHub/GitLab/Bitbucket keys pinned, known_hosts per key |
+| ⌨️ **CLI** | Everything also as `keybund …`, scriptable with `--yes` and exit codes |
+
+## 📸 Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshot-home.png" alt="Overview: what to do, how Keybund works, a card per key"><br><sub><b>Overview</b> – what to do, every key at a glance · <a href="https://firsttris.github.io/keybund/app.html#overview">docs →</a></sub></td>
+    <td width="50%"><img src="docs/screenshot-test.png" alt="Connection test explained step by step: connected to github.com, host key known, key offered and accepted, logged in"><br><sub><b>Connection test</b> – what ssh did, in plain words · <a href="https://firsttris.github.io/keybund/app.html#wo-wird-dieser-key-benutzt-where-is-this-key-used">docs →</a></sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshot-which.png" alt="Which key applies in ~/dev/acme/app: key, source file via includeIf, Git identity, IdentitiesOnly, agent"><br><sub><b>Which key?</b> – asks Git and ssh directly · <a href="https://firsttris.github.io/keybund/app.html#which-key-welcher-key">docs →</a></sub></td>
+    <td><img src="docs/screenshot-config.png" alt="Generated configuration of a key: its gitconfig with user, sshCommand and signing"><br><sub><b>Generated config</b> – exactly what is written · <a href="https://firsttris.github.io/keybund/generated-files.html">docs →</a></sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshot-import.png" alt="Taking over an existing ~/.ssh/config: two keys found, with name and optional Git folder"><br><sub><b>Take over ~/.ssh/config</b> – one click, with backup · <a href="https://firsttris.github.io/keybund/getting-started.html#taking-over-an-existing-setup">docs →</a></sub></td>
+    <td><img src="docs/screenshot-doctor.png" alt="Doctor: the Include is not at the top of ~/.ssh/config, with a fix button; all other checks fine"><br><sub><b>Doctor</b> – finds the classic traps, fixes them · <a href="https://firsttris.github.io/keybund/troubleshooting.html">docs →</a></sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshot-new-key.png" alt="New key: name, generate or take an existing key, optional passphrase"><br><sub><b>New key</b> – a name, that's it · <a href="https://firsttris.github.io/keybund/getting-started.html#1-create-a-key">docs →</a></sub></td>
+    <td><img src="docs/screenshot-clone.png" alt="Clone helper: repository URL, matching keys, target folder"><br><sub><b>Clone</b> – right folder, right key · <a href="https://firsttris.github.io/keybund/guides.html#cloning-into-the-right-folder-with-the-right-key">docs →</a></sub></td>
+  </tr>
+</table>
+
+## ⚙️ How it works
+
+Keybund keeps your keys and where they are used in `~/.config/keybund/profiles.toml` and derives
+standard configuration from it:
+
+```sshconfig
+# ~/.ssh/config – one line added at the top
+Include ~/.ssh/config.d/keybund.conf
 ```
 
-## Entwickeln
+```sshconfig
+# ~/.ssh/config.d/keybund.conf – a block per server, matching alias and IP
+Host nas 192.168.1.20
+    HostName 192.168.1.20
+    User admin
+    IdentityFile ~/.ssh/nas_ed25519
+    IdentitiesOnly yes
+    AddKeysToAgent yes
+```
 
-Unter Bazzite/Fedora am besten in einer Toolbox, damit das Host-System sauber bleibt:
+```ini
+# ~/.config/keybund/git/index.gitconfig – included as the last entry of ~/.gitconfig
+[includeIf "gitdir:~/dev/client-a/"]
+	path = ~/.config/keybund/git/client-a.gitconfig
+
+# ~/.config/keybund/git/client-a.gitconfig
+[user]
+	email = you@client-a.com
+[core]
+	sshCommand = ssh -i ~/.ssh/client-a_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes
+```
+
+So `git push` in `~/dev/client-a/app` runs ssh with exactly the client's key, and `ssh nas` uses the
+NAS key – whoever calls them. Why each line is there, how the includes are ordered and how backups
+work: [what Keybund writes](https://firsttris.github.io/keybund/generated-files.html).
+
+## ❓ FAQ
+
+<details>
+<summary><b>How do I use two GitHub accounts on one computer?</b></summary>
+
+Create a key per account and give each a Git folder, e.g. `~/dev/private/` and `~/dev/work/`. Every
+repository below a folder pushes with its key, with the normal `git@github.com:…` remote. Or give an
+account an alias and clone `git@github-work:org/repo.git`. See the
+[guide](https://firsttris.github.io/keybund/guides.html#two-github-accounts-on-one-computer).
+</details>
+
+<details>
+<summary><b>Does Keybund have to keep running? Does it replace ssh-agent?</b></summary>
+
+No and no. Keybund writes configuration files and is done; ssh and Git read them on their own. It
+uses your existing ssh-agent (KDE, GNOME and most desktops start one) and writes `AddKeysToAgent yes`,
+so a passphrase is typed once per session.
+</details>
+
+<details>
+<summary><b>Does it upload my keys or need a GitHub token?</b></summary>
+
+No. Keybund makes no network connections of its own and never reads private keys. “Add key” copies
+the public key and opens the provider's page in your browser; on servers it logs in with ssh like
+`ssh-copy-id`.
+</details>
+
+<details>
+<summary><b>What happens to my existing ~/.ssh/config and ~/.gitconfig?</b></summary>
+
+Each gets one include line, after a backup; nothing else in them is changed. Existing `Host` blocks
+with their own key can be taken over, and removed afterwards if you want (again with a backup).
+`keybund uninstall --restore-backups` restores both files.
+</details>
+
+<details>
+<summary><b>Why does Keybund not write <code>Host github.com</code>?</b></summary>
+
+Because a `Host github.com` block with an `IdentityFile` adds that key to every connection to GitHub
+– the classic cause of pushing with the wrong account. Keybund selects the key per folder through
+Git's `core.sshCommand`, and writes `Host` blocks for Git providers only with an alias.
+</details>
+
+<details>
+<summary><b>Does it work with Dolphin, VS Code, JetBrains IDEs?</b></summary>
+
+Yes – they all use OpenSSH's or Git's configuration. Dolphin reads it through libssh; for libssh
+before 0.10.2 (e.g. Ubuntu 22.04) the doctor offers the include with the full path.
+</details>
+
+More in the [FAQ](https://firsttris.github.io/keybund/faq.html).
+
+## 📚 Documentation
+
+Installation, first steps, common setups, the app, every CLI command, `profiles.toml`, the generated
+files, security and host keys, troubleshooting, architecture and modules – all in the
+**[documentation](https://firsttris.github.io/keybund/)**.
+
+## 🛠️ Development
 
 ```sh
-packaging/toolbox.sh            # einmalig: Toolbox mit webkit2gtk, Rust, Node, pnpm, just
-toolbox enter keybund-dev
-just setup                      # Frontend-Abhängigkeiten
-just dev                        # App mit Hot Reload
-just dev-mock                   # nur das Frontend im Browser, gegen das Mock-Backend
-just install                    # CLI + AppImage nach ~/.local/bin, .desktop-Datei
+packaging/toolbox.sh && toolbox enter keybund-dev   # Fedora/Bazzite: toolbox with all build dependencies
+just setup          # frontend dependencies
+just dev            # the app with hot reload
+just dev-mock       # only the frontend, in the browser, against an in-memory demo backend
+just                # lint + every test: Rust unit/snapshot/integration (real git, ssh, sshd), Vitest, Playwright
 ```
 
-## Tests
-
-Jede Schicht hat eigene Tests, alle laufen in der CI (`.github/workflows/ci.yml`):
-
-| Schicht | Was | Wo |
-| --- | --- | --- |
-| Unit (Rust) | Parsing, Validierung, Diff, Include-Logik, Provider-Ausgaben, URL-Parsing | `crates/*/src/**` |
-| Snapshot | `render` ist rein funktional, jede Key-Kombination hat eine Golden-File (insta) | `crates/core/src/snapshots/` |
-| Integration (Rust) | `apply` gegen ein temporäres HOME, Auflösung mit echtem `git` und `ssh -G`, Doctor, Archiv | `crates/core/tests/` |
-| Integration (sshd) | Echter `sshd` auf localhost: Passphrase einmal, danach hält der Agent den Key (Test und `git`), falscher Key erkannt, Key auf Server eintragen | `crates/core/tests/sshd.rs` |
-| Integration (CLI) | Jeder Befehl gegen ein temporäres HOME, Fake-`ssh`/`xdg-open` | `crates/cli/tests/cli.rs` |
-| E2E (CLI) | Kompletter Lebenszyklus: zwei Kunden auf github.com, Server, Clone, Doctor, Archiv | `crates/cli/tests/e2e.rs` |
-| IPC (Tauri) | Commands über die Tauri-IPC mit Mock-Runtime und echten Capabilities | `app/src-tauri/tests/ipc.rs` |
-| Vertrag | `bindings.ts` muss zu den Rust-Commands passen; Mock-Backend verhält sich wie der Core | `app/src-tauri/tests/bindings.rs`, `app/src/lib/mock/*.test.ts` |
-| Unit/Komponenten (Frontend) | Vitest + Testing Library, ganze App gegen das Mock-Backend, Coverage-Schwellen | `app/src/**/*.test.ts(x)` |
-| E2E (Frontend) | Playwright, alle Flows auf Desktop- und schmalem Viewport | `app/e2e/` |
-
-```sh
-just            # lint + alle Tests
-just test-rust  # nur Rust
-just e2e        # nur Playwright
-just coverage   # Rust-Coverage (cargo-llvm-cov)
-```
-
-Vor jedem Release zusätzlich von Hand: `ssh meinserver`, `sftp://meinserver` in Dolphin, Push in zwei Kundenordnern,
-Clone über den Helfer, `keybund doctor` grün.
-
-## Release
-
-Die Version steht nur in `Cargo.toml` (`[workspace.package]`); `app/package.json` wird mitgezogen, die Tauri-App
-übernimmt sie aus Cargo. Ein Release startet ausschließlich über einen Tag `vX.Y.Z`:
-
-1. **Actions → Bump version → Run workflow**, `patch`, `minor` oder `major` wählen. Der Workflow erhöht die Version,
-   committet `Release vX.Y.Z` auf `main`, setzt den Tag und startet `release.yml`.
-2. `release.yml` führt die komplette CI aus (`ci.yml` per `workflow_call`), baut auf Ubuntu 22.04 das CLI-Binary,
-   das AppImage und das `.deb` und legt das GitHub-Release mit generierten Notes und `SHA256SUMS` an.
-   Eine Version mit `-` (z. B. `0.2.0-rc.1`) wird ein Pre-Release.
-
-Alternativ von einem Checkout: Version in `Cargo.toml` und `app/package.json` anpassen, `cargo check` (aktualisiert
-`Cargo.lock`), committen, `git tag v0.2.0 && git push --follow-tags`. Stimmen Tag und `Cargo.toml` nicht überein,
-bricht das Release ab. `release.yml` von Hand auf einem Branch gestartet baut nur, ohne zu veröffentlichen – gut, um
-das Packaging zu testen.
-
-Die Workflows kommen aus [firsttris/workflows](https://github.com/firsttris/workflows) (`bump-version.yml`,
-`github-release.yml`, jeweils `@v1`).
-
-## Stand
-
-- [x] Phase 0 – Gerüst (Workspace, Tauri 2, React, TanStack, shadcn, tauri-specta, CI)
-- [x] Phase 1 – Core + CLI
-- [x] Phase 2 – GUI-MVP
-- [x] Phase 3 – Clone-Helfer, „Welcher Key?“, Archivieren, SSH-Signing, Warnung bei alten Keys
-- [x] Key eintragen: Pubkey kopieren und Seite öffnen (GitHub, GitLab, Bitbucket), auf Servern wie ssh-copy-id
-- [x] Host-Keys bestätigen, known_hosts pro Key, letzter Test bleibt gespeichert, Ordner einstellbar
-- [ ] Phase 4 – KRunner, Flatpak
-- [ ] Phase 5/6 – macOS und Windows
-
-## Stolperfallen, die Keybund abfängt
-
-- `Include` unter einem `Host`-Block gilt nur für diesen Host → Keybund setzt es als erste Zeile, `doctor` prüft die Position.
-- „Too many authentication failures“ → `IdentitiesOnly yes` überall.
-- `includeIf` greift beim ersten `git clone` nicht → `keybund clone` übergibt `core.sshCommand` direkt.
-- `gitdir:` ohne abschließenden `/` matcht keine Unterordner → Ordner werden normalisiert (Slash, Symlinks aufgelöst).
-- `ssh -T` bei GitHub endet auch bei Erfolg mit Exit-Code 1 → Erfolg wird an der Ausgabe erkannt.
-- Keys mit Passphrase → `AddKeysToAgent=yes` in jedem `core.sshCommand` und Host-Block: einmal eingeben (Terminal
-  oder ksshaskpass), danach hält der Agent den Key. Der Verbindungstest nutzt deshalb kein `BatchMode`; `doctor` prüft
-  die geschriebenen Dateien.
-- Erster Kontakt blockiert im BatchMode → Test mit `StrictHostKeyChecking=accept-new`.
-- Browser aus einer Toolbox oder einem AppImage öffnen → `flatpak-spawn --host xdg-open` bzw. eine von
-  AppImage-Pfaden bereinigte Umgebung, Fallback `gio open`; klappt es nicht, zeigt die App den Link zum Kopieren.
-- Zu offene Rechte → `doctor --fix` setzt 700/600.
-- Ein globaler `Host github.com` mit `IdentityFile` mischt sich ein → `doctor` warnt.
+A Rust core (`crates/core`) with a CLI (`crates/cli`) and a Tauri 2 app (`app/`, React, TanStack,
+shadcn/ui) on top. The [development guide](https://firsttris.github.io/keybund/development.html)
+covers the setup, the mock backend, bindings, screenshots and releases;
+[architecture](https://firsttris.github.io/keybund/architecture.html) and
+[modules](https://firsttris.github.io/keybund/modules.html) explain how it all fits together.
 
 ---
 
 <div align="center">
 
-⭐ Gefällt dir Keybund? Ein [Stern auf GitHub](https://github.com/firsttris/keybund) hilft anderen, es zu finden.<br>
-🐛 [Fehler melden](https://github.com/firsttris/keybund/issues/new) · 💡 [Idee vorschlagen](https://github.com/firsttris/keybund/issues/new)
+⭐ Like Keybund? A [star on GitHub](https://github.com/firsttris/keybund) helps others find it.<br>
+🐛 [Report a bug](https://github.com/firsttris/keybund/issues/new) · 💡 [Request a feature](https://github.com/firsttris/keybund/issues/new)
 
-<sub>Lizenz: <a href="LICENSE">GPL-3.0</a> · © Tristan Teufel und Mitwirkende<br>
-Wer eine veränderte Version weitergibt, muss sie unter der GPL und mit ihrem Quellcode weitergeben; eine kommerzielle Lizenz ohne diese Pflichten gibt es über <a href="https://teufel-it.de">teufel-it.de</a>.<br>
-Keybund steht in keiner Verbindung zu GitHub, GitLab, Atlassian (Bitbucket) oder dem OpenSSH-Projekt.</sub>
+<sub>License: <a href="LICENSE">GPL-3.0</a> · © Tristan Teufel and contributors<br>
+Changed versions you pass on must stay under the GPL and come with their source code; a commercial license without these obligations is available via <a href="https://teufel-it.de">teufel-it.de</a>.<br>
+Keybund is not affiliated with GitHub, GitLab, Atlassian (Bitbucket), KDE or the OpenSSH project.</sub>
 
 </div>

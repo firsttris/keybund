@@ -30,7 +30,8 @@
       "rpm"
     ],
     "category": "DeveloperTool",
-    "shortDescription": "SSH-Keys pro Projekt",
+    "shortDescription": "SSH key manager: the right SSH key and Git identity, automatically",
+    "longDescription": "Keybund manages your SSH keys on Linux: one key per GitHub, GitLab or Bitbucket account, per client and per server, the right Git identity per folder. It writes plain OpenSSH and Git configuration (Include, includeIf, core.sshCommand), so git, ssh and Dolphin pick the right key without Keybund running.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
