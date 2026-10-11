@@ -302,13 +302,8 @@ fn parallel_runs_do_not_lose_profiles() {
     let children: Vec<_> = (0..6)
         .map(|n| {
             let name = format!("Kunde {n}");
-            let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("keybund"));
+            let mut cmd = sb.spawnable();
             cmd.args(["new", "--name", &name, "--provider", "github", "--host", "github.com", "--yes", "--no-browser"]);
-            cmd.env("HOME", &sb.home)
-                .env("PATH", format!("{}:{}", sb.bin.display(), std::env::var("PATH").unwrap_or_default()))
-                .env("GIT_CONFIG_NOSYSTEM", "1")
-                .env_remove("SSH_AUTH_SOCK")
-                .env_remove("DISPLAY");
             cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped()).spawn().unwrap()
         })
         .collect();

@@ -35,6 +35,13 @@ impl Sandbox {
         cmd
     }
 
+    /// The binary as a plain `std` command (for tests that spawn several at once).
+    pub fn spawnable(&self) -> std::process::Command {
+        let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("keybund"));
+        self.isolate_std(&mut cmd);
+        cmd
+    }
+
     pub fn git(&self, dir: &Path, args: &[&str]) -> String {
         let mut cmd = Command::new("git");
         self.isolate(&mut cmd);
@@ -44,6 +51,22 @@ impl Sandbox {
     }
 
     fn isolate(&self, cmd: &mut Command) {
+        let path = format!("{}:{}", self.bin.display(), std::env::var("PATH").unwrap_or_default());
+        cmd.env("HOME", &self.home)
+            .env("PATH", path)
+            .env("NO_COLOR", "1")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env_remove("XDG_CONFIG_HOME")
+            .env_remove("GIT_CONFIG_GLOBAL")
+            .env_remove("SSH_AUTH_SOCK")
+            .env_remove("DISPLAY")
+            .env_remove("WAYLAND_DISPLAY")
+            .env_remove("KEYBUND_PASSPHRASE");
+    }
+
+    /// Nothing of the real user leaks in: a HOME of its own, no XDG or
+    /// git overrides, no agent, no display.
+    fn isolate_std(&self, cmd: &mut std::process::Command) {
         let path = format!("{}:{}", self.bin.display(), std::env::var("PATH").unwrap_or_default());
         cmd.env("HOME", &self.home)
             .env("PATH", path)
