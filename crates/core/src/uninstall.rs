@@ -59,8 +59,7 @@ pub fn without_git_include(content: &str, index_path: &str) -> String {
     let mut drop = vec![false; lines.len()];
     let mut i = 0;
     while i < lines.len() {
-        let header = lines[i].trim().trim_start_matches('[').trim_end_matches(']').trim().to_ascii_lowercase();
-        if lines[i].trim().starts_with('[') && header == "include" {
+        if apply::include_header(lines[i]) == Some(true) {
             // The section: up to the next header.
             let mut end = i + 1;
             while end < lines.len() && !lines[end].trim().starts_with('[') {
@@ -71,11 +70,7 @@ pub fn without_git_include(content: &str, index_path: &str) -> String {
                 .map(|l| l.trim())
                 .filter(|l| !l.is_empty() && !l.starts_with('#') && !l.starts_with(';'))
                 .collect();
-            let ours = |l: &&str| {
-                l.split_once('=').is_some_and(|(k, v)| {
-                    k.trim().eq_ignore_ascii_case("path") && v.trim().trim_matches('"') == index_path
-                })
-            };
+            let ours = |l: &&str| apply::is_index_entry(l, index_path);
             if keys.iter().any(ours) {
                 if keys.iter().all(ours) {
                     // Only ours: drop the whole section with the comment and blank line before it.

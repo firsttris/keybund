@@ -358,21 +358,42 @@ pub fn ensure_ssh_include(content: &str, include: &str) -> String {
     out
 }
 
+/// `Some(true)` for an `[include]` section header, `Some(false)` for any
+/// other header, `None` for a line that is no header. A comment after the
+/// header (`[include] ; mine`) is allowed, as in git.
+pub(crate) fn include_header(line: &str) -> Option<bool> {
+    let t = line.trim();
+    let name = t.strip_prefix('[')?.split(']').next()?;
+    Some(name.trim().eq_ignore_ascii_case("include"))
+}
+
+/// `true` if the line is `path = <Keybund's index>` – written the way
+/// Keybund does (`~/…`), with the full path, quoted, or with a comment after
+/// it, and under any XDG_CONFIG_HOME (the index always ends in
+/// `keybund/git/index.gitconfig`).
+pub(crate) fn is_index_entry(line: &str, index_path: &str) -> bool {
+    let Some((key, value)) = line.trim().split_once('=') else { return false };
+    if !key.trim().eq_ignore_ascii_case("path") {
+        return false;
+    }
+    let value = value.trim();
+    let value = match value.strip_prefix('"') {
+        Some(quoted) => quoted.split('"').next().unwrap_or(quoted),
+        None => value.split(['#', ';']).next().unwrap_or(value).trim(),
+    };
+    value == index_path || value.ends_with("/keybund/git/index.gitconfig")
+}
+
 /// `true` if `~/.gitconfig` includes Keybund's index file.
 pub fn git_include_present(content: &str, index_path: &str) -> bool {
     let mut in_include = false;
     for line in content.lines() {
-        let t = line.trim();
-        if t.starts_with('[') {
-            in_include = t.trim_start_matches('[').trim_end_matches(']').trim().eq_ignore_ascii_case("include");
+        if let Some(include) = include_header(line) {
+            in_include = include;
             continue;
         }
-        if in_include {
-            if let Some((k, v)) = t.split_once('=') {
-                if k.trim().eq_ignore_ascii_case("path") && v.trim().trim_matches('"') == index_path {
-                    return true;
-                }
-            }
+        if in_include && is_index_entry(line, index_path) {
+            return true;
         }
     }
     false
@@ -389,15 +410,12 @@ pub fn git_include_last(content: &str, index_path: &str) -> bool {
         if t.is_empty() || t.starts_with('#') || t.starts_with(';') {
             continue;
         }
-        if t.starts_with('[') {
+        if let Some(include) = include_header(t) {
             // A section header alone sets nothing; its first setting decides.
-            in_include = t.trim_start_matches('[').trim_end_matches(']').trim().eq_ignore_ascii_case("include");
+            in_include = include;
             continue;
         }
-        let is_ours = in_include
-            && t.split_once('=').is_some_and(|(k, v)| {
-                k.trim().eq_ignore_ascii_case("path") && v.trim().trim_matches('"') == index_path
-            });
+        let is_ours = in_include && is_index_entry(t, index_path);
         if is_ours {
             seen = true;
         } else if seen {
@@ -431,6 +449,27 @@ pub fn ensure_git_include(content: &str, index_path: &str) -> String {
 mod tests {
     use super::*;
     use crate::render::SSH_INCLUDE_LINE;
+
+    /// The include written by hand: full path, quoted, with a comment, a
+    /// comment after the header, another XDG_CONFIG_HOME – all recognised,
+    /// so no second `[include]` is appended.
+    #[test]
+    fn a_hand_written_index_include_is_recognised() {
+        let idx = "~/.config/keybund/git/index.gitconfig";
+        for content in [
+            "[user]\n\tname = T\n[include]\n\tpath = /home/t/.config/keybund/git/index.gitconfig\n",
+            "[user]\n\tname = T\n[include]\n\tpath = \"/home/t/.config/keybund/git/index.gitconfig\"\n",
+            "[user]\n\tname = T\n[include] ; keybund\n\tpath = ~/.config/keybund/git/index.gitconfig # mine\n",
+            "[user]\n\tname = T\n[Include]\n\tpath = /home/t/xdg/keybund/git/index.gitconfig\n",
+        ] {
+            assert!(git_include_present(content, idx), "{content:?}");
+            assert!(git_include_last(content, idx), "{content:?}");
+            assert_eq!(ensure_git_include(content, idx), content, "{content:?}");
+            assert_eq!(crate::uninstall::without_git_include(content, idx), "[user]\n\tname = T\n", "{content:?}");
+        }
+        // Someone else's index is not ours.
+        assert!(!git_include_present("[include]\n\tpath = ~/other/index.gitconfig\n", idx));
+    }
 
     #[test]
     fn git_include_stays_last() {
