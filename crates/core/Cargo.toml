@@ -14,7 +14,6 @@ specta = ["dep:specta"]
 
 [dependencies]
 serde.workspace = true
-thiserror.workspace = true
 specta = { workspace = true, optional = true }
 toml = "0.9"
 similar = "3"
