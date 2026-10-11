@@ -5,7 +5,7 @@ the test layers in [Testing](testing.md).
 
 ## Setup
 
-You need Rust (stable, 1.80 or newer), Node.js 22 with pnpm 10, [`just`](https://github.com/casey/just),
+You need Rust (stable, 1.89 or newer), Node.js 22 with pnpm 10, [`just`](https://github.com/casey/just),
 OpenSSH and Git, and for the desktop app the WebKitGTK development files.
 
 === "Fedora, Bazzite (toolbox)"

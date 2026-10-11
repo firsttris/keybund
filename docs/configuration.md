@@ -110,22 +110,34 @@ Values from `profiles.toml` end up in ssh and Git configuration, so Keybund refu
 the doctor reports – anything that could change their meaning:
 
 - IDs must be unique. Every `Host` pattern – each alias, and each server's hostname – may belong to
-  one key only. Several keys may use the same Git provider (`github.com`), that is the point.
+  one key only. Several keys may use the same Git provider (`github.com`), that is the point – but
+  the same host twice in one key is refused.
+- Aliases and hostnames are stored in lower case: ssh matches `Host` patterns exactly as typed, and
+  DNS names are case-insensitive, so `ssh nas` and `ssh NAS.local` must agree.
 - Git folders must not overlap – neither within a key nor across keys (`~/dev/` and `~/dev/acme/`):
   `includeIf` would apply both and the later one would win silently.
 - Folders must be absolute or start with `~/` and must not contain the glob characters `* ? [ \`
-  or `"` (`gitdir:` patterns are globs).
+  or `"` (`gitdir:` patterns are globs), nor `.` or `..` components (Git compares real paths, so
+  such a pattern would never match; the app and the CLI resolve them before saving).
 - Hostnames, aliases and users must not contain spaces, wildcards (`* ? !`), quotes, `# % , [ ]`,
   control characters or a leading `-`.
-- Key paths must not contain `"`, `%` or `${` (ssh expands those in `IdentityFile`).
+- Key paths must not contain `"`, `%`, `${` or `\` (ssh expands or swallows those in
+  `IdentityFile`). A path with a space or `'` is quoted in the generated files.
 - No value may contain a line break or another control character.
-- A key that signs commits needs its own e-mail.
+- A key that signs commits needs its own e-mail, without spaces or `, * ? !` (it is the principal
+  in `allowed_signers`, where those are pattern syntax).
 - The key file must exist when a key is added or its path changes. (A key file that disappears later
   does not block other changes; the doctor reports it.)
 
+These rules are checked on every save and again before anything is written: a hand-edited
+`profiles.toml` that breaks one of them is refused by `keybund apply` and the app, and the doctor
+names the value.
+
 ## Hand edits and unknown fields
 
-`profiles.toml` is written atomically with permissions `600`. Fields Keybund does not know – from a
+`profiles.toml` is written atomically with permissions `600`. While a process changes it and the
+generated files, it holds `~/.config/keybund/.lock`, so the app and the CLI (or two CLI runs) never
+overwrite each other. Fields Keybund does not know – from a
 newer version, or your own notes – survive a save: they are copied over at the top level, in
 `[settings]` and per key (matched by `id`). Comments are not kept.
 

@@ -77,9 +77,11 @@ Why each line is there:
   keys.
 - **`User git`** for Git providers – otherwise `ssh -T github-kunde-b` would log in with your local
   user name.
-- **`IdentitiesOnly yes`** – ssh offers only this key, not every key in the agent. That prevents
-  “Too many authentication failures” on servers with a low `MaxAuthTries` and logins with the wrong
-  account on GitHub.
+- **`IdentitiesOnly yes`** – ssh offers only the keys named in `IdentityFile` lines, not every key
+  in the agent. That prevents “Too many authentication failures” on servers with a low
+  `MaxAuthTries` and logins with the wrong account on GitHub. One thing it does not stop: an
+  `IdentityFile` your own `~/.ssh/config` applies to all hosts (under `Host *`, a `Match` or outside
+  any block) is offered as well – the doctor warns about those.
 - **`AddKeysToAgent yes`** – after you typed a passphrase once, the agent keeps the key; no prompt on
   every push.
 - **`UserKnownHostsFile`** (servers, when known_hosts per key is on) – new host keys go to the key's
@@ -134,11 +136,14 @@ needed for libssh before 0.10.2 (Dolphin/KIO on older distributions), which does
 - **`core.sshCommand`** is how Git chooses the key, independent of the remote URL: `git push` in
   `~/dev/acme/app` runs exactly this ssh command. The default key's `sshCommand` sits at the top of
   `index.gitconfig`; a folder's include comes later and overrides it (in Git, the last value wins).
-- **`includeIf "gitdir:~/dev/acme/"`** – the trailing `/` makes it match every repository below the
-  folder (without it, only a repository *at* exactly that path would match). Keybund stores folders
-  with symlinks resolved, because Git compares the real path of the repository's `.git` directory.
-  For linked worktrees Git uses the main repository's `.git` directory, so a worktree outside the
-  folder still belongs to the key of its main repository.
+- **`includeIf "gitdir:~/dev/acme/"`** – the trailing `/` makes Git append `/**`, so the rule
+  matches every repository below the folder (without it, the pattern would have to equal the
+  repository's `.git` directory itself and would match nothing but a bare repository at that path).
+  Keybund stores folders with symlinks resolved and without `.` or `..`, because Git compares the
+  real path of the repository's `.git` directory – a repository entered through a symlink still
+  matches. For linked worktrees Git uses the main repository's `.git` directory: a worktree outside
+  the folder still belongs to the key of its main repository, and a worktree *inside* the folder
+  whose main repository lies outside gets no key from the folder.
 - **`[user]`** only contains what you set. An empty name or e-mail is left out, so the value from
   `~/.gitconfig` applies.
 - Values that need it are quoted (`"…"`) – for example a key path with spaces.

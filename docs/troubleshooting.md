@@ -11,15 +11,17 @@ search field in the sidebar, or run `keybund which <folder|host>`.
 |---|---|---|
 | **N keys loaded** / **profiles.toml is invalid** | `profiles.toml` could not be read or breaks a [validation rule](configuration.md#validation). | Correct the named value; the message says which one. |
 | **ssh is not installed** (or ssh-keygen, git) | `ssh`, `ssh-keygen` or `git` is missing. | Install OpenSSH client / Git. |
-| **~/.ssh has permissions … instead of 700** | `~/.ssh` is writable by group or others. ssh then refuses keys and configs. | `--fix`: `chmod 700 ~/.ssh` |
-| **Private keys with too open permissions** | A private key is readable by others; ssh refuses to use it. | `--fix`: `chmod 600` on the keys |
+| **~/.ssh has permissions … instead of 700** | `~/.ssh` is writable by group or others, who could swap keys or the config. | `--fix`: `chmod 700 ~/.ssh` |
+| **Private keys with too open permissions** | A private key is readable by others; ssh refuses to use it (`0400` is fine). | `--fix`: `chmod 600` on those keys |
+| **ssh does not read this config** | `~/.ssh/config` or `keybund.conf` belongs to someone else (edited with `sudo`) or is writable by group or others. ssh refuses such a file with “Bad owner or permissions” – then no `Host` block applies at all. | `--fix` clears the write bits; a wrong owner needs `chown`. |
 | **Key files are missing** | A key's file was moved or deleted. | Restore it, or point the key to another file (`keybund edit <key> --key <path>`). |
 | **The Include is not at the top** | Keybund's `Include` is not the first directive of `~/.ssh/config` – then it may only apply to one `Host` block, and earlier values win. | `--fix` moves it to the top. |
 | **The Include is missing in ~/.ssh/config** (or ~/.gitconfig) | The include in `~/.ssh/config` or `~/.gitconfig` is missing (file replaced, restored from a backup …). | `--fix` writes it again. |
 | **Keybund is no longer at the end of ~/.gitconfig** | Something was added to `~/.gitconfig` after Keybund's include (e.g. by `git config --global`) and may override the folder rules. | Any write moves it back: `keybund apply`. |
 | **N file(s) not up to date** | A generated file differs from what `profiles.toml` says – edited or deleted by hand. | `--fix` / `keybund apply` writes it again. |
 | **GIT_SSH_COMMAND overrides Keybund** | `GIT_SSH_COMMAND` or `GIT_CONFIG_GLOBAL` is set – in this process, your login shell or a shell config file. Git then ignores Keybund's rules. | Remove the line the doctor names, open a new terminal / log in again. |
-| **No ssh-agent reachable** | Without an agent, a key with a passphrase asks on every connection. | Enable your desktop's agent (KDE: ksshaskpass + `ssh-agent`, GNOME: gcr-ssh-agent) or start one in your shell profile. |
+| **No ssh-agent reachable** | Without an agent, a key with a passphrase asks on every connection. | Enable your desktop's agent (KDE: ksshaskpass + `ssh-agent`, GNOME: gcr-ssh-agent). |
+| **ssh-agent only runs in the terminal** | Your shell profile starts an agent that programs from the menu – Keybund, Dolphin, the IDE – do not see; they ask for the passphrase every time, and a key the app loads is not the one your terminal uses. | Use the desktop's agent instead (see above) and drop the line from the shell profile. |
 | **AddKeysToAgent missing** | A generated file lacks `AddKeysToAgent`, so the agent would not remember the key. | `keybund apply`. |
 | **Old entry for github.com in ~/.ssh/config** | A block in your own `~/.ssh/config` that Keybund now covers still offers its key – a login can succeed with the wrong key. | `--fix` removes these blocks (with a backup). |
 | **Global / Duplicate entry for … in ~/.ssh/config** | A `Host` block in your own config mixes another key into the connection, or duplicates one Keybund writes. | Take it over in Keybund (**Take over existing SSH config**), then remove it. |
@@ -84,9 +86,25 @@ If you do not know why, do not connect – ask whoever runs the server.
 
 ### A passphrase is asked on every push
 
-No agent is running, or the key is not added to it. The doctor shows **No ssh-agent reachable**.
+No agent is running, or the key is not added to it, or the agent only exists in your terminal (started
+from `.bashrc`/`.zshrc`) while the app, Dolphin and the IDE run without one. The doctor shows
+**No ssh-agent reachable** or **ssh-agent only runs in the terminal**.
 With an agent, `AddKeysToAgent yes` adds the key after the first use; **Loaded in the agent** on the key
 page confirms it.
+
+### The test says “Wrong passphrase”, “Passphrase prompt cancelled” or “Could not ask for the passphrase”
+
+ssh asks for the passphrase only after the server accepted the key, so these are never about the
+server. **Wrong passphrase**: ssh asked up to three times and was refused. **Cancelled**: the
+dialog was closed – run the test again. **Could not ask**: no askpass program is installed and the
+app has no terminal; install `ksshaskpass` (KDE) or `ssh-askpass`, or load the key once with
+`ssh-add` in a terminal, then the agent answers for the app too.
+
+### The test says “Login successful – but the server runs no commands”
+
+The server accepted the key and then exited with an error: the account only runs a forced command
+(`command="…"` in `authorized_keys`, `git-shell`, a backup user, Gitea's `git` user). That is a
+working login for what the account is meant to do.
 
 ### The app cannot open the browser
 

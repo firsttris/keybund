@@ -39,7 +39,8 @@ hostname/IP.
 
 Commands that write show what will change and ask first. `--yes` (`-y`) skips the question. Without
 a terminal – in a script, a cron job, CI – a question cannot be asked: such a command then needs
-`--yes`, and `new` needs all of its answers as options.
+`--yes`, and `new` needs all of its answers as options. Without `--yes` the key and the profile are
+still created, only your own files stay untouched; `keybund apply --yes` finishes the job.
 
 ## Keys
 
@@ -201,7 +202,7 @@ covers, and the full-path include for Dolphin.
 ### `keybund import [--all] [--yes] [--keep-old]`
 
 Takes over `Host` blocks with their own `IdentityFile` from `~/.ssh/config` as keys. Asks per
-proposal, or takes all with `--all`. Afterwards it offers to remove the taken-over blocks (with a
+proposal, or takes all with `--all` (a block whose key file no longer exists is skipped with a note). Afterwards it offers to remove the taken-over blocks (with a
 backup); `--keep-old` leaves them.
 
 ### `keybund config [NAME] [VALUE]`
