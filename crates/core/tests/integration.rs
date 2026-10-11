@@ -872,3 +872,34 @@ fn worktrees_follow_their_main_repository() {
     git(&env, &inside, &["worktree", "add", "-q", &outside_wt.display().to_string()]);
     assert_eq!(email(&outside_wt), "privat@example.org", "a worktree outside, main inside: the key");
 }
+
+/// The macOS configs, asked of a real ssh and git here on Linux: ssh does
+/// not know `UseKeychain` (like Homebrew's ssh on a Mac) and still accepts
+/// the files and the command line because of `IgnoreUnknown`; git applies
+/// `gitdir/i:` to a checkout whose folder differs in case.
+#[test]
+fn macos_configs_work_with_an_ssh_without_keychain_support() {
+    use keybund_core::env::Platform;
+    if !has("ssh") || !has("git") || !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    let env = Env { platform: Platform::MacOs, ..env };
+    apply::apply_config(&env, &config).unwrap();
+    let conf = fs::read_to_string(env.ssh_keybund_conf()).unwrap();
+    assert!(conf.contains("UseKeychain yes"));
+    let out = Command::new("ssh").arg("-G").arg("-F").arg(env.ssh_keybund_conf()).arg("meinserver").output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let cmd = keybund_core::render::ssh_command("~/.ssh/privat_ed25519", Platform::MacOs);
+    let args: Vec<&str> = cmd.split_whitespace().skip(1).collect();
+    let out = Command::new("ssh").args(&args).arg("-G").arg("example.org").output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+
+    // gitdir/i: the folder is ~/dev/kunde-a/, the checkout sits in ~/DEV/Kunde-A/app.
+    let repo = env.home.join("DEV/Kunde-A/app");
+    fs::create_dir_all(&repo).unwrap();
+    git(&env, &repo, &["init", "-q"]);
+    // git compares a gitdir/i: pattern without case, also on Linux.
+    let out = git(&env, &repo, &["config", "user.email"]);
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "kunde-a@example.org");
+}

@@ -116,7 +116,10 @@ fn which_folder(env: &Env, config: &Config, query: &str) -> Result<WhichResult> 
         result.git_name = git_get(env, &dir, "user.name").map(|(_, v)| v);
         result.git_email = git_get(env, &dir, "user.email").map(|(_, v)| v);
         if let Some((p, folder)) = &folder_match {
-            result.via = Some(msg!("common_text", text = format!("includeIf \"gitdir:{folder}\"")));
+            result.via = Some(msg!(
+                "common_text",
+                text = format!("includeIf \"{}\"", crate::render::gitdir_condition(folder, env.platform))
+            ));
             if result.key_path.as_deref().map(|k| same_key(env, k, &p.key.path)) == Some(false) {
                 result.notes.push(msg!("which_localOverride", name = &p.name));
             }
@@ -128,7 +131,10 @@ fn which_folder(env: &Env, config: &Config, query: &str) -> Result<WhichResult> 
         result.key_path = Some(p.key.path.clone());
         result.identities_only = Some(true);
         result.source = Some(env.contract(&env.profile_gitconfig(&p.id)));
-        result.via = Some(msg!("common_text", text = format!("includeIf \"gitdir:{folder}\"")));
+        result.via = Some(msg!(
+            "common_text",
+            text = format!("includeIf \"{}\"", crate::render::gitdir_condition(folder, env.platform))
+        ));
         // Empty fields of the key fall back to ~/.gitconfig, like git does.
         let global = gitenv::global_identity(env);
         let own = |v: Option<&String>| v.filter(|v| !v.trim().is_empty()).cloned();
@@ -372,7 +378,12 @@ pub fn profile_for_folder<'a>(env: &Env, config: &'a Config, dir: &Path) -> Opti
             if !e.ends_with('/') {
                 e.push('/');
             }
-            dir_s.starts_with(&e)
+            // macOS: `gitdir/i:`, the same folder in other case still matches.
+            if env.platform.case_insensitive_paths() {
+                dir_s.to_lowercase().starts_with(&e.to_lowercase())
+            } else {
+                dir_s.starts_with(&e)
+            }
         })
         .max_by_key(|(_, f)| f.len())
         .map(|(p, f)| (p, f.clone()))

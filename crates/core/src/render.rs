@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::path::PathBuf;
 
+use crate::env::Platform;
 use crate::model::{Config, Profile, Provider, Settings};
 use crate::process::shell_quote;
 use crate::Env;
@@ -32,10 +33,24 @@ pub struct RenderedFile {
 
 /// `core.sshCommand` value for a key. `AddKeysToAgent` makes ssh hand a
 /// key to the running agent after its passphrase was entered once, so git
-/// does not ask again on every push.
-pub fn ssh_command(key_path: &str) -> String {
-    format!("ssh -i {} -o IdentitiesOnly=yes -o AddKeysToAgent=yes", shell_quote(key_path))
+/// does not ask again on every push. On macOS the passphrase also goes to
+/// the Keychain (see [`KEYCHAIN_OPTIONS`]).
+pub fn ssh_command(key_path: &str, platform: Platform) -> String {
+    let mut cmd = format!("ssh -i {} -o IdentitiesOnly=yes -o AddKeysToAgent=yes", shell_quote(key_path));
+    if platform == Platform::MacOs {
+        for (key, value) in KEYCHAIN_OPTIONS {
+            let _ = write!(cmd, " -o {key}={value}");
+        }
+    }
+    cmd
 }
+
+/// macOS: Apple's ssh keeps the passphrase in the Keychain (`UseKeychain`),
+/// so the agent – emptied at every restart – gets the key back without a
+/// prompt. OpenSSH from Homebrew or MacPorts does not know the option and
+/// would refuse the whole config; `IgnoreUnknown` before it keeps that ssh
+/// working (readconf.c: an ignored unknown option is skipped).
+pub const KEYCHAIN_OPTIONS: [(&str, &str); 2] = [("IgnoreUnknown", "UseKeychain"), ("UseKeychain", "yes")];
 
 /// `true` if an ssh command line enables `AddKeysToAgent`.
 pub fn adds_keys_to_agent(command: &str) -> bool {
@@ -46,7 +61,7 @@ pub fn adds_keys_to_agent(command: &str) -> bool {
 /// `~/.ssh/config.d/keybund.conf`: a `Host` block for every server (by
 /// alias and hostname/IP) and every aliased git host, each pinned to the
 /// profile's key.
-pub fn ssh_config(config: &Config) -> String {
+pub fn ssh_config(config: &Config, platform: Platform) -> String {
     let mut out = format!("{MANAGED}\n# Included from the top of ~/.ssh/config.\n");
     for p in config.active_profiles() {
         for h in p.hosts.iter() {
@@ -67,6 +82,11 @@ pub fn ssh_config(config: &Config) -> String {
             let _ = writeln!(out, "    IdentityFile {}", ssh_path(&p.key.path));
             let _ = writeln!(out, "    IdentitiesOnly yes");
             let _ = writeln!(out, "    AddKeysToAgent yes");
+            if platform == Platform::MacOs {
+                for (key, value) in KEYCHAIN_OPTIONS {
+                    let _ = writeln!(out, "    {key} {value}");
+                }
+            }
             if config.settings.known_hosts_per_profile && h.provider == Provider::Generic {
                 // New host keys go into the profile's own file, known ones
                 // from the shared file still count.
@@ -89,13 +109,21 @@ pub fn index_gitconfig(config: &Config, env: &Env) -> String {
     let mut out = format!("{MANAGED}\n# Included from ~/.gitconfig.\n");
     if let Some(def) = config.default_entry() {
         let _ = writeln!(out, "\n# Default key: {}", def.name);
-        let _ = writeln!(out, "[core]\n\tsshCommand = {}", git_value(&ssh_command(&def.key.path)));
+        let _ = writeln!(out, "[core]\n\tsshCommand = {}", git_value(&ssh_command(&def.key.path, env.platform)));
     }
     for p in config.active_profiles() {
         out.push('\n');
         out.push_str(&include_if_blocks(p, env));
     }
     out
+}
+
+/// The `includeIf` condition for a folder: `gitdir/i:` where the file
+/// system ignores case (macOS), so `~/Dev/acme` still matches `~/dev/acme/`
+/// (git-config(1), "gitdir/i").
+pub fn gitdir_condition(folder: &str, platform: Platform) -> String {
+    let keyword = if platform.case_insensitive_paths() { "gitdir/i" } else { "gitdir" };
+    format!("{keyword}:{folder}")
 }
 
 /// The `includeIf` sections of one profile in `index.gitconfig`.
@@ -106,7 +134,7 @@ pub fn include_if_blocks(profile: &Profile, env: &Env) -> String {
         .iter()
         // Without the trailing slash git would match only that exact directory.
         .map(|f| if f.ends_with('/') { f.clone() } else { format!("{f}/") })
-        .map(|f| format!("[includeIf \"gitdir:{f}\"]\n\tpath = {path}\n"))
+        .map(|f| format!("[includeIf \"{}\"]\n\tpath = {path}\n", gitdir_condition(&f, env.platform)))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -117,13 +145,13 @@ pub fn profile_known_hosts(id: &str) -> String {
 }
 
 /// The `Host` blocks of one profile in `keybund.conf` (empty without aliases).
-pub fn ssh_host_blocks(settings: &Settings, profile: &Profile) -> String {
+pub fn ssh_host_blocks(settings: &Settings, profile: &Profile, platform: Platform) -> String {
     let single = Config {
         profiles: vec![Profile { archived: false, ..profile.clone() }],
         settings: settings.clone(),
         ..Default::default()
     };
-    let full = ssh_config(&single);
+    let full = ssh_config(&single, platform);
     let start = full.find("\n# Key:").map(|i| i + 1).unwrap_or(full.len());
     let end = full.rfind("\nHost *").unwrap_or(full.len());
     if start >= end {
@@ -151,7 +179,7 @@ pub fn profile_gitconfig(profile: &Profile, env: &Env) -> String {
             let _ = writeln!(out, "\tsigningkey = {}", git_value(&profile.key.pub_path()));
         }
     }
-    let _ = writeln!(out, "[core]\n\tsshCommand = {}", git_value(&ssh_command(&profile.key.path)));
+    let _ = writeln!(out, "[core]\n\tsshCommand = {}", git_value(&ssh_command(&profile.key.path, env.platform)));
     if signs(profile) {
         // Commits only: `git tag -s` signs a tag on request, while tag.gpgsign
         // would turn every lightweight `git tag v1` into an annotated one.
@@ -177,7 +205,7 @@ pub fn allowed_signers(config: &Config, pubkeys: &BTreeMap<String, String>) -> S
 /// All files Keybund owns, in a stable order.
 pub fn render_all(config: &Config, env: &Env, pubkeys: &BTreeMap<String, String>) -> Vec<RenderedFile> {
     let mut files = vec![
-        RenderedFile { path: env.ssh_keybund_conf(), content: ssh_config(config) },
+        RenderedFile { path: env.ssh_keybund_conf(), content: ssh_config(config, env.platform) },
         RenderedFile { path: env.index_gitconfig(), content: index_gitconfig(config, env) },
     ];
     for p in config.active_profiles() {
@@ -253,9 +281,35 @@ mod tests {
         Config { default_profile: Some("privat".into()), profiles: vec![privat, a, b, old], ..Default::default() }
     }
 
+    /// macOS: the Keychain options in every Host block and in core.sshCommand
+    /// (IgnoreUnknown first, for an ssh without UseKeychain), and `gitdir/i:`
+    /// for the case-insensitive file system. Linux stays as it was.
+    #[test]
+    fn macos_gets_the_keychain_and_case_insensitive_folders() {
+        let mac = Env { platform: Platform::MacOs, ..Env::with_home("/Users/t") };
+        let conf = ssh_config(&sample(), Platform::MacOs);
+        let block = &conf[conf.find("Host meinserver").unwrap()..];
+        assert!(
+            block.contains("    AddKeysToAgent yes\n    IgnoreUnknown UseKeychain\n    UseKeychain yes\n"),
+            "{block}"
+        );
+        assert_eq!(
+            ssh_command("~/.ssh/a", Platform::MacOs),
+            "ssh -i ~/.ssh/a -o IdentitiesOnly=yes -o AddKeysToAgent=yes -o IgnoreUnknown=UseKeychain -o UseKeychain=yes"
+        );
+        let index = index_gitconfig(&sample(), &mac);
+        assert!(index.contains("[includeIf \"gitdir/i:~/dev/kunde-a/\"]"), "{index}");
+        assert!(index.contains("-o UseKeychain=yes"));
+        assert!(profile_gitconfig(&sample().profiles[1], &mac).contains("-o UseKeychain=yes"));
+
+        let linux = Env::with_home("/home/t");
+        assert!(!ssh_config(&sample(), Platform::Linux).contains("UseKeychain"));
+        assert!(index_gitconfig(&sample(), &linux).contains("[includeIf \"gitdir:~/dev/kunde-a/\"]"));
+    }
+
     #[test]
     fn snapshot_ssh_config() {
-        insta::assert_snapshot!(ssh_config(&sample()));
+        insta::assert_snapshot!(ssh_config(&sample(), Platform::Linux));
     }
 
     #[test]
@@ -300,7 +354,7 @@ mod tests {
             },
             HostEntry { hostname: "github.com".into(), provider: Provider::Github, ..Default::default() },
         ];
-        let conf = ssh_config(&Config { profiles: vec![p], ..Default::default() });
+        let conf = ssh_config(&Config { profiles: vec![p], ..Default::default() }, Platform::Linux);
         assert!(conf.contains("Host nas 192.168.1.5\n"));
         assert!(conf.contains("Host 10.0.0.7\n    HostName 10.0.0.7\n    User root\n"));
         assert!(conf.contains("Host nebenjob\n    HostName github.com\n"));
@@ -324,7 +378,7 @@ mod tests {
 
     #[test]
     fn ssh_command_adds_keys_to_agent() {
-        assert!(adds_keys_to_agent(&ssh_command("~/.ssh/a")));
+        assert!(adds_keys_to_agent(&ssh_command("~/.ssh/a", Platform::Linux)));
         assert!(!adds_keys_to_agent("ssh -i ~/.ssh/a -o IdentitiesOnly=yes"));
         assert!(adds_keys_to_agent("ssh -o addkeystoagent=confirm"));
     }
@@ -337,15 +391,18 @@ mod tests {
             include_if_blocks(&cfg.profiles[1], &env),
             "[includeIf \"gitdir:~/dev/kunde-a/\"]\n\tpath = ~/.config/keybund/git/kunde-a.gitconfig\n"
         );
-        let blocks = ssh_host_blocks(&cfg.settings, &cfg.profiles[0]);
+        let blocks = ssh_host_blocks(&cfg.settings, &cfg.profiles[0], Platform::Linux);
         assert!(blocks.starts_with("# Key: Privat\nHost meinserver 1.2.3.4\n"));
         assert!(!blocks.contains("Host *"));
-        assert_eq!(ssh_host_blocks(&cfg.settings, &cfg.profiles[1]), "");
+        assert_eq!(ssh_host_blocks(&cfg.settings, &cfg.profiles[1], Platform::Linux), "");
     }
 
     #[test]
     fn quotes_paths_with_spaces() {
-        assert_eq!(ssh_command("~/my keys/a"), "ssh -i ~/'my keys/a' -o IdentitiesOnly=yes -o AddKeysToAgent=yes");
+        assert_eq!(
+            ssh_command("~/my keys/a", Platform::Linux),
+            "ssh -i ~/'my keys/a' -o IdentitiesOnly=yes -o AddKeysToAgent=yes"
+        );
         assert_eq!(git_value("a # b"), "\"a # b\"");
     }
 
@@ -368,7 +425,7 @@ mod tests {
             provider: Provider::Github,
             ..Default::default()
         }];
-        let conf = ssh_config(&Config { profiles: vec![p], ..Default::default() });
+        let conf = ssh_config(&Config { profiles: vec![p], ..Default::default() }, Platform::Linux);
         assert!(conf.contains("Host nebenjob\n    HostName github.com\n    User git\n"), "{conf}");
     }
 }

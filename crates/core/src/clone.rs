@@ -139,7 +139,7 @@ pub fn clone(env: &Env, profile: &Profile, url: &str, target: Option<PathBuf>) -
     // stored in the repo, so includeIf keeps deciding later (key changes, archive).
     let mut cmd = env.command("git");
     cmd.arg("-c")
-        .arg(format!("core.sshCommand={}", ssh_command(&profile.key.path)))
+        .arg(format!("core.sshCommand={}", ssh_command(&profile.key.path, env.platform)))
         .arg("clone")
         .arg("--")
         .arg(url.trim())

@@ -3,6 +3,33 @@ use std::process::Command;
 
 use crate::{Error, Result};
 
+/// The operating system Keybund writes configs for. Rendering stays pure:
+/// it takes the platform from [`Env`] instead of asking `cfg!` itself, so
+/// tests render the macOS files on Linux too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Platform {
+    #[default]
+    Linux,
+    MacOs,
+}
+
+impl Platform {
+    /// The platform Keybund was built for.
+    pub fn current() -> Self {
+        if cfg!(target_os = "macos") {
+            Platform::MacOs
+        } else {
+            Platform::Linux
+        }
+    }
+
+    /// APFS and HFS+ compare names without case by default, and git's
+    /// `gitdir:` would then miss `~/Dev/x` for a folder `~/dev/x`.
+    pub fn case_insensitive_paths(self) -> bool {
+        self == Platform::MacOs
+    }
+}
+
 /// The file system locations Keybund works with.
 ///
 /// Everything is derived from a home directory and Keybund's own config
@@ -22,6 +49,8 @@ pub struct Env {
     /// this to be asked at all; paths ssh prints below the real home are
     /// mapped back into the test home.
     pub ssh_config_override: Option<PathBuf>,
+    /// The system the generated files are for.
+    pub platform: Platform,
 }
 
 impl Env {
@@ -40,6 +69,7 @@ impl Env {
             login_shell,
             global_known_hosts: Some(PathBuf::from("/etc/ssh/ssh_known_hosts")),
             ssh_config_override: None,
+            platform: Platform::current(),
         })
     }
 
@@ -48,7 +78,14 @@ impl Env {
         let home = home.into();
         let config_dir = home.join(".config").join("keybund");
         let ssh_config_override = Some(home.join(".ssh").join("config"));
-        Env { home, config_dir, login_shell: None, global_known_hosts: None, ssh_config_override }
+        Env {
+            home,
+            config_dir,
+            login_shell: None,
+            global_known_hosts: None,
+            ssh_config_override,
+            platform: Platform::Linux,
+        }
     }
 
     /// Expands a leading `~` to the home directory.

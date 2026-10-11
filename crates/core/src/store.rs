@@ -441,6 +441,8 @@ pub fn validate_in(env: &Env, config: &Config) -> Result<()> {
     let folders: Vec<(&str, String)> = config
         .active_profiles()
         .flat_map(|p| p.folders.iter().map(|f| (f.as_str(), env.expand(f).display().to_string())))
+        // With `gitdir/i:` (macOS) `~/Dev/` and `~/dev/acme/` overlap as well.
+        .map(|(f, path)| (f, if env.platform.case_insensitive_paths() { path.to_lowercase() } else { path }))
         .collect();
     for (i, (a, pa)) in folders.iter().enumerate() {
         for (b, pb) in &folders[i + 1..] {

@@ -536,7 +536,7 @@ pub fn generated_config(env: &Env, id: &str) -> CmdResult<Vec<GeneratedFile>> {
             excerpt: true,
         });
     }
-    let ssh = keybund_core::render::ssh_host_blocks(&config.settings, p);
+    let ssh = keybund_core::render::ssh_host_blocks(&config.settings, p, env.platform);
     if !ssh.is_empty() {
         files.push(GeneratedFile { path: env.contract(&env.ssh_keybund_conf()), content: ssh, excerpt: true });
     }

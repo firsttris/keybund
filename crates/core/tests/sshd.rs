@@ -205,7 +205,7 @@ fn git_with_generated_ssh_command_keeps_the_key_in_the_agent() {
     // Exactly the command Keybund writes into <id>.gitconfig, plus test isolation.
     let ssh_command = format!(
         "{} -F /dev/null -o UserKnownHostsFile={} -o StrictHostKeyChecking=accept-new",
-        render::ssh_command("~/.ssh/kunde_ed25519"),
+        render::ssh_command("~/.ssh/kunde_ed25519", env.platform),
         dir.join("known_hosts").display()
     );
     let url = format!("ssh://{}@127.0.0.1:{port}{}", user(), remote.display());
