@@ -9,7 +9,7 @@
     "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide",
     "dev": "vite",
     "dev:mock": "vite --mode mock",
-    "build": "tsc -b && vite build",
+    "build": "pnpm i18n && tsc -b && vite build",
     "typecheck": "pnpm i18n && tsc -b",
     "lint": "pnpm i18n && biome check .",
     "format": "biome check --write .",
