@@ -308,13 +308,14 @@ pub fn without_blocks(ssh_config: &str, remove: &[&HostBlock]) -> String {
             *d = true;
         }
     }
+    let nl = crate::apply::newline(ssh_config);
     let kept: Vec<&str> = lines.iter().zip(&drop).filter(|(_, d)| !**d).map(|(l, _)| *l).collect();
-    let mut out = kept.join("\n");
-    while out.ends_with("\n\n") {
-        out.pop();
+    let mut out = kept.join(nl);
+    while out.ends_with(&format!("{nl}{nl}")) {
+        out.truncate(out.len() - nl.len());
     }
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
+    if !out.is_empty() && !out.ends_with(nl) {
+        out.push_str(nl);
     }
     out
 }

@@ -344,18 +344,43 @@ pub fn ensure_ssh_include(content: &str, include: &str) -> String {
     if content.lines().find(|l| is_directive(l)).is_some_and(|l| l.trim() == include || is_glob_include(l)) {
         return content.to_string();
     }
-    let rest: Vec<String> = content
-        .lines()
-        .filter_map(|l| if is_keybund_include(l) { without_keybund_path(l) } else { Some(l.to_string()) })
-        .collect();
-    let mut out = format!("{include}\n");
+    let nl = newline(content);
+    // The user's lines without an older Keybund include (and the blank line
+    // that came with it), like `uninstall::without_ssh_include`.
+    let mut rest: Vec<String> = Vec::new();
+    let mut skip_blank = false;
+    for line in content.lines() {
+        if is_keybund_include(line) {
+            match without_keybund_path(line) {
+                Some(kept) => rest.push(kept),
+                None => skip_blank = true,
+            }
+            continue;
+        }
+        if std::mem::take(&mut skip_blank) && line.trim().is_empty() {
+            continue;
+        }
+        rest.push(line.to_string());
+    }
+    let mut out = format!("{include}{nl}");
     if rest.iter().any(|l| !l.trim().is_empty()) {
-        out.push('\n');
-        let joined = rest.join("\n");
-        out.push_str(joined.trim_start_matches('\n'));
-        out.push('\n');
+        // The user's file as it was, leading blank lines included, so that
+        // removing the include again gives back exactly the original.
+        out.push_str(nl);
+        out.push_str(&rest.join(nl));
+        out.push_str(nl);
     }
     out
+}
+
+/// The line ending of a user's file: a file written on Windows keeps its
+/// `\r\n` when Keybund adds or removes a line.
+pub(crate) fn newline(content: &str) -> &'static str {
+    if content.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    }
 }
 
 /// `Some(true)` for an `[include]` section header, `Some(false)` for any
@@ -432,16 +457,18 @@ pub fn ensure_git_include(content: &str, index_path: &str) -> String {
     if git_include_last(content, index_path) {
         return content.to_string();
     }
+    let nl = newline(content);
     let content = if git_include_present(content, index_path) {
         crate::uninstall::without_git_include(content, index_path)
     } else {
         content.to_string()
     };
-    let mut out = content.trim_end_matches('\n').to_string();
+    let mut out = content.trim_end_matches(['\r', '\n']).to_string();
     if !out.is_empty() {
-        out.push_str("\n\n");
+        out.push_str(nl);
+        out.push_str(nl);
     }
-    out.push_str(&format!("# Added by Keybund\n[include]\n\tpath = {}\n", crate::render::git_value(index_path)));
+    out.push_str(&format!("# Added by Keybund{nl}[include]{nl}\tpath = {}{nl}", crate::render::git_value(index_path)));
     out
 }
 

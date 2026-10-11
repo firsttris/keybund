@@ -49,7 +49,7 @@ pub fn without_ssh_include(content: &str) -> String {
         skip_blank = false;
         out.push(line.to_string());
     }
-    join(out.iter().map(String::as_str).collect())
+    join(out.iter().map(String::as_str).collect(), apply::newline(content))
 }
 
 /// `~/.gitconfig` without the `[include]` of Keybund's index (and the
@@ -99,13 +99,13 @@ pub fn without_git_include(content: &str, index_path: &str) -> String {
         }
         i += 1;
     }
-    join(lines.iter().zip(&drop).filter(|(_, d)| !**d).map(|(l, _)| *l).collect())
+    join(lines.iter().zip(&drop).filter(|(_, d)| !**d).map(|(l, _)| *l).collect(), apply::newline(content))
 }
 
-fn join(lines: Vec<&str>) -> String {
-    let mut s = lines.join("\n");
+fn join(lines: Vec<&str>, nl: &str) -> String {
+    let mut s = lines.join(nl);
     if !s.is_empty() {
-        s.push('\n');
+        s.push_str(nl);
     }
     s
 }
@@ -189,6 +189,31 @@ mod tests {
                 "{original:?}"
             );
         }
+    }
+
+    /// A config written on Windows keeps its CRLF, and leading blank lines
+    /// survive: add and remove the include and the file is as it was.
+    #[test]
+    fn crlf_and_leading_blank_lines_survive() {
+        let include = crate::render::SSH_INCLUDE_LINE;
+        for original in ["Host a\r\n    User x\r\n", "\r\n\r\nHost a\r\n", "\n\nHost a\n"] {
+            let with = ensure_ssh_include(original, include);
+            assert!(!with.replace("\r\n", "").contains('\n') || !original.contains('\r'), "{with:?}");
+            assert_eq!(without_ssh_include(&with), original, "{original:?}");
+        }
+        assert_eq!(ensure_ssh_include("Host a\r\n", include), format!("{include}\r\n\r\nHost a\r\n"));
+        let index = "~/.config/keybund/git/index.gitconfig";
+        let git = "[user]\r\n\tname = T\r\n";
+        let with = ensure_git_include(git, index);
+        assert_eq!(
+            with,
+            format!("[user]\r\n\tname = T\r\n\r\n# Added by Keybund\r\n[include]\r\n\tpath = {index}\r\n")
+        );
+        assert_eq!(without_git_include(&with, index), git);
+        // Removing taken-over blocks keeps the line ending too.
+        let ssh = "Host a\r\n    IdentityFile ~/.ssh/a\r\n\r\nHost b\r\n    User x\r\n";
+        let blocks = crate::import::parse_ssh_config(ssh);
+        assert_eq!(crate::import::without_blocks(ssh, &[&blocks[0]]), "Host b\r\n    User x\r\n");
     }
 
     #[test]
