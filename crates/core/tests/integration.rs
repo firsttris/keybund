@@ -841,3 +841,34 @@ fn which_says_when_ssh_tries_several_keys() {
     assert_eq!(r.profile_id.as_deref(), Some("privat"));
     assert!(r.notes.iter().any(|n| n.key == "which_triesKeys"), "{:?}", r.notes);
 }
+
+/// What docs/generated-files.md says about linked worktrees, checked with
+/// git: `gitdir:` sees the main repository's `.git`, so a worktree follows
+/// its main repository – out of a folder into it gets no key, from a folder
+/// out of it keeps the key.
+#[test]
+fn worktrees_follow_their_main_repository() {
+    if !has("git") || !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    apply::apply_config(&env, &config).unwrap();
+    let repo = |rel: &str| {
+        let dir = env.home.join(rel);
+        fs::create_dir_all(&dir).unwrap();
+        git(&env, &dir, &["init", "-q"]);
+        git(&env, &dir, &["-c", "user.email=x@y", "-c", "user.name=x", "commit", "-q", "--allow-empty", "-m", "i"]);
+        dir
+    };
+    let email =
+        |dir: &Path| String::from_utf8_lossy(&git(&env, dir, &["config", "user.email"]).stdout).trim().to_string();
+    let outside = repo("elsewhere/main");
+    let inside_wt = env.home.join("dev/privat/wt");
+    git(&env, &outside, &["worktree", "add", "-q", &inside_wt.display().to_string()]);
+    assert_eq!(email(&inside_wt), "global@example.org", "a worktree inside the folder, main outside: no key");
+
+    let inside = repo("dev/privat/main");
+    let outside_wt = env.home.join("elsewhere/wt");
+    git(&env, &inside, &["worktree", "add", "-q", &outside_wt.display().to_string()]);
+    assert_eq!(email(&outside_wt), "privat@example.org", "a worktree outside, main inside: the key");
+}
