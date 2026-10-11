@@ -10,7 +10,9 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::apply::{self, Plan};
+use crate::i18n::Msg;
 use crate::model::{Config, HostEntry, KeyRef, Profile, Provider};
+use crate::msg;
 use crate::{fsutil, store, Env, Error, Result};
 
 /// One `Host` block of an ssh config.
@@ -114,7 +116,7 @@ pub struct ImportProposal {
     pub blocks: Vec<String>,
     pub key_exists: bool,
     /// Hints for the user, e.g. that a folder is needed.
-    pub notes: Vec<String>,
+    pub notes: Vec<Msg>,
 }
 
 /// A git host several keys may use: the public ones, or one another key has.
@@ -208,20 +210,18 @@ pub fn proposals(env: &Env, config: &Config, ssh_config: &str) -> Vec<ImportProp
             })
             .collect();
         if needs_folder {
-            notes.push("Ein anderer Key ist schon Standard – dieser gilt erst mit einem Git-Ordner.".into());
+            notes.push(msg!("import_needsFolder"));
         }
         if make_default {
-            notes.push(format!(
-                "Wird Standard-Key: gilt für {} in allen Ordnern ohne eigenen Key",
-                hosts.iter().find(|h| h.alias.is_none()).map(|h| h.hostname.as_str()).unwrap_or_default()
-            ));
+            let host = hosts.iter().find(|h| h.alias.is_none()).map(|h| h.hostname.as_str()).unwrap_or_default();
+            notes.push(msg!("import_becomesDefault", host = host));
         }
         if blocks.iter().any(|b| b.identity_files.len() > 1) {
-            notes.push("Mehrere IdentityFile-Einträge – übernommen wird der erste".into());
+            notes.push(msg!("import_severalIdentityFiles"));
         }
         let key_exists = env.expand(&key).exists();
         if !key_exists {
-            notes.push(format!("Key-Datei {key} existiert nicht"));
+            notes.push(msg!("import_keyFileMissing", path = &key));
         }
         out.push(ImportProposal {
             profile: Profile {
@@ -478,6 +478,6 @@ Match host foo
         assert_eq!(p[0].blocks, ["github.com", "gitlab.com"]);
         // gitlab.com is shared by many keys: no `Host gitlab.com` block, it works through a folder.
         assert_eq!(p[0].profile.hosts[1].alias, None);
-        assert!(p[0].notes.iter().any(|n| n.contains("erst mit einem Git-Ordner")));
+        assert!(p[0].notes.iter().any(|n| n.to_string().contains("erst mit einem Git-Ordner")));
     }
 }

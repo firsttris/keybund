@@ -11,6 +11,8 @@ import { api, errorMessage } from "@/lib/api";
 import type { ClonePreview } from "@/lib/bindings";
 import { useProfiles } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+import { rich } from "@/lib/i18n";
+import { m } from "@/paraglide/messages";
 
 export function ClonePage() {
   const [url, setUrl] = useState("");
@@ -35,10 +37,8 @@ export function ClonePage() {
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <h1 className="m-0 text-[22px] font-semibold tracking-tight">Repo klonen</h1>
-        <p className="m-0 text-muted-foreground">
-          Beim ersten Klonen greift includeIf noch nicht – Keybund klont deshalb direkt mit dem passenden Key.
-        </p>
+        <h1 className="m-0 text-[22px] font-semibold tracking-tight">{m.sidebar_clone()}</h1>
+        <p className="m-0 text-muted-foreground">{m.clone_intro()}</p>
       </div>
       <Card className="max-w-[720px]">
         <form
@@ -49,14 +49,14 @@ export function ClonePage() {
             if (url.trim()) preview.mutate(url.trim());
           }}
         >
-          <Label htmlFor="clone-url">Repo-URL</Label>
+          <Label htmlFor="clone-url">{m.clone_url()}</Label>
           <div className="flex flex-wrap gap-2">
             <Input id="clone-url" className="flex-[1_1_280px] font-mono" placeholder="git@github.com:team/repo.git" value={url}
               // A changed URL needs a new check: key and folder came from the old one.
               onChange={(e) => (setUrl(e.target.value), preview.reset(), clone.reset())}
             />
             <Button type="submit" variant="outline" disabled={!url.trim()}>
-              Prüfen
+              {m.clone_check()}
             </Button>
           </div>
         </form>
@@ -64,9 +64,9 @@ export function ClonePage() {
         {preview.data && (
           <>
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-              <legend className="mb-2 text-[13px] font-medium">Key</legend>
+              <legend className="mb-2 text-[13px] font-medium">{m.newKey_key()}</legend>
               {!preview.data.matched && (
-                <FieldHint className="mb-1">Kein Key ist für {preview.data.repo.host} eingerichtet – bitte einen wählen.</FieldHint>
+                <FieldHint className="mb-1">{m.clone_noMatch({ host: preview.data.repo.host })}</FieldHint>
               )}
               {preview.data.candidates.map((c) => {
                 const color = profiles.data?.profiles.find((p) => p.profile.id === c.profile_id)?.profile.color;
@@ -75,18 +75,18 @@ export function ClonePage() {
                     <input type="radio" name="clone-profile" checked={profileId === c.profile_id} onChange={() => choose(c.profile_id)} />
                     <ColorDot color={color} />
                     <span className="flex-1">{c.profile_name}</span>
-                    <span className="font-mono text-xs text-muted-foreground">{c.target ?? "kein Ordner"}</span>
+                    <span className="font-mono text-xs text-muted-foreground">{c.target ?? m.clone_noFolder()}</span>
                   </label>
                 );
               })}
             </fieldset>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="clone-target">Zielordner</Label>
+              <Label htmlFor="clone-target">{m.clone_target()}</Label>
               <Input id="clone-target" className="font-mono" value={target} onChange={(e) => setTarget(e.target.value)} />
             </div>
             <Button className="self-end" disabled={!profileId || !target.trim() || clone.isPending} onClick={() => clone.mutate()}>
               {clone.isPending && <Spinner className="size-3.5" />}
-              Klonen
+              {m.clone_button()}
             </Button>
           </>
         )}
@@ -94,7 +94,7 @@ export function ClonePage() {
         {clone.data && (
           <p role="status" className="m-0 flex items-center gap-2 text-success">
             <Check aria-hidden className="size-4" />
-            Geklont nach <span className="font-mono">{clone.data}</span>
+            {rich(m.clone_done, { path: <span className="font-mono">{clone.data}</span> })}
           </p>
         )}
       </Card>

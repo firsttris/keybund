@@ -1,6 +1,7 @@
 import { ShieldQuestion } from "lucide-react";
 import { useEffect, useState } from "react";
 import { setHostKeyAsker, type UnknownHostKey } from "@/lib/host-keys";
+import { m } from "@/paraglide/messages";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,12 +32,10 @@ export function HostKeyPrompt() {
         <AlertDialogContent>
           <AlertDialogTitle className="flex items-center gap-2">
             <ShieldQuestion aria-hidden className="size-4 text-warning" />
-            Erste Verbindung zu {pending.check.host}
+            {m.hostKey_title({ host: pending.check.host })}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            Der Server weist sich mit diesem Host-Key aus. Vergleiche den Fingerprint mit dem Server
-            (ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub) oder den Angaben deines Hosters. Nur wenn er stimmt,
-            ist es wirklich dein Server.
+            {m.hostKey_explain()}
           </AlertDialogDescription>
           <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
             {pending.check.keys.map((k) => (
@@ -46,10 +45,10 @@ export function HostKeyPrompt() {
               </li>
             ))}
           </ul>
-          <span className="text-xs text-muted-foreground">Wird gespeichert in {pending.check.file}</span>
+          <span className="text-xs text-muted-foreground">{m.hostKey_storedIn({ file: pending.check.file })}</span>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => answer(false)}>Abbrechen</AlertDialogCancel>
-            <AlertDialogAction onClick={() => answer(true)}>Fingerprint stimmt</AlertDialogAction>
+            <AlertDialogCancel onClick={() => answer(false)}>{m.common_cancel()}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => answer(true)}>{m.hostKey_confirm()}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       )}

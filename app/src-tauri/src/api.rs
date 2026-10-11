@@ -13,24 +13,31 @@ use keybund_core::import::{self, ImportProposal};
 use keybund_core::keygen::{self, GenerateOptions, ImportCandidate, KeyInfo};
 use keybund_core::model::{Config, HostEntry, KeyRef, Profile, Provider, Settings};
 use keybund_core::uninstall::{self, UninstallOptions, UninstallPreview};
-use keybund_core::{archive, provider, store, Env, Error};
+use keybund_core::{archive, msg, provider, store, Env, Error, Msg};
 
-/// Error as the frontend sees it: a stable kind plus a readable message.
+/// Error as the frontend sees it: a stable kind plus the message key the
+/// frontend translates.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct CmdError {
     pub kind: String,
-    pub message: String,
+    pub message: Msg,
 }
 
 impl From<Error> for CmdError {
     fn from(e: Error) -> Self {
-        CmdError { kind: e.kind().to_string(), message: e.to_string() }
+        CmdError { kind: e.kind().to_string(), message: e.msg() }
     }
 }
 
 impl CmdError {
-    pub fn other(message: impl Into<String>) -> Self {
-        CmdError { kind: "other".into(), message: message.into() }
+    /// An unexpected failure with a technical detail (a crashed thread, an OS error).
+    pub fn other(detail: impl Into<String>) -> Self {
+        CmdError { kind: "other".into(), message: msg!("error_other", detail = detail.into()) }
+    }
+
+    /// The key has no host or server with that name.
+    pub fn no_such_host(id: &str, host: &str) -> Self {
+        CmdError { kind: "no_host".into(), message: msg!("error_noSuchHost", id = id, host = host) }
     }
 }
 
@@ -222,7 +229,7 @@ pub struct CreatedProject {
     pub report: ApplyReport,
     pub public_key: String,
     /// Why the provider page could not be opened, if it was requested.
-    pub open_error: Option<String>,
+    pub open_error: Option<Msg>,
 }
 
 /// Creates the key (if requested), the project folders and the profile,
@@ -300,7 +307,7 @@ fn host_of<'a>(profile: &'a Profile, host: Option<&str>) -> CmdResult<&'a HostEn
             .hosts
             .iter()
             .find(|h| h.target_name() == name || h.hostname == name)
-            .ok_or_else(|| CmdError::other(format!("Key „{}“ hat keinen Host {name}", profile.id))),
+            .ok_or_else(|| CmdError::no_such_host(&profile.id, name)),
         None => Ok(profile.hosts.first().ok_or_else(|| Error::NoHost(profile.id.clone()))?),
     }
 }
@@ -564,7 +571,7 @@ mod tests {
         create_project(&env, &project("c")).unwrap();
         assert_eq!(host_key_check(&env, "c", None).unwrap(), HostKeyCheck::Pinned);
         assert_eq!(host_key_check(&env, "c", Some("github.com")).unwrap(), HostKeyCheck::Known);
-        assert!(host_key_check(&env, "c", Some("nope")).unwrap_err().message.contains("keinen Host nope"));
+        assert!(host_key_check(&env, "c", Some("nope")).unwrap_err().message.to_string().contains("keinen Host nope"));
     }
 
     #[test]

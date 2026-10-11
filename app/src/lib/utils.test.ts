@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { colorHex, formatAge, formatDate, formatDay, formatRelative, hostLabel, isValidEmail, plural, slugify } from "./utils";
+import { colorHex, formatAge, formatDate, formatDay, formatRelative, hostLabel, isValidEmail, slugify } from "./utils";
 
 describe("slugify", () => {
   // Same cases as store::tests::slugs in the Rust core.
@@ -37,10 +37,6 @@ describe("formatting", () => {
     expect(formatRelative(null)).toBe("");
   });
 
-  it("pluralizes", () => {
-    expect(plural(1, "Datei", "Dateien")).toBe("1 Datei");
-    expect(plural(3, "Datei", "Dateien")).toBe("3 Dateien");
-  });
 });
 
 describe("hosts and colors", () => {

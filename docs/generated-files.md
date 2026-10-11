@@ -111,7 +111,7 @@ needed for libssh before 0.10.2 (Dolphin/KIO on older distributions), which does
 # Managed by Keybund – manual changes will be overwritten.
 # Included from ~/.gitconfig.
 
-# Standard-Key: Privat
+# Default key: Privat
 [core]
 	sshCommand = ssh -i ~/.ssh/privat_ed25519 -o IdentitiesOnly=yes -o AddKeysToAgent=yes
 

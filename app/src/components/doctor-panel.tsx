@@ -1,5 +1,7 @@
 import { AlertTriangle, Check, X } from "lucide-react";
 import type { Check as CheckT } from "@/lib/bindings";
+import { t } from "@/lib/i18n";
+import { m } from "@/paraglide/messages";
 import { useDoctor, useFixDoctor } from "@/lib/queries";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -24,8 +26,8 @@ function Problem({ check }: { check: CheckT }) {
           <AlertTriangle aria-hidden className="mt-px size-4 shrink-0 text-warning" />
         )}
         <div className="flex flex-col gap-1">
-          <span className="text-[13px] font-medium">{check.title}</span>
-          {check.detail && <span className="text-[12.5px] leading-normal text-secondary-foreground">{check.detail}</span>}
+          <span className="text-[13px] font-medium">{t(check.title)}</span>
+          {check.detail && <span className="text-[12.5px] leading-normal text-secondary-foreground">{t(check.detail)}</span>}
         </div>
       </div>
       {check.fix && (
@@ -34,10 +36,10 @@ function Problem({ check }: { check: CheckT }) {
           className="self-end"
           disabled={fix.isPending}
           onClick={() => fix.mutate(check.fix!)}
-          aria-label={`${check.title} beheben`}
+          aria-label={m.doctor_fixLabel({ title: t(check.title) })}
         >
           {fix.isPending ? <Spinner className="size-3" /> : null}
-          Beheben
+          {m.doctor_fix()}
         </Button>
       )}
     </li>
@@ -55,30 +57,30 @@ export function DoctorPanel({ className }: { className?: string }) {
         <CardTitle id="doctor-title">Doctor</CardTitle>
         {doctor.isSuccess &&
           (problems.length ? (
-            <Badge variant="warning">{problems.length === 1 ? "1 Hinweis" : `${problems.length} Hinweise`}</Badge>
+            <Badge variant="warning">{m.sidebar_hints({ n: problems.length })}</Badge>
           ) : (
-            <Badge variant="success">Alles in Ordnung</Badge>
+            <Badge variant="success">{m.common_allFine()}</Badge>
           ))}
       </CardHeader>
       {doctor.isPending && <Spinner />}
       {problems.length > 0 && (
-        <ul aria-label="Probleme" className="m-0 flex list-none flex-col gap-2.5 p-0">
+        <ul aria-label={m.doctor_problems()} className="m-0 flex list-none flex-col gap-2.5 p-0">
           {problems.map((c) => (
             <Problem key={c.id} check={c} />
           ))}
         </ul>
       )}
-      <ul aria-label="Bestanden" className="m-0 flex list-none flex-col p-0">
+      <ul aria-label={m.doctor_passed()} className="m-0 flex list-none flex-col p-0">
         {ok.map((c) => (
           <li key={c.id} className="flex min-h-10 items-center gap-2.5 border-b border-border-subtle text-[13px] last:border-b-0">
             <Check aria-hidden className="size-[15px] text-success" strokeWidth={2.6} />
-            <span className="flex-1">{c.title}</span>
-            {c.detail && <span className="text-xs text-muted-foreground">{c.detail}</span>}
+            <span className="flex-1">{t(c.title)}</span>
+            {c.detail && <span className="text-xs text-muted-foreground">{t(c.detail)}</span>}
           </li>
         ))}
       </ul>
       <Button variant="outline" onClick={() => doctor.refetch()} disabled={doctor.isFetching}>
-        Erneut prüfen
+        {m.doctor_recheck()}
       </Button>
     </Card>
   );

@@ -3,7 +3,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::Msg;
 use crate::model::Config;
+use crate::msg;
 use crate::{apply, fsutil, gitenv, import, keygen, process, render, store, which, Env, Result};
 
 /// Keys older than this get a rotation hint.
@@ -40,18 +42,22 @@ pub enum Fix {
 pub struct Check {
     pub id: String,
     pub status: Status,
-    pub title: String,
-    pub detail: Option<String>,
+    pub title: Msg,
+    pub detail: Option<Msg>,
     pub fix: Option<Fix>,
 }
 
 impl Check {
-    fn new(id: &str, status: Status, title: impl Into<String>) -> Self {
-        Check { id: id.into(), status, title: title.into(), detail: None, fix: None }
+    fn new(id: &str, status: Status, title: Msg) -> Self {
+        Check { id: id.into(), status, title, detail: None, fix: None }
     }
-    fn detail(mut self, d: impl Into<String>) -> Self {
-        self.detail = Some(d.into());
+    fn detail(mut self, d: Msg) -> Self {
+        self.detail = Some(d);
         self
+    }
+    /// A detail that is a plain list (paths, names) and needs no translation.
+    fn list(self, items: &[String]) -> Self {
+        self.detail(msg!("common_text", text = items.join(", ")))
     }
     fn fix(mut self, f: Fix) -> Self {
         self.fix = Some(f);
@@ -81,16 +87,17 @@ pub fn run(env: &Env) -> Report {
     let config = match store::load(env) {
         Ok(c) => {
             match store::validate(&c) {
-                Ok(()) => checks.push(Check::new("profiles", Status::Ok, format!("{} Keys geladen", c.profiles.len()))),
-                Err(e) => checks
-                    .push(Check::new("profiles", Status::Error, "profiles.toml ist ungültig").detail(e.to_string())),
+                Ok(()) => {
+                    checks.push(Check::new("profiles", Status::Ok, msg!("doctor_profiles_ok", n = c.profiles.len())))
+                }
+                Err(e) => {
+                    checks.push(Check::new("profiles", Status::Error, msg!("doctor_profiles_invalid")).detail(e.msg()))
+                }
             }
             c
         }
         Err(e) => {
-            checks.push(
-                Check::new("profiles", Status::Error, "profiles.toml kann nicht gelesen werden").detail(e.to_string()),
-            );
+            checks.push(Check::new("profiles", Status::Error, msg!("doctor_profiles_unreadable")).detail(e.msg()));
             Config::default()
         }
     };
@@ -155,19 +162,17 @@ pub fn dolphin_check(installed: bool, libssh: Option<(u32, u32, u32)>, config: &
         return None;
     }
     let Some(v) = libssh else {
-        return Some(Check::new("dolphin", Status::Ok, "Dolphin gefunden, libssh-Version unbekannt").detail(
-            "Zum Prüfen sftp://<alias> in Dolphin öffnen: Es sollte ohne Passwort mit dem Key aus Keybund verbinden.",
-        ));
+        return Some(
+            Check::new("dolphin", Status::Ok, msg!("doctor_dolphin_unknown"))
+                .detail(msg!("doctor_dolphin_unknown_detail")),
+        );
     };
     let version = format!("{}.{}.{}", v.0, v.1, v.2);
     Some(if v >= LIBSSH_TILDE_INCLUDE || config.settings.absolute_ssh_include {
-        Check::new("dolphin", Status::Ok, format!("Dolphin (libssh {version}) liest die Keybund-Config"))
+        Check::new("dolphin", Status::Ok, msg!("doctor_dolphin_ok", version = &version))
     } else {
-        Check::new("dolphin", Status::Warn, format!("Dolphin sieht die Keybund-Config nicht (libssh {version})"))
-            .detail(
-                "libssh vor 0.10.2 versteht ~ in Include nicht – sftp:// in Dolphin nutzt dann nicht den Key aus Keybund. \
-                 Abhilfe: Include mit vollem Pfad schreiben.",
-            )
+        Check::new("dolphin", Status::Warn, msg!("doctor_dolphin_old", version = &version))
+            .detail(msg!("doctor_dolphin_old_detail"))
             .fix(Fix::AbsoluteSshInclude)
     })
 }
@@ -180,7 +185,7 @@ fn tool_checks(env: &Env) -> Vec<Check> {
             cmd.arg(if *tool == "git" { "--version" } else { "-V" });
             match process::output(cmd) {
                 Err(crate::Error::ToolMissing(_)) => {
-                    Some(Check::new(&format!("tool-{tool}"), Status::Error, format!("{tool} ist nicht installiert")))
+                    Some(Check::new(&format!("tool-{tool}"), Status::Error, msg!("doctor_toolMissing", tool = tool)))
                 }
                 _ => None,
             }
@@ -193,10 +198,10 @@ fn permission_checks(env: &Env, config: &Config) -> Vec<Check> {
     if let Some(mode) = fsutil::mode(&env.ssh_dir()) {
         // sshd (StrictModes) only rejects ~/.ssh when others can write to it.
         checks.push(if mode & 0o022 == 0 {
-            Check::new("ssh-dir-perms", Status::Ok, format!("~/.ssh hat Rechte {mode:o}"))
+            Check::new("ssh-dir-perms", Status::Ok, msg!("doctor_sshDir_ok", mode = format!("{mode:o}")))
         } else {
-            Check::new("ssh-dir-perms", Status::Error, format!("~/.ssh hat Rechte {mode:o} statt 700"))
-                .detail("Andere dürfen in ~/.ssh schreiben – sshd verweigert dann die Anmeldung mit Keys.")
+            Check::new("ssh-dir-perms", Status::Error, msg!("doctor_sshDir_bad", mode = format!("{mode:o}")))
+                .detail(msg!("doctor_sshDir_bad_detail"))
                 .fix(Fix::Permissions)
         });
     }
@@ -214,15 +219,13 @@ fn permission_checks(env: &Env, config: &Config) -> Vec<Check> {
         }
     }
     if !missing.is_empty() {
-        checks.push(Check::new("keys-missing", Status::Error, "Key-Dateien fehlen").detail(missing.join(", ")));
+        checks.push(Check::new("keys-missing", Status::Error, msg!("doctor_keysMissing")).list(&missing));
     }
     if !config.profiles.is_empty() {
         checks.push(if bad.is_empty() {
-            Check::new("key-perms", Status::Ok, "Private Keys haben Rechte 600")
+            Check::new("key-perms", Status::Ok, msg!("doctor_keyPerms_ok"))
         } else {
-            Check::new("key-perms", Status::Error, "Private Keys mit zu offenen Rechten")
-                .detail(bad.join(", "))
-                .fix(Fix::Permissions)
+            Check::new("key-perms", Status::Error, msg!("doctor_keyPerms_bad")).list(&bad).fix(Fix::Permissions)
         });
     }
     checks
@@ -232,35 +235,35 @@ fn include_checks(env: &Env) -> Vec<Check> {
     let mut checks = Vec::new();
     let ssh = fsutil::read_optional(&env.ssh_config()).ok().flatten().unwrap_or_default();
     checks.push(if apply::ssh_include_on_top(&ssh) {
-        Check::new("ssh-include", Status::Ok, "Include steht ganz oben in ~/.ssh/config")
+        Check::new("ssh-include", Status::Ok, msg!("doctor_sshInclude_ok"))
     } else if apply::ssh_include_present(&ssh) {
-        Check::new("ssh-include", Status::Error, "Include steht nicht ganz oben")
-            .detail("In ~/.ssh/config steht es unter einem Host-Block und gilt nur für diesen.")
+        Check::new("ssh-include", Status::Error, msg!("doctor_sshInclude_notTop"))
+            .detail(msg!("doctor_sshInclude_notTop_detail"))
             .fix(Fix::MoveSshInclude)
     } else {
-        Check::new("ssh-include", Status::Warn, "Include fehlt in ~/.ssh/config").fix(Fix::Apply)
+        Check::new("ssh-include", Status::Warn, msg!("doctor_sshInclude_missing")).fix(Fix::Apply)
     });
     let git = fsutil::read_optional(&env.gitconfig()).ok().flatten().unwrap_or_default();
     let index = env.contract(&env.index_gitconfig());
     checks.push(if apply::git_include_last(&git, &index) {
-        Check::new("git-include", Status::Ok, "~/.gitconfig bindet Keybund ein")
+        Check::new("git-include", Status::Ok, msg!("doctor_gitInclude_ok"))
     } else if apply::git_include_present(&git, &index) {
-        Check::new("git-include", Status::Warn, "Keybund steht nicht mehr am Ende von ~/.gitconfig")
-            .detail("Was danach steht (z. B. von git config --global), überschreibt die Einstellungen deiner Keys.")
+        Check::new("git-include", Status::Warn, msg!("doctor_gitInclude_notLast"))
+            .detail(msg!("doctor_gitInclude_notLast_detail"))
             .fix(Fix::Apply)
     } else {
-        Check::new("git-include", Status::Warn, "Include fehlt in ~/.gitconfig").fix(Fix::Apply)
+        Check::new("git-include", Status::Warn, msg!("doctor_gitInclude_missing")).fix(Fix::Apply)
     });
     checks
 }
 
 fn up_to_date_check(env: &Env, config: &Config) -> Check {
     match apply::plan(env, config) {
-        Ok(plan) if plan.is_empty() => Check::new("configs", Status::Ok, "Configs sind aktuell"),
-        Ok(plan) => Check::new("configs", Status::Warn, format!("{} Datei(en) nicht aktuell", plan.changes.len()))
-            .detail(plan.changes.iter().map(|c| c.path.as_str()).collect::<Vec<_>>().join(", "))
+        Ok(plan) if plan.is_empty() => Check::new("configs", Status::Ok, msg!("doctor_configs_ok")),
+        Ok(plan) => Check::new("configs", Status::Warn, msg!("doctor_configs_stale", n = plan.changes.len()))
+            .list(&plan.changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>())
             .fix(Fix::Apply),
-        Err(e) => Check::new("configs", Status::Error, "Configs können nicht berechnet werden").detail(e.to_string()),
+        Err(e) => Check::new("configs", Status::Error, msg!("doctor_configs_error")).detail(e.msg()),
     }
 }
 
@@ -268,31 +271,24 @@ fn up_to_date_check(env: &Env, config: &Config) -> Check {
 fn git_env_check(env: &Env) -> Check {
     let found = gitenv::detect(env);
     let Some(first) = found.first() else {
-        return Check::new("git-env", Status::Ok, "Keine Umgebungsvariable übersteuert Git");
+        return Check::new("git-env", Status::Ok, msg!("doctor_gitEnv_ok"));
     };
-    let detail = found
-        .iter()
-        .map(|o| match o.name.as_str() {
-            "GIT_SSH_COMMAND" => format!(
-                "GIT_SSH_COMMAND ist in {} gesetzt („{}“). Git benutzt dann in jedem Repo diesen Befehl statt des Keys aus Keybund.",
-                o.origin, o.value
-            ),
-            _ => format!(
-                "{} zeigt in {} auf {} – Git liest dann ~/.gitconfig mit dem Keybund-Include nicht.",
-                o.name, o.origin, o.value
-            ),
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
-    Check::new("git-env", Status::Error, format!("{} übersteuert Keybund", first.name))
-        .detail(format!("{detail} Zeile entfernen und neu anmelden bzw. ein neues Terminal öffnen."))
+    // The first one; the next shows up once that is gone.
+    let detail = match first.name.as_str() {
+        "GIT_SSH_COMMAND" => msg!("doctor_gitEnv_sshCommand", origin = &first.origin, value = &first.value),
+        _ => msg!("doctor_gitEnv_config", name = &first.name, origin = &first.origin, value = &first.value),
+    };
+    Check::new("git-env", Status::Error, msg!("doctor_gitEnv_bad", name = &first.name)).detail(detail)
 }
 
 fn agent_check(env: &Env) -> Check {
     match which::agent_fingerprints(env) {
-        Some(keys) => Check::new("agent", Status::Ok, "ssh-agent läuft").detail(format!("{} Keys geladen", keys.len())),
-        None => Check::new("agent", Status::Warn, "Kein ssh-agent erreichbar")
-            .detail("SSH_AUTH_SOCK ist nicht gesetzt oder der Agent läuft nicht. Keys mit Passphrase werden bei jeder Verbindung abgefragt."),
+        Some(keys) => {
+            Check::new("agent", Status::Ok, msg!("doctor_agent_ok")).detail(msg!("doctor_agent_keys", n = keys.len()))
+        }
+        None => {
+            Check::new("agent", Status::Warn, msg!("doctor_agent_missing")).detail(msg!("doctor_agent_missing_detail"))
+        }
     }
 }
 
@@ -324,13 +320,10 @@ fn add_keys_check(env: &Env, config: &Config) -> Option<Check> {
         }
     }
     Some(if missing.is_empty() {
-        Check::new("add-keys", Status::Ok, "AddKeysToAgent aktiv")
+        Check::new("add-keys", Status::Ok, msg!("doctor_addKeys_ok"))
     } else {
-        Check::new("add-keys", Status::Warn, "AddKeysToAgent fehlt")
-            .detail(format!(
-                "Keys mit Passphrase werden bei jedem Zugriff neu abgefragt: {}. Configs neu schreiben.",
-                missing.join(", ")
-            ))
+        Check::new("add-keys", Status::Warn, msg!("doctor_addKeys_missing"))
+            .detail(msg!("doctor_addKeys_missing_detail", files = missing.join(", ")))
             .fix(Fix::Apply)
     })
 }
@@ -354,14 +347,20 @@ fn ssh_config_checks(env: &Env, config: &Config) -> Vec<Check> {
         let mixes = shared.contains(&host.to_lowercase());
         let covered = migrated.contains(&host.as_str());
         let check = match (mixes, covered) {
-            (true, true) => Check::new(&format!("ssh-config-{host}"), Status::Warn, format!("Alter Eintrag für {host} in ~/.ssh/config"))
-                .detail(format!("Er ist in Keybund übernommen, bietet aber weiter {} an – dadurch kann die Anmeldung mit dem falschen Key gelingen. Entfernen.", b.identity_files[0]))
-                .fix(Fix::CleanupSshConfig),
-            (true, false) => Check::new(&format!("ssh-config-{host}"), Status::Warn, format!("Globaler Eintrag für {host} in ~/.ssh/config"))
-                .detail(format!("{} wird zusätzlich zum Key aus Keybund angeboten – die Anmeldung kann mit dem falschen Key gelingen. Mit „Bestehende SSH-Config übernehmen“ in Keybund übernehmen, dann entfernen.", b.identity_files[0])),
-            (false, true) => Check::new(&format!("ssh-config-{host}"), Status::Warn, format!("Doppelter Eintrag für {host} in ~/.ssh/config"))
-                .detail("Keybund schreibt diesen Host-Block selbst, der alte kann weg.")
-                .fix(Fix::CleanupSshConfig),
+            (true, true) => {
+                Check::new(&format!("ssh-config-{host}"), Status::Warn, msg!("doctor_sshConfig_old", host = host))
+                    .detail(msg!("doctor_sshConfig_old_detail", key = &b.identity_files[0]))
+                    .fix(Fix::CleanupSshConfig)
+            }
+            (true, false) => {
+                Check::new(&format!("ssh-config-{host}"), Status::Warn, msg!("doctor_sshConfig_global", host = host))
+                    .detail(msg!("doctor_sshConfig_global_detail", key = &b.identity_files[0]))
+            }
+            (false, true) => {
+                Check::new(&format!("ssh-config-{host}"), Status::Warn, msg!("doctor_sshConfig_duplicate", host = host))
+                    .detail(msg!("doctor_sshConfig_duplicate_detail"))
+                    .fix(Fix::CleanupSshConfig)
+            }
             (false, false) => continue,
         };
         checks.push(check);
@@ -399,11 +398,8 @@ fn global_identity_file_check(env: &Env) -> Vec<Check> {
     if files.is_empty() {
         return Vec::new();
     }
-    vec![Check::new("ssh-global-identity", Status::Warn, "IdentityFile für alle Hosts in ~/.ssh/config")
-        .detail(format!(
-            "{} wird bei jeder Verbindung zusätzlich angeboten, auch zu den Hosts deiner Keys. Ist er im ssh-agent, kommt er zuerst – die Anmeldung kann dann mit dem falschen Konto gelingen. Besser nur in den Host-Blöcken angeben, die ihn brauchen.",
-            files.join(", ")
-        ))]
+    vec![Check::new("ssh-global-identity", Status::Warn, msg!("doctor_globalIdentity"))
+        .detail(msg!("doctor_globalIdentity_detail", files = files.join(", ")))]
 }
 
 /// The user's own `core.sshCommand` in `~/.gitconfig` is replaced by the
@@ -417,11 +413,11 @@ fn own_ssh_command_check(env: &Env, config: &Config) -> Vec<Check> {
     if own.is_empty() {
         return Vec::new();
     }
-    vec![Check::new("git-own-ssh-command", Status::Warn, "Standard-Key ersetzt dein core.sshCommand")
-        .detail(format!(
-            "~/.gitconfig setzt „{own}“, außerhalb der Git-Ordner gilt aber der Standard-Key „{}“. Entferne die Zeile oder nimm den Standard zurück.",
-            def.name
-        ))]
+    vec![Check::new("git-own-ssh-command", Status::Warn, msg!("doctor_ownSshCommand")).detail(msg!(
+        "doctor_ownSshCommand_detail",
+        command = own,
+        name = &def.name
+    ))]
 }
 
 fn key_age_checks(env: &Env, config: &Config) -> Vec<Check> {
@@ -434,9 +430,9 @@ fn key_age_checks(env: &Env, config: &Config) -> Vec<Check> {
                 Check::new(
                     &format!("key-age-{}", p.id),
                     Status::Warn,
-                    format!("Key von „{}“ ist {} Jahre alt", p.name, days / 365),
+                    msg!("doctor_keyAge", name = &p.name, years = days / 365),
                 )
-                .detail("Neuen Key erzeugen und den alten beim Provider entfernen.")
+                .detail(msg!("doctor_keyAge_detail"))
             })
         })
         .collect()
@@ -448,7 +444,7 @@ fn folder_checks(env: &Env, config: &Config) -> Vec<Check> {
     if missing.is_empty() {
         return Vec::new();
     }
-    vec![Check::new("folders", Status::Warn, "Git-Ordner existieren nicht").detail(missing.join(", "))]
+    vec![Check::new("folders", Status::Warn, msg!("doctor_folders")).list(&missing)]
 }
 
 /// Runs an automatic fix.
@@ -512,10 +508,10 @@ mod tests {
         assert_eq!(dolphin_check(true, Some((0, 10, 6)), &config).unwrap().status, Status::Ok);
         let old = dolphin_check(true, Some((0, 9, 6)), &config).unwrap();
         assert_eq!((old.status, old.fix), (Status::Warn, Some(Fix::AbsoluteSshInclude)));
-        assert!(old.title.contains("libssh 0.9.6"));
+        assert!(old.title.to_string().contains("libssh 0.9.6"));
         assert_eq!(dolphin_check(true, Some((0, 10, 1)), &config).unwrap().status, Status::Warn);
         config.settings.absolute_ssh_include = true;
         assert_eq!(dolphin_check(true, Some((0, 9, 6)), &config).unwrap().status, Status::Ok);
-        assert!(dolphin_check(true, None, &config).unwrap().detail.unwrap().contains("sftp://"));
+        assert!(dolphin_check(true, None, &config).unwrap().detail.unwrap().to_string().contains("sftp://"));
     }
 }

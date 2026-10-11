@@ -572,7 +572,7 @@ pub fn which(env: &Env, target: Option<&str>) -> Result<ExitCode> {
         ui::row("Key", &name);
     }
     if let Some(src) = &r.source {
-        let via = r.via.as_deref().map(|v| format!(" · via {v}")).unwrap_or_default();
+        let via = r.via.as_ref().map(|v| format!(" · via {v}")).unwrap_or_default();
         ui::row("Quelle", &format!("{src}{via}"));
     }
     if let (Some(n), Some(e)) = (&r.git_name, &r.git_email) {
@@ -590,7 +590,7 @@ pub fn which(env: &Env, target: Option<&str>) -> Result<ExitCode> {
         ui::row("Agent", if loaded { "geladen" } else { "nicht geladen" });
     }
     for n in &r.notes {
-        ui::hint(n);
+        ui::hint(&n.to_string());
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -661,10 +661,10 @@ pub fn doctor(env: &Env, fix: bool) -> Result<ExitCode> {
         }
     }
     for c in &report.checks {
-        ui::status(c.status, &c.title);
+        ui::status(c.status, &c.title.to_string());
         if c.status != Status::Ok {
             if let Some(d) = &c.detail {
-                ui::hint(d);
+                ui::hint(&d.to_string());
             }
             if c.fix.is_some() && !fix {
                 ui::hint("→ automatisch behebbar mit `keybund doctor --fix`");
@@ -763,7 +763,7 @@ pub fn import(env: &Env, all: bool, yes: bool, keep_old: bool) -> Result<ExitCod
             ui::row("Key", &p.profile.key.path);
             ui::row("Hosts", &hosts.join(", "));
             for note in &p.notes {
-                ui::hint(note);
+                ui::hint(&note.to_string());
             }
         }
         let chosen: Vec<_> = if all || !tty {
@@ -1131,9 +1131,9 @@ pub fn install_key(env: &Env, id: &str, host: Option<&str>) -> Result<ExitCode> 
             ));
             let r = keyinstall::install(env, p, target)?;
             if r.success {
-                ui::success(&r.message);
+                ui::success(&r.message.to_string());
             } else {
-                ui::error(&r.message);
+                ui::error(&r.message.to_string());
                 for line in r.output.lines().take(5) {
                     ui::hint(line);
                 }

@@ -79,9 +79,9 @@ describe("mock backend contract", () => {
     const p = b.state.profiles[0];
     const host = { alias: null, hostname: "github.com", user: null, port: 443, provider: "github" as const };
     await b.invoke("update_profile", { profile: { ...p, hosts: [host] } as Profile });
-    const result = (await b.invoke("test_connection", { id: p.id, host: null })) as { success: boolean; message: string };
+    const result = (await b.invoke("test_connection", { id: p.id, host: null })) as { success: boolean; message: unknown };
     expect(result.success).toBe(false);
-    expect(result.message).toContain("nicht bestätigt");
+    expect(result.message).toMatchObject({ key: "probe_hostKeyUnconfirmed" });
   });
 
   it("refuses to restore a file that changed since the preview", async () => {
@@ -106,7 +106,7 @@ describe("mock backend contract", () => {
   it("resolves folders and hosts", async () => {
     const b = backend();
     expect(await b.invoke("which", { query: "~/dev/acme/repo" })).toMatchObject({ profile_id: "acme", mode: "folder" });
-    expect(await b.invoke("which", { query: "~/elsewhere" })).toMatchObject({ profile_id: "privat", via: "Standard-Key" });
+    expect(await b.invoke("which", { query: "~/elsewhere" })).toMatchObject({ profile_id: "privat", via: { key: "which_viaDefault" } });
     expect(await b.invoke("which", { query: "meinserver" })).toMatchObject({ profile_id: "privat", hostname: "1.2.3.4" });
   });
 

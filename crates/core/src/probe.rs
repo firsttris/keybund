@@ -2,7 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::Msg;
 use crate::model::{HostEntry, Profile, Provider};
+use crate::msg;
 use crate::process::{self, shell_quote};
 use crate::{keygen, Env, Error, Result};
 
@@ -14,7 +16,7 @@ pub struct ProbeResult {
     /// Account the provider associated the key with.
     pub account: Option<String>,
     /// Short explanation for the user.
-    pub message: String,
+    pub message: Msg,
     /// Raw output of ssh.
     pub output: String,
     /// The command that was run, for display.
@@ -39,17 +41,17 @@ pub struct ProbeResult {
 pub struct ProbeStep {
     /// `Some(true)` went well, `Some(false)` failed, `None` is information.
     pub ok: Option<bool>,
-    pub text: String,
+    pub text: Msg,
 }
 
 impl ProbeStep {
-    fn info(text: String) -> Self {
+    fn info(text: Msg) -> Self {
         ProbeStep { ok: None, text }
     }
-    fn ok(text: String) -> Self {
+    fn ok(text: Msg) -> Self {
         ProbeStep { ok: Some(true), text }
     }
-    fn fail(text: String) -> Self {
+    fn fail(text: Msg) -> Self {
         ProbeStep { ok: Some(false), text }
     }
 }
@@ -65,42 +67,46 @@ pub fn steps(env: &Env, output: &str) -> Vec<ProbeStep> {
         let line = raw.trim_start_matches("debug1: ").trim();
         let step = if let Some(rest) = line.split_once(": Applying options for ") {
             let file = rest.0.rsplit_once(" line ").map_or(rest.0, |(f, _)| f);
-            Some(ProbeStep::info(format!("ssh-Config {} gilt für „{}“", short(file), rest.1)))
+            Some(ProbeStep::info(msg!("step_config", file = short(file), host = rest.1)))
         } else if let Some(rest) = line.strip_prefix("Connecting to ") {
-            Some(ProbeStep::info(format!("Verbinde mit {}", rest.trim_end_matches('.').replace(" port ", ", Port "))))
+            let target = rest.trim_end_matches('.');
+            Some(ProbeStep::info(match target.rsplit_once(" port ") {
+                Some((host, port)) => msg!("step_connecting", host = host, port = port),
+                None => msg!("step_connectingHost", host = target),
+            }))
         } else if line == "Connection established." {
-            Some(ProbeStep::ok("Verbindung steht".into()))
+            Some(ProbeStep::ok(msg!("step_connected")))
         } else if let Some(rest) = line.strip_prefix("Authenticating to ") {
             let user = rest.rsplit_once(" as ").map(|(_, u)| u.trim_matches('\'')).unwrap_or_default();
-            Some(ProbeStep::info(format!("Anmelden als Benutzer „{user}“")))
+            Some(ProbeStep::info(msg!("step_user", user = user)))
         } else if line.starts_with("Host '") && line.contains("is known and matches") {
-            Some(ProbeStep::ok("Host-Key ist bekannt und passt – es ist der richtige Server".into()))
+            Some(ProbeStep::ok(msg!("step_hostKeyOk")))
         } else if let Some(rest) = line.strip_prefix("Offering public key: ") {
             offered = true;
-            Some(ProbeStep::info(format!("Biete Key an: {}", short(rest.split_whitespace().next().unwrap_or(rest)))))
+            Some(ProbeStep::info(msg!("step_offer", key = short(rest.split_whitespace().next().unwrap_or(rest)))))
         } else if let Some(rest) = line.strip_prefix("Server accepts key: ") {
             offered = false;
-            Some(ProbeStep::ok(format!("Server akzeptiert {}", short(rest.split_whitespace().next().unwrap_or(rest)))))
+            Some(ProbeStep::ok(msg!("step_accepted", key = short(rest.split_whitespace().next().unwrap_or(rest)))))
         } else if line.starts_with("Authentications that can continue") && offered {
             offered = false;
-            Some(ProbeStep::fail("Server kennt diesen Key nicht".into()))
+            Some(ProbeStep::fail(msg!("step_rejected")))
         } else if line.starts_with("Authenticated to ") {
-            Some(ProbeStep::ok("Angemeldet".into()))
+            Some(ProbeStep::ok(msg!("step_loggedIn")))
         } else if line.starts_with("No more authentication methods to try") {
-            Some(ProbeStep::fail("Kein weiterer Key zum Anbieten – Anmeldung fehlgeschlagen".into()))
+            Some(ProbeStep::fail(msg!("step_noMoreKeys")))
         } else if line.contains("Permission denied") {
-            Some(ProbeStep::fail(format!("Server: {line}")))
+            Some(ProbeStep::fail(msg!("step_server", line = line)))
         } else if line.contains("Could not resolve hostname") {
-            Some(ProbeStep::fail("Hostname nicht gefunden – Tippfehler oder kein Netz?".into()))
+            Some(ProbeStep::fail(msg!("step_hostNotFound")))
         } else if line.starts_with("ssh: connect to host") {
-            Some(ProbeStep::fail(format!("Keine Verbindung: {}", line.rsplit(": ").next().unwrap_or(line))))
+            Some(ProbeStep::fail(msg!("step_noConnection", reason = line.rsplit(": ").next().unwrap_or(line))))
         } else if line.contains("Host key verification failed") {
-            Some(ProbeStep::fail("Host-Key nicht bestätigt oder geändert – Verbindung abgebrochen".into()))
+            Some(ProbeStep::fail(msg!("step_hostKeyFailed")))
         } else if line.starts_with("Hi ")
             || line.starts_with("Welcome to GitLab")
             || line.contains("authenticated via ssh key")
         {
-            Some(ProbeStep::ok(format!("Antwort: {line}")))
+            Some(ProbeStep::ok(msg!("step_answer", line = line)))
         } else {
             None
         };
@@ -214,11 +220,11 @@ pub fn evaluate(
             result.success = false;
             result.other_key = true;
             result.key_rejected = true;
-            let who = result.account.as_deref().map(|a| format!(" als {a}")).unwrap_or_default();
-            result.message = format!(
-                "Angemeldet{who}, aber mit {} statt mit diesem Key",
-                result.used_key.as_deref().unwrap_or(path)
-            );
+            let key = result.used_key.as_deref().unwrap_or(path);
+            result.message = match result.account.as_deref() {
+                Some(account) => msg!("probe_otherKey_as", account = account, key = key),
+                None => msg!("probe_otherKey", key = key),
+            };
         }
     }
     result
@@ -255,36 +261,36 @@ pub fn interpret(host: &HostEntry, output: &str, code: Option<i32>, command: Str
     let account = parse_account(host.provider, output);
     let lower = output.to_lowercase();
     let (success, message) = if let Some(acc) = &account {
-        (true, format!("Verbunden als {acc}"))
+        (true, msg!("probe_connected", account = acc))
     } else if (host.provider == Provider::Generic && code == Some(0))
         || (host.provider == Provider::Bitbucket && lower.contains("authenticated via ssh key"))
     {
-        (true, "Anmeldung erfolgreich".to_string())
+        (true, msg!("probe_loggedIn"))
     } else if lower.contains("incorrect passphrase") || lower.contains("bad passphrase") {
-        (false, "Passphrase falsch".to_string())
+        (false, msg!("probe_wrongPassphrase"))
     } else if lower.contains("read_passphrase") || lower.contains("ssh_askpass") {
-        (false, "Passphrase konnte nicht abgefragt werden – Key einmal mit ssh-add laden".to_string())
+        (false, msg!("probe_noPassphrasePrompt"))
     } else if lower.contains("permission denied") {
-        (false, format!("{} kennt diesen Key nicht", host.provider.display_name()))
-    } else if lower.contains("could not resolve hostname") {
-        (false, format!("Host {} nicht gefunden", host.hostname))
-    } else if lower.contains("timed out") || lower.contains("connection refused") || lower.contains("no route to host")
-    {
-        (false, format!("{} ist nicht erreichbar", host.hostname))
-    } else if lower.contains("remote host identification has changed") {
         (
             false,
-            format!(
-                "Der Host-Key von {} hat sich geändert – erst prüfen, dann mit ssh-keygen -R entfernen",
-                host.hostname
-            ),
+            match host.provider {
+                Provider::Generic => msg!("probe_keyUnknown_server"),
+                p => msg!("probe_keyUnknown", provider = p.display_name()),
+            },
         )
+    } else if lower.contains("could not resolve hostname") {
+        (false, msg!("probe_hostNotFound", host = &host.hostname))
+    } else if lower.contains("timed out") || lower.contains("connection refused") || lower.contains("no route to host")
+    {
+        (false, msg!("probe_unreachable", host = &host.hostname))
+    } else if lower.contains("remote host identification has changed") {
+        (false, msg!("probe_hostKeyChanged", host = &host.hostname))
     } else if lower.contains("host key verification failed") {
-        (false, format!("Host-Key von {} ist noch nicht bestätigt", host.hostname))
+        (false, msg!("probe_hostKeyUnconfirmed", host = &host.hostname))
     } else if lower.contains("no such identity") || lower.contains("no such file") {
-        (false, "Key-Datei nicht gefunden".to_string())
+        (false, msg!("probe_keyFileMissing"))
     } else {
-        (false, "Verbindung fehlgeschlagen".to_string())
+        (false, msg!("probe_failed"))
     };
     ProbeResult {
         success,
@@ -371,7 +377,7 @@ mod tests {
             String::new(),
         );
         assert!(!r.success && r.key_rejected);
-        assert_eq!(r.message, "GitHub kennt diesen Key nicht");
+        assert_eq!(r.message.to_string(), "GitHub kennt diesen Key nicht");
         let r = interpret(
             &host(Provider::Github, "github.com"),
             "ssh: connect to host github.com: timed out",
@@ -406,13 +412,16 @@ mod tests {
         assert!(r.other_key && r.key_rejected);
         assert_eq!(r.account.as_deref(), Some("@firsttris"));
         assert_eq!(r.used_key.as_deref(), Some("~/.ssh/privat_ed25519"));
-        assert_eq!(r.message, "Angemeldet als @firsttris, aber mit ~/.ssh/privat_ed25519 statt mit diesem Key");
+        assert_eq!(
+            r.message.to_string(),
+            "Angemeldet als @firsttris, aber mit ~/.ssh/privat_ed25519 statt mit diesem Key"
+        );
         assert!(!r.output.contains("debug1"), "debug lines are hidden");
         assert!(r.output.contains("Hi firsttris!"));
 
         let r = evaluate(&env, &gh, VERBOSE_OK, Some(1), String::new(), Some("SHA256:bbbb"));
         assert!(r.success && !r.other_key);
-        assert_eq!(r.message, "Verbunden als @firsttris");
+        assert_eq!(r.message.to_string(), "Verbunden als @firsttris");
     }
 
     #[test]
@@ -421,10 +430,10 @@ mod tests {
         let out = "read_passphrase: can't open /dev/tty: No such device or address\ngit@github.com: Permission denied (publickey).";
         let r = interpret(&gh, out, Some(255), String::new());
         assert!(!r.success);
-        assert!(r.message.starts_with("Passphrase konnte nicht abgefragt werden"));
+        assert!(r.message.to_string().starts_with("Passphrase konnte nicht abgefragt werden"));
         assert!(!r.key_rejected);
         let out = "Load key \"/home/t/.ssh/a\": incorrect passphrase supplied to decrypt private key\ngit@github.com: Permission denied (publickey).";
-        assert_eq!(interpret(&gh, out, Some(255), String::new()).message, "Passphrase falsch");
+        assert_eq!(interpret(&gh, out, Some(255), String::new()).message.to_string(), "Passphrase falsch");
     }
 
     #[test]
@@ -477,7 +486,7 @@ debug1: Authentications that can continue: publickey
 debug1: No more authentication methods to try.
 tristan@github.com: Permission denied (publickey).";
         let s = steps(&env, out);
-        let texts: Vec<&str> = s.iter().map(|s| s.text.as_str()).collect();
+        let texts: Vec<String> = s.iter().map(|s| s.text.to_string()).collect();
         assert_eq!(
             texts,
             [
@@ -494,6 +503,6 @@ tristan@github.com: Permission denied (publickey).";
         );
         assert_eq!(s[6].ok, Some(false));
         let unreachable = steps(&env, "ssh: connect to host 10.0.0.9 port 22: Connection timed out");
-        assert_eq!(unreachable[0].text, "Keine Verbindung: Connection timed out");
+        assert_eq!(unreachable[0].text.to_string(), "Keine Verbindung: Connection timed out");
     }
 }

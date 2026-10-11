@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { m } from "@/paraglide/messages";
 import { api, errorMessage } from "./api";
 
 /**
@@ -10,9 +11,9 @@ export async function openExternal(url: string): Promise<boolean> {
     await api.openUrl(url);
     return true;
   } catch (e) {
-    toast.error("Browser konnte nicht geöffnet werden", {
+    toast.error(m.toast_browserFailed(), {
       description: `${errorMessage(e)} · ${url}`,
-      action: { label: "Link kopieren", onClick: () => void navigator.clipboard?.writeText(url) },
+      action: { label: m.toast_copyLink(), onClick: () => void navigator.clipboard?.writeText(url) },
       duration: 15_000,
     });
     return false;

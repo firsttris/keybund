@@ -6,7 +6,7 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
-	loadProfiles: () => typedError<ProfilesView, CmdError>(__TAURI_INVOKE("load_profiles")),
+	loadProfiles: () => typedError<ProfilesView_Serialize, CmdError>(__TAURI_INVOKE("load_profiles")),
 	profileDefaults: (name: string) => typedError<ProfileDefaults, CmdError>(__TAURI_INVOKE("profile_defaults", { name })),
 	normalizeFolder: (folder: string) => __TAURI_INVOKE<string>("normalize_folder", { folder }),
 	previewNewProject: (project: NewProject) => typedError<Plan, CmdError>(__TAURI_INVOKE("preview_new_project", { project })),
@@ -14,11 +14,11 @@ export const commands = {
 	 *  Creates the project, writes the configs, copies the public key and
 	 *  opens the provider's "add key" page.
 	 */
-	createProject: (project: NewProject, openProviderPage: boolean) => typedError<CreatedProject, CmdError>(__TAURI_INVOKE("create_project", { project, openProviderPage })),
-	updateProfile: (profile: Profile) => typedError<ProfileView, CmdError>(__TAURI_INVOKE("update_profile", { profile })),
+	createProject: (project: NewProject, openProviderPage: boolean) => typedError<CreatedProject_Serialize, CmdError>(__TAURI_INVOKE("create_project", { project, openProviderPage })),
+	updateProfile: (profile: Profile) => typedError<ProfileView_Serialize, CmdError>(__TAURI_INVOKE("update_profile", { profile })),
 	setDefaultProfile: (id: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("set_default_profile", { id })),
 	previewAddHost: (id: string, host: HostEntry) => typedError<Plan, CmdError>(__TAURI_INVOKE("preview_add_host", { id, host })),
-	addHost: (id: string, host: HostEntry) => typedError<ProfileView, CmdError>(__TAURI_INVOKE("add_host", { id, host })),
+	addHost: (id: string, host: HostEntry) => typedError<ProfileView_Serialize, CmdError>(__TAURI_INVOKE("add_host", { id, host })),
 	copyPublicKey: (id: string) => typedError<string, CmdError>(__TAURI_INVOKE("copy_public_key", { id })),
 	/**  Opens an https link in the browser, also from a toolbox or an AppImage. */
 	openUrl: (url: string) => typedError<null, CmdError>(__TAURI_INVOKE("open_url", { url })),
@@ -33,7 +33,7 @@ export const commands = {
 	lastTest: (id: string) => typedError<{
 	success: boolean,
 	account: string | null,
-	message: string,
+	message: Msg,
 	/**  Milliseconds since the epoch. */
 	at: number | null,
 } | null, CmdError>(__TAURI_INVOKE("last_test", { id })),
@@ -77,8 +77,8 @@ export type ChangeKind = "create" | "modify" | "delete";
 export type Check = {
 	id: string,
 	status: Status,
-	title: string,
-	detail: string | null,
+	title: Msg,
+	detail: Msg | null,
 	fix: Fix | null,
 };
 
@@ -95,18 +95,31 @@ export type CloneTarget = {
 	target: string | null,
 };
 
-/**  Error as the frontend sees it: a stable kind plus a readable message. */
+/**
+ *  Error as the frontend sees it: a stable kind plus the message key the
+ *  frontend translates.
+ */
 export type CmdError = {
 	kind: string,
-	message: string,
+	message: Msg,
 };
 
-export type CreatedProject = {
-	profile: ProfileView,
+export type CreatedProject = CreatedProject_Serialize | CreatedProject_Deserialize;
+
+export type CreatedProject_Deserialize = {
+	profile: ProfileView_Deserialize,
 	report: ApplyReport,
 	public_key: string,
 	/**  Why the provider page could not be opened, if it was requested. */
-	open_error: string | null,
+	open_error: Msg | null,
+};
+
+export type CreatedProject_Serialize = {
+	profile: ProfileView_Serialize,
+	report: ApplyReport,
+	public_key: string,
+	/**  Why the provider page could not be opened, if it was requested. */
+	open_error: Msg | null,
 };
 
 /**  A pending change to one file. */
@@ -218,14 +231,14 @@ export type ImportProposal = {
 	blocks: string[],
 	key_exists: boolean,
 	/**  Hints for the user, e.g. that a folder is needed. */
-	notes: string[],
+	notes: Msg[],
 };
 
 export type InstallResult = {
 	success: boolean,
 	/**  The key was already in `authorized_keys`. */
 	already_present: boolean,
-	message: string,
+	message: Msg,
 	output: string,
 };
 
@@ -259,13 +272,35 @@ export type KeyRef = {
 	comment: string | null,
 };
 
-export type LastTest = {
+export type LastTest = LastTest_Serialize | LastTest_Deserialize;
+
+export type LastTest_Deserialize = {
 	success: boolean,
 	account: string | null,
-	message: string,
+	message: Msg,
 	/**  Milliseconds since the epoch. */
 	at: number | null,
 };
+
+export type LastTest_Serialize = {
+	success: boolean,
+	account: string | null,
+	message: Msg,
+	/**  Milliseconds since the epoch. */
+	at: number | null,
+};
+
+/**  A text for people: a catalog key and its arguments. */
+export type Msg = {
+	key: string,
+	args: { [key in string]: MsgArg },
+};
+
+/**
+ *  An argument: plain text (a path, a host, ssh's own output) or another
+ *  message that is translated as well.
+ */
+export type MsgArg = string | Msg;
 
 export type NewProject = {
 	profile: Profile,
@@ -291,7 +326,7 @@ export type ProbeResult = {
 	/**  Account the provider associated the key with. */
 	account: string | null,
 	/**  Short explanation for the user. */
-	message: string,
+	message: Msg,
 	/**  Raw output of ssh. */
 	output: string,
 	/**  The command that was run, for display. */
@@ -318,7 +353,7 @@ export type ProbeResult = {
 export type ProbeStep = {
 	/**  `Some(true)` went well, `Some(false)` failed, `None` is information. */
 	ok: boolean | null,
-	text: string,
+	text: Msg,
 };
 
 export type Profile = {
@@ -345,19 +380,46 @@ export type ProfileDefaults = {
 	id_taken: boolean,
 };
 
-export type ProfileView = {
+export type ProfileView = ProfileView_Serialize | ProfileView_Deserialize;
+
+export type ProfileView_Deserialize = {
 	profile: Profile,
 	key: KeyInfo,
 	is_default: boolean,
 	add_key_urls: HostLink[],
-	last_test: LastTest | null,
+	last_test: LastTest_Deserialize | null,
 	/**  The key is loaded in ssh-agent (`None`: no agent running). */
 	in_agent: boolean | null,
 };
 
-export type ProfilesView = {
+export type ProfileView_Serialize = {
+	profile: Profile,
+	key: KeyInfo,
+	is_default: boolean,
+	add_key_urls: HostLink[],
+	last_test: LastTest_Serialize | null,
+	/**  The key is loaded in ssh-agent (`None`: no agent running). */
+	in_agent: boolean | null,
+};
+
+export type ProfilesView = ProfilesView_Serialize | ProfilesView_Deserialize;
+
+export type ProfilesView_Deserialize = {
 	default_profile: string | null,
-	profiles: ProfileView[],
+	profiles: ProfileView_Deserialize[],
+	/**  Number of config files that differ from what Keybund would write. */
+	pending_changes: number,
+	/**  Profiles that could be taken over from `~/.ssh/config`. */
+	import_available: number,
+	/**  When Keybund last wrote its configs (milliseconds since the epoch). */
+	last_applied: number | null,
+	/**  Name and e-mail from `~/.gitconfig`, used where a key sets none. */
+	global_identity: GlobalIdentity,
+};
+
+export type ProfilesView_Serialize = {
+	default_profile: string | null,
+	profiles: ProfileView_Serialize[],
 	/**  Number of config files that differ from what Keybund would write. */
 	pending_changes: number,
 	/**  Profiles that could be taken over from `~/.ssh/config`. */
@@ -431,7 +493,7 @@ export type WhichResult = {
 	/**  Where the setting comes from, e.g. a gitconfig file or `ssh -G`. */
 	source: string | null,
 	/**  How it got there, e.g. `includeIf "gitdir:~/dev/kunde/"`. */
-	via: string | null,
+	via: Msg | null,
 	identities_only: boolean | null,
 	git_name: string | null,
 	git_email: string | null,
@@ -440,7 +502,7 @@ export type WhichResult = {
 	port: number | null,
 	/**  Whether the key is loaded in ssh-agent (`None`: no agent). */
 	agent_loaded: boolean | null,
-	notes: string[],
+	notes: Msg[],
 };
 
 /* Tauri Specta runtime */

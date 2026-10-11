@@ -74,7 +74,7 @@ pub async fn create_project<R: Runtime>(
     if open_provider_page {
         if let Some(link) = created.profile.add_key_urls.first().map(|l| l.url.clone()) {
             created.open_error =
-                blocking(move || Ok(keybund_core::desktop::open_url(&link).err().map(|e| e.to_string()))).await?;
+                blocking(move || Ok(keybund_core::desktop::open_url(&link).err().map(|e| e.msg()))).await?;
         }
     }
     Ok(created)
@@ -185,7 +185,7 @@ pub async fn test_connection(state: State<'_, AppState>, id: String, host: Optio
                     .hosts
                     .iter()
                     .find(|h| h.target_name() == name || h.hostname == name)
-                    .ok_or_else(|| CmdError::other(format!("Key „{id}“ hat keinen Host {name}")))?;
+                    .ok_or_else(|| CmdError::no_such_host(&id, &name))?;
                 let result = probe::probe(&env, profile, h)?;
                 // The key's latest test is remembered (sidebar, start page).
                 history::record(&env, &id, &result)?;
@@ -217,7 +217,7 @@ pub async fn install_key(
             .hosts
             .iter()
             .find(|h| h.target_name() == host || h.hostname == host)
-            .ok_or_else(|| CmdError::other(format!("Key „{id}“ hat keinen Server {host}")))?;
+            .ok_or_else(|| CmdError::no_such_host(&id, &host))?;
         Ok(keybund_core::keyinstall::install(&env, profile, server)?)
     })
     .await

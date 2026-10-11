@@ -18,6 +18,7 @@ pub mod error;
 pub mod gitenv;
 pub mod history;
 pub mod hostkeys;
+pub mod i18n;
 pub mod import;
 pub mod keygen;
 pub mod keyinstall;
@@ -34,4 +35,5 @@ mod process;
 
 pub use env::Env;
 pub use error::{Error, Result};
+pub use i18n::{Lang, Msg};
 pub use model::*;

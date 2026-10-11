@@ -15,6 +15,8 @@ import type { Settings } from "@/lib/bindings";
 import { openExternal } from "@/lib/open";
 import { toastSaved, usePaths, useProfiles, useScanKeys, useSetDefault, useSettings, useUpdateSettings } from "@/lib/queries";
 import { formatAge } from "@/lib/utils";
+import { LANGS, rich, setLang, storedLang, systemLang, type Lang } from "@/lib/i18n";
+import { m } from "@/paraglide/messages";
 
 const REPO_URL = "https://github.com/firsttris/keybund";
 
@@ -29,41 +31,42 @@ export function SettingsPage() {
 
   return (
     <>
-      <h1 className="m-0 text-[22px] font-semibold tracking-tight">Einstellungen</h1>
+      <h1 className="m-0 text-[22px] font-semibold tracking-tight">{m.sidebar_settings()}</h1>
       <div className="grid max-w-[960px] grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
         <Card aria-labelledby="default-title">
-          <CardTitle id="default-title">Standard-Key für Git</CardTitle>
+          <CardTitle id="default-title">{m.settings_defaultTitle()}</CardTitle>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="default-profile">Key für Repos außerhalb deiner Git-Ordner</Label>
+            <Label htmlFor="default-profile">{m.settings_defaultLabel()}</Label>
             <Select
               id="default-profile"
               value={profiles.data?.default_profile ?? ""}
               onChange={(e) => setDefault.mutate(e.target.value || null)}
             >
-              <option value="">Keiner – ssh wählt selbst</option>
+              <option value="">{m.settings_defaultNone()}</option>
               {active.map((p) => (
                 <option key={p.profile.id} value={p.profile.id}>
                   {p.profile.name}
                 </option>
               ))}
             </Select>
-            <FieldHint>
-              Für alle Git-Repos, die in keinem Git-Ordner eines Keys liegen, z. B. ein schnell geklontes Repo in ~/Downloads.
-              Ohne Standard-Key probiert ssh einfach deine Keys durch.
-            </FieldHint>
+            <FieldHint>{m.settings_defaultHint()}</FieldHint>
           </div>
         </Card>
 
         <SettingsCard />
 
+        <LanguageCard />
+
         <Card className="col-span-full" aria-labelledby="import-title">
-          <CardTitle id="import-title">Keys in ~/.ssh</CardTitle>
+          <CardTitle id="import-title">{m.settings_keysTitle()}</CardTitle>
           <FieldHint>
-            Einen Key, den Keybund noch nicht kennt, kannst du direkt übernehmen – oder du{" "}
-            <Link to="/import" className="text-foreground">
-              übernimmst deine bestehende ~/.ssh/config
-            </Link>
-            .
+            {rich(m.settings_keysHint, {
+              link: (
+                <Link to="/import" className="text-foreground">
+                  {m.settings_keysHintLink()}
+                </Link>
+              ),
+            })}
           </FieldHint>
           {keys.isPending && <Spinner />}
           <ul className="m-0 flex list-none flex-col p-0">
@@ -77,11 +80,11 @@ export function SettingsPage() {
                 </div>
                 {k.used_by ? (
                   <Link to="/profile/$id" params={{ id: k.used_by }} className="text-xs text-muted-foreground">
-                    genutzt von {names[k.used_by] ?? k.used_by}
+                    {m.settings_usedBy({ name: names[k.used_by] ?? k.used_by })}
                   </Link>
                 ) : (
                   <Link to="/new" search={{ key: k.key.path }} className="text-[13px] font-medium text-foreground">
-                    Als Key übernehmen
+                    {m.settings_takeOver()}
                   </Link>
                 )}
               </li>
@@ -91,20 +94,18 @@ export function SettingsPage() {
 
         <details className="group col-span-full">
           <summary className="cursor-pointer py-1 text-[13px] font-medium text-muted-foreground select-none hover:text-foreground">
-            Erweitert
+            {m.settings_advanced()}
           </summary>
           <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
             <AdvancedCard />
 
             <Card aria-labelledby="paths-title">
-              <CardTitle id="paths-title">Pfade</CardTitle>
-              <p className="m-0 -mt-2 text-[13px] text-muted-foreground">
-                Diese Dateien liest und schreibt Keybund. Deine eigenen (SSH, Git) bekommen nur je eine Include-Zeile.
-              </p>
+              <CardTitle id="paths-title">{m.settings_paths()}</CardTitle>
+              <p className="m-0 -mt-2 text-[13px] text-muted-foreground">{m.settings_pathsHint()}</p>
               {paths.data && (
                 <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13px]">
                   {[
-                    ["Keys (Keybund)", paths.data.profiles_file],
+                    [m.settings_pathKeys(), paths.data.profiles_file],
                     ["SSH", paths.data.ssh_config],
                     ["SSH (Keybund)", paths.data.ssh_keybund_conf],
                     ["Git", paths.data.gitconfig],
@@ -120,24 +121,24 @@ export function SettingsPage() {
             </Card>
 
             <Card aria-labelledby="remove-title">
-              <CardTitle id="remove-title">Keybund entfernen</CardTitle>
-              <FieldHint>Nimmt alle Änderungen von Keybund zurück, mit Vorschau. Deine Keys bleiben.</FieldHint>
+              <CardTitle id="remove-title">{m.uninstall_title()}</CardTitle>
+              <FieldHint>{m.settings_removeHint()}</FieldHint>
               <Link to="/uninstall" className="self-start text-[13px] font-medium text-foreground">
-                Entfernen …
+                {m.settings_remove()}
               </Link>
             </Card>
           </div>
         </details>
 
         <Card aria-labelledby="about-title">
-          <CardTitle id="about-title">Über Keybund</CardTitle>
+          <CardTitle id="about-title">{m.settings_about()}</CardTitle>
           <p className="m-0 text-[13px] leading-relaxed text-muted-foreground">
             Keybund {version.data ? `${version.data} ` : ""}by Tristan Teufel ·{" "}
             <button className="text-foreground underline-offset-4 hover:underline" onClick={() => openExternal(REPO_URL)}>
-              Quellcode auf GitHub
+              {m.settings_source()}
             </button>
             <br />
-            Lizenz: GPL-3.0 · eine kommerzielle Lizenz gibt es über{" "}
+            {m.settings_license()}{" "}
             <button className="text-foreground underline-offset-4 hover:underline" onClick={() => openExternal("https://teufel-it.de")}>
               teufel-it.de
             </button>
@@ -166,30 +167,30 @@ function FoldersForm({ saved }: { saved: Settings }) {
   const changed = draft.projects_dir !== saved.projects_dir || draft.keys_dir !== saved.keys_dir;
   return (
     <Card aria-labelledby="settings-title">
-      <CardTitle id="settings-title">Neue Keys</CardTitle>
+      <CardTitle id="settings-title">{m.settings_newKeys()}</CardTitle>
       <form
         className="flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault();
           update.mutate(
             { projects_dir: draft.projects_dir, keys_dir: draft.keys_dir },
-            { onSuccess: () => toast.success("Einstellungen gespeichert") },
+            { onSuccess: () => toast.success(m.settings_saved()) },
           );
         }}
       >
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="projects-dir">Ordner für Git-Repos</Label>
+          <Label htmlFor="projects-dir">{m.settings_projectsDir()}</Label>
           <Input id="projects-dir" className={mono} value={draft.projects_dir} onChange={(e) => set({ projects_dir: e.target.value })} />
-          <FieldHint>Hier schlägt Keybund Git-Ordner vor, z. B. {draft.projects_dir.replace(/\/+$/, "")}/kunde-c/.</FieldHint>
+          <FieldHint>{m.settings_projectsDirHint({ example: `${draft.projects_dir.replace(/\/+$/, "")}/${m.settings_exampleFolder()}/` })}</FieldHint>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="keys-dir">Ordner für Keys</Label>
+          <Label htmlFor="keys-dir">{m.settings_keysDir()}</Label>
           <Input id="keys-dir" className={mono} value={draft.keys_dir} onChange={(e) => set({ keys_dir: e.target.value })} />
-          <FieldHint>Hier legt Keybund neue Keys an.</FieldHint>
+          <FieldHint>{m.settings_keysDirHint()}</FieldHint>
         </div>
         <ErrorSlot message={update.isError && errorMessage(update.error)} />
         <Button type="submit" className="self-end" disabled={!changed || update.isPending}>
-          Speichern
+          {m.common_save()}
         </Button>
       </form>
     </Card>
@@ -206,17 +207,14 @@ function AdvancedCard() {
     update.mutate(patch, { onSuccess: toastSaved, onError: (e) => toast.error(errorMessage(e)) });
   return (
     <Card aria-labelledby="advanced-title">
-      <CardTitle id="advanced-title">Für besondere Fälle</CardTitle>
+      <CardTitle id="advanced-title">{m.settings_special()}</CardTitle>
       <label className="flex items-start justify-between gap-4">
         <span className="flex flex-col gap-0.5">
-          <span className="text-[13px] font-medium">Server-Fingerprints pro Key (known_hosts)</span>
-          <span className="text-xs text-muted-foreground">
-            ssh merkt sich, woran es deine Server erkennt. Mit dieser Option liegt das pro Key in einer eigenen Datei und
-            verschwindet beim Archivieren mit.
-          </span>
+          <span className="text-[13px] font-medium">{m.settings_knownHosts()}</span>
+          <span className="text-xs text-muted-foreground">{m.settings_knownHostsHint()}</span>
         </span>
         <Switch
-          aria-label="Server-Fingerprints pro Key"
+          aria-label={m.settings_knownHostsLabel()}
           checked={s.known_hosts_per_profile}
           disabled={update.isPending}
           onCheckedChange={(v) => toggle({ known_hosts_per_profile: v })}
@@ -224,16 +222,47 @@ function AdvancedCard() {
       </label>
       <label className="flex items-start justify-between gap-4">
         <span className="flex flex-col gap-0.5">
-          <span className="text-[13px] font-medium">Include mit vollem Pfad</span>
-          <span className="text-xs text-muted-foreground">Statt ~ in ~/.ssh/config – nötig für Dolphin/KIO mit libssh vor 0.10.2 (der Doctor meldet das).</span>
+          <span className="text-[13px] font-medium">{m.settings_absoluteInclude()}</span>
+          <span className="text-xs text-muted-foreground">{m.settings_absoluteIncludeHint()}</span>
         </span>
         <Switch
-          aria-label="Include mit vollem Pfad"
+          aria-label={m.settings_absoluteInclude()}
           checked={s.absolute_ssh_include}
           disabled={update.isPending}
           onCheckedChange={(v) => toggle({ absolute_ssh_include: v })}
         />
       </label>
+    </Card>
+  );
+}
+
+/** The UI language: the system's, or a fixed one. Switches right away. */
+function LanguageCard() {
+  const [choice, setChoice] = useState<Lang | "">(() => storedLang() ?? "");
+  const system = LANGS.find((l) => l.id === systemLang())!.label;
+  return (
+    <Card aria-labelledby="language-title">
+      <CardTitle id="language-title">{m.settings_language()}</CardTitle>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="language">{m.settings_languageLabel()}</Label>
+        <Select
+          id="language"
+          value={choice}
+          onChange={(e) => {
+            const lang = (e.target.value || null) as Lang | null;
+            setChoice(lang ?? "");
+            setLang(lang);
+          }}
+        >
+          <option value="">{m.settings_languageSystem({ language: system })}</option>
+          {LANGS.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.label}
+            </option>
+          ))}
+        </Select>
+        <FieldHint>{m.settings_languageHint()}</FieldHint>
+      </div>
     </Card>
   );
 }

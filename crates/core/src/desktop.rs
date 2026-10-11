@@ -62,10 +62,7 @@ pub fn opener_commands(url: &str, vars: Vec<(OsString, OsString)>, container: bo
 /// Opens an `https://` URL in the default browser.
 pub fn open_url(url: &str) -> Result<()> {
     if !url.starts_with("https://") {
-        return Err(Error::ToolFailed {
-            tool: "Browser".into(),
-            message: format!("Nur https-Links werden geöffnet: {url}"),
-        });
+        return Err(Error::NotHttps(url.to_string()));
     }
     let vars = clean_env(std::env::vars_os());
     let container = in_container(&vars);

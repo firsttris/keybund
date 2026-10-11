@@ -9,7 +9,9 @@ use std::process::Stdio;
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::Msg;
 use crate::model::{HostEntry, Profile};
+use crate::msg;
 use crate::{keygen, Env, Error, Result};
 
 /// POSIX sh, run via `sh -c` so it works whatever the login shell is (fish).
@@ -23,7 +25,7 @@ pub struct InstallResult {
     pub success: bool,
     /// The key was already in `authorized_keys`.
     pub already_present: bool,
-    pub message: String,
+    pub message: Msg,
     pub output: String,
 }
 
@@ -132,24 +134,20 @@ pub fn interpret(output: &str, ok: bool, host: &HostEntry) -> InstallResult {
     let lower = output.to_lowercase();
     let name = host.target_name();
     let (success, already_present, message) = if output.contains("KEYBUND_PRESENT") {
-        (true, true, format!("Der Key war auf {name} schon eingetragen"))
+        (true, true, msg!("install_present", host = name))
     } else if ok && output.contains("KEYBUND_ADDED") {
-        (true, false, format!("Key auf {name} eingetragen"))
+        (true, false, msg!("install_added", host = name))
     } else if lower.contains("permission denied") {
-        (
-            false,
-            false,
-            format!("Anmeldung an {name} fehlgeschlagen – Passwort oder ein bereits eingetragener Key wird gebraucht"),
-        )
+        (false, false, msg!("install_denied", host = name))
     } else if lower.contains("could not resolve hostname") {
-        (false, false, format!("Host {} nicht gefunden", host.hostname))
+        (false, false, msg!("probe_hostNotFound", host = &host.hostname))
     } else if lower.contains("timed out") || lower.contains("connection refused") || lower.contains("no route to host")
     {
-        (false, false, format!("{name} ist nicht erreichbar"))
+        (false, false, msg!("probe_unreachable", host = name))
     } else if lower.contains("read_passphrase") || lower.contains("ssh_askpass") {
-        (false, false, "Kein Passwort-Dialog verfügbar – im Terminal `keybund install-key` ausführen".to_string())
+        (false, false, msg!("install_noAskpass"))
     } else {
-        (false, false, format!("Eintragen auf {name} fehlgeschlagen"))
+        (false, false, msg!("install_failed", host = name))
     };
     let output = output.lines().filter(|l| !l.starts_with("KEYBUND_")).collect::<Vec<_>>().join("\n");
     InstallResult { success, already_present, message, output }
@@ -195,9 +193,9 @@ mod tests {
         assert!(interpret("KEYBUND_ADDED", true, &server()).success);
         let r = interpret("KEYBUND_PRESENT", true, &server());
         assert!(r.success && r.already_present);
-        assert_eq!(r.message, "Der Key war auf nas schon eingetragen");
+        assert_eq!(r.message.to_string(), "Der Key war auf nas schon eingetragen");
         let r = interpret("admin@192.168.1.5: Permission denied (publickey,password).", false, &server());
         assert!(!r.success);
-        assert!(r.message.starts_with("Anmeldung an nas fehlgeschlagen"));
+        assert!(r.message.to_string().starts_with("Anmeldung an nas fehlgeschlagen"));
     }
 }

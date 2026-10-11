@@ -108,7 +108,8 @@ fn wizard_flow_over_ipc() {
 
     let err = invoke(&webview, "clone_preview", json!({ "url": "nonsense" })).unwrap_err();
     assert_eq!(err["kind"], "invalid_url");
-    assert!(err["message"].as_str().unwrap().contains("Ungültige Repo-URL"));
+    // The frontend gets the message key and its arguments, not text.
+    assert_eq!(err["message"], json!({ "key": "error_invalidUrl", "args": { "url": "nonsense" } }));
 
     let archived = invoke(&webview, "archive_profile", json!({ "id": "c" })).unwrap();
     assert_eq!(archived["key_path"], "~/.ssh/archive/c_ed25519");
@@ -172,7 +173,8 @@ fn profile_commands_over_ipc() {
         .unwrap_err();
     assert_eq!(err["kind"], "profile_not_found");
     let err = invoke(&webview, "open_url", json!({ "url": "file:///etc/passwd" })).unwrap_err();
-    assert!(err["message"].as_str().unwrap().contains("https"));
+    assert_eq!(err["kind"], "not_https");
+    assert_eq!(err["message"]["key"], "error_notHttps");
 }
 
 #[test]

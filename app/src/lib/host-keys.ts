@@ -1,3 +1,4 @@
+import { m } from "@/paraglide/messages";
 import { api } from "./api";
 import type { HostKeyCheck } from "./bindings";
 
@@ -26,6 +27,6 @@ export async function ensureHostKey(id: string, host: string | null): Promise<vo
   }
   if (check.state !== "unknown") return;
   const confirmed = asker ? await asker(check) : false;
-  if (!confirmed) throw new Error("Host-Key nicht bestätigt – keine Verbindung aufgebaut.");
+  if (!confirmed) throw new Error(m.hostKey_declined());
   await api.trustHostKey(id, host, check.keys.map((k) => k.fingerprint));
 }

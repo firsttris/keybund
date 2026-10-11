@@ -93,7 +93,7 @@ pub fn ssh_config(config: &Config) -> String {
 pub fn index_gitconfig(config: &Config, env: &Env) -> String {
     let mut out = format!("{MANAGED}\n# Included from ~/.gitconfig.\n");
     if let Some(def) = config.default_entry() {
-        let _ = writeln!(out, "\n# Standard-Key: {}", def.name);
+        let _ = writeln!(out, "\n# Default key: {}", def.name);
         let _ = writeln!(out, "[core]\n\tsshCommand = {}", git_value(&ssh_command(&def.key.path)));
     }
     for p in config.active_profiles() {

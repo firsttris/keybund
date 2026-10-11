@@ -2,6 +2,8 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Activity, Archive, Crosshair, Download, KeyRound, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import type { ProfileView } from "@/lib/bindings";
+import { t } from "@/lib/i18n";
+import { m } from "@/paraglide/messages";
 import { activeKeys, usageParts } from "@/lib/categories";
 import { useDoctor, useProfiles } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -37,12 +39,12 @@ export function Sidebar() {
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate">{profile.name}</span>
           {last_test && !last_test.success ? (
-            <span className="truncate text-xs font-normal text-danger" title={last_test.message}>
-              Test fehlgeschlagen
+            <span className="truncate text-xs font-normal text-danger" title={t(last_test.message)}>
+              {m.sidebar_testFailed()}
             </span>
           ) : (
             <span className={cn("truncate text-xs font-normal", parts.length ? "text-muted-foreground" : "text-warning")}>
-              {parts.length ? parts.join(" · ") : "noch nicht benutzt"}
+              {parts.length ? parts.join(" · ") : m.sidebar_unused()}
             </span>
           )}
         </span>
@@ -58,23 +60,23 @@ export function Sidebar() {
         </span>
         <span className="flex flex-col">
           <span className="text-[15px] font-semibold tracking-tight">Keybund</span>
-          <span className="text-xs text-muted-foreground">Der richtige Key, automatisch</span>
+          <span className="text-xs text-muted-foreground">{m.app_tagline()}</span>
         </span>
       </Link>
 
       <Link to="/new" className={cn(buttonVariants(), "no-underline")}>
         <Plus aria-hidden />
-        Neuer Key
+        {m.sidebar_newKey()}
       </Link>
 
       <div className="relative">
         <label htmlFor="profile-search" className="sr-only">
-          Keys durchsuchen
+          {m.sidebar_search()}
         </label>
         <Search aria-hidden className="pointer-events-none absolute top-[11px] left-[11px] size-[15px] text-muted-foreground" />
         <Input
           id="profile-search"
-          placeholder="Key, Ordner oder Server …"
+          placeholder={m.sidebar_searchPlaceholder()}
           className="pl-[34px]"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -85,21 +87,21 @@ export function Sidebar() {
         />
       </div>
 
-      <nav aria-label="Keys" className="flex flex-col gap-0.5">
-        <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">Deine Keys</span>
+      <nav aria-label={m.sidebar_keys()} className="flex flex-col gap-0.5">
+        <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">{m.sidebar_yourKeys()}</span>
         {keys.map(keyLink)}
-        {nothing && <span className="px-2.5 text-xs text-muted-foreground">{filter ? "Kein Key passt" : "Noch keine Keys"}</span>}
+        {nothing && <span className="px-2.5 text-xs text-muted-foreground">{filter ? m.sidebar_noMatch() : m.sidebar_noKeys()}</span>}
         {q && (
           <Link to="/which" search={{ q: filter.trim() }} className={cn(navItem, "text-muted-foreground")}>
             <Crosshair aria-hidden />
-            <span className="min-w-0 flex-1 truncate">Welcher Key gilt für „{filter.trim()}“?</span>
+            <span className="min-w-0 flex-1 truncate">{m.sidebar_whichFor({ query: filter.trim() })}</span>
           </Link>
         )}
       </nav>
 
       {archived.length > 0 && (
-        <nav aria-label="Archiv" className="flex flex-col gap-0.5">
-          <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">Archiv</span>
+        <nav aria-label={m.sidebar_archive()} className="flex flex-col gap-0.5">
+          <span className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">{m.sidebar_archive()}</span>
           {archived.map(({ profile }) => (
             <Link key={profile.id} to="/profile/$id" params={{ id: profile.id }} className={cn(navItem, "text-muted-foreground")}>
               <Archive aria-hidden />
@@ -109,17 +111,17 @@ export function Sidebar() {
         </nav>
       )}
 
-      <nav aria-label="Werkzeuge" className="mt-auto flex flex-col gap-0.5 border-t border-border pt-3.5">
-        <Link to="/clone" className={navItem} title="Klont ein Repo direkt in den Ordner des passenden Keys">
+      <nav aria-label={m.sidebar_tools()} className="mt-auto flex flex-col gap-0.5 border-t border-border pt-3.5">
+        <Link to="/clone" className={navItem} title={m.sidebar_cloneHint()}>
           <Download aria-hidden />
-          Repo klonen
+          {m.sidebar_clone()}
         </Link>
-        <Link to="/doctor" className={navItem} title="Prüft, ob ssh und Git richtig eingerichtet sind">
+        <Link to="/doctor" className={navItem} title={m.sidebar_doctorHint()}>
           <Activity aria-hidden />
           <span className="flex-1">Doctor</span>
           {problems > 0 && (
             <span
-              aria-label={`${problems} Hinweise`}
+              aria-label={m.sidebar_hints({ n: problems })}
               className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-[11.5px] font-semibold text-warning"
             >
               {problems}
@@ -128,7 +130,7 @@ export function Sidebar() {
         </Link>
         <Link to="/settings" className={navItem}>
           <SlidersHorizontal aria-hidden />
-          Einstellungen
+          {m.sidebar_settings()}
         </Link>
       </nav>
     </aside>

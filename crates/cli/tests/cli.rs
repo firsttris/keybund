@@ -73,10 +73,10 @@ fn new_generates_key_and_writes_configs() {
     assert!(!toml.contains("default_profile"), "the standard key is only set on request");
     sb.cmd().args(["default", "kunde-c"]).assert().success();
     assert!(sb.read(".config/keybund/profiles.toml").contains("default_profile = \"kunde-c\""));
-    assert!(sb.read(".config/keybund/git/index.gitconfig").contains("# Standard-Key: "), "written right away");
+    assert!(sb.read(".config/keybund/git/index.gitconfig").contains("# Default key: "), "written right away");
     sb.cmd().args(["default", "--unset"]).assert().success();
     assert!(!sb.read(".config/keybund/profiles.toml").contains("default_profile"));
-    assert!(!sb.read(".config/keybund/git/index.gitconfig").contains("Standard-Key"));
+    assert!(!sb.read(".config/keybund/git/index.gitconfig").contains("Default key"));
     assert!(sb.read(".ssh/config").starts_with("Include ~/.ssh/config.d/keybund.conf"));
     assert!(sb.read(".config/keybund/git/index.gitconfig").contains("[includeIf \"gitdir:~/dev/kunde-c/\"]"));
     assert!(sb.read(".config/keybund/git/kunde-c.gitconfig").contains("email = t@c.de"));
@@ -223,7 +223,10 @@ fn test_command_uses_exit_code_from_output() {
         sb.cmd().args(["test", "p"]).assert().success().stdout(predicate::str::contains("Verbunden als @octocat"));
         // The result is remembered for `show` and the app.
         sb.cmd().args(["show", "p"]).assert().success().stdout(predicate::str::contains("Letzter Test"));
-        assert!(sb.read(".config/keybund/last-tests.json").contains("Verbunden als @octocat"));
+        // Stored as a message key, so the app shows it in its own language.
+        let stored = sb.read(".config/keybund/last-tests.json");
+        assert!(stored.contains("probe_connected") && stored.contains("@octocat"), "{stored}");
+        sb.cmd().args(["show", "p"]).assert().success().stdout(predicate::str::contains("Verbunden als @octocat"));
         let log = sb.ssh_log();
         assert!(log.contains("IdentitiesOnly=yes"));
         assert!(log.contains("AddKeysToAgent=yes"));

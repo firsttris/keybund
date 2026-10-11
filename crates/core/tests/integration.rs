@@ -259,7 +259,7 @@ fn which_outside_profiles_and_with_local_override() {
     // A folder outside of all profiles falls back to the default profile.
     let r = which::which(&env, &config, &env.home.join("tmp").display().to_string()).unwrap();
     assert_eq!(r.profile_id.as_deref(), Some("privat"));
-    assert_eq!(r.via.as_deref(), Some("Standard-Key"));
+    assert_eq!(r.via.as_ref().map(|v| v.to_string()).as_deref(), Some("Standard-Key"));
 
     // A repo with its own core.sshCommand is reported as a mismatch.
     let repo = env.home.join("dev/kunde-a/special");
@@ -269,7 +269,7 @@ fn which_outside_profiles_and_with_local_override() {
     let r = which::which(&env, &config, &repo.display().to_string()).unwrap();
     assert_eq!(r.key_path.as_deref(), Some("~/.ssh/kunde-b_ed25519"));
     assert_eq!(r.identities_only, Some(false));
-    assert!(r.notes.iter().any(|n| n.contains("anderen Key")), "{:?}", r.notes);
+    assert!(r.notes.iter().any(|n| n.to_string().contains("anderen Key")), "{:?}", r.notes);
 
     // Without a default profile, a repo outside of all folders has no key.
     config.default_profile = None;
@@ -280,9 +280,9 @@ fn which_outside_profiles_and_with_local_override() {
     git(&env, &elsewhere, &["init", "-q"]);
     let r = which::which(&env, &config, &elsewhere.display().to_string()).unwrap();
     assert_eq!(r.key_path, None);
-    assert!(r.notes.iter().any(|n| n.contains("kein core.sshCommand")));
+    assert!(r.notes.iter().any(|n| n.to_string().contains("kein core.sshCommand")));
     let r = which::which(&env, &config, &env.home.join("plain").display().to_string()).unwrap();
-    assert!(r.notes.iter().any(|n| n.contains("keinen Standard-Key")));
+    assert!(r.notes.iter().any(|n| n.to_string().contains("keinen Standard-Key")));
 }
 
 #[test]
@@ -295,7 +295,7 @@ fn which_host_lists_profiles_sharing_it() {
     assert_eq!(r.mode, which::WhichMode::Host);
     assert_eq!(r.hostname.as_deref(), Some("github.com"));
     assert_eq!(r.source.as_deref(), Some("ssh -G"));
-    assert!(r.notes.iter().any(|n| n.contains("kunde-a, kunde-b")), "{:?}", r.notes);
+    assert!(r.notes.iter().any(|n| n.to_string().contains("kunde-a, kunde-b")), "{:?}", r.notes);
 }
 
 #[test]
@@ -321,7 +321,7 @@ fn doctor_reports_missing_keys_bad_permissions_and_old_folders() {
     let report = doctor::run(&env);
     let by_id = |id: &str| report.checks.iter().find(|c| c.id == id).unwrap_or_else(|| panic!("no check {id}"));
     assert_eq!(by_id("keys-missing").status, doctor::Status::Error);
-    assert!(by_id("keys-missing").detail.as_deref().unwrap().contains("kunde-b_ed25519.pub"));
+    assert!(by_id("keys-missing").detail.as_ref().unwrap().to_string().contains("kunde-b_ed25519.pub"));
     assert_eq!(by_id("folders").status, doctor::Status::Warn);
     assert_eq!(by_id("ssh-config-github.com").status, doctor::Status::Warn);
     #[cfg(unix)]
@@ -362,7 +362,7 @@ fn configs_from_older_versions_get_add_keys_to_agent() {
     let report = doctor::run(&env);
     let check = report.checks.iter().find(|c| c.id == "add-keys").unwrap();
     assert_eq!(check.status, doctor::Status::Warn);
-    let detail = check.detail.as_deref().unwrap();
+    let detail = check.detail.as_ref().unwrap().to_string();
     assert!(detail.contains("kunde-a") && detail.contains("privat") && detail.contains("keybund.conf"), "{detail}");
     assert!(!detail.contains("kunde-b"));
 
@@ -410,7 +410,7 @@ fn import_existing_ssh_config_and_clean_up() {
     apply::apply_config(&env, &store::load(&env).unwrap()).unwrap();
     let report = doctor::run(&env);
     let check = report.checks.iter().find(|c| c.id == "ssh-config-github.com").unwrap();
-    assert_eq!(check.title, "Globaler Eintrag für github.com in ~/.ssh/config");
+    assert_eq!(check.title.to_string(), "Globaler Eintrag für github.com in ~/.ssh/config");
     assert!(check.fix.is_none(), "not imported yet, nothing to clean up");
 
     // Import all three.
@@ -483,14 +483,14 @@ fn git_ssh_command_in_the_shell_config_is_reported() {
     let report = doctor::run(&env);
     let check = report.checks.iter().find(|c| c.id == "git-env").unwrap();
     assert_eq!(check.status, doctor::Status::Error);
-    assert_eq!(check.title, "GIT_SSH_COMMAND übersteuert Keybund");
-    assert!(check.detail.as_deref().unwrap().contains("~/.config/fish/config.fish:2"), "{:?}", check.detail);
+    assert_eq!(check.title.to_string(), "GIT_SSH_COMMAND übersteuert Keybund");
+    assert!(check.detail.as_ref().unwrap().to_string().contains("~/.config/fish/config.fish:2"), "{:?}", check.detail);
 
     let r = which::which(&env, &config, "~/dev/kunde-a").unwrap();
     assert_eq!(r.key_path.as_deref(), Some("~/.ssh/old_key"));
-    assert_eq!(r.via.as_deref(), Some("GIT_SSH_COMMAND"));
+    assert_eq!(r.via.as_ref().map(|v| v.to_string()).as_deref(), Some("GIT_SSH_COMMAND"));
     assert_eq!(r.source.as_deref(), Some("~/.config/fish/config.fish:2"));
-    assert!(r.notes[0].starts_with("GIT_SSH_COMMAND ist gesetzt"));
+    assert!(r.notes[0].to_string().starts_with("GIT_SSH_COMMAND ist gesetzt"));
 }
 
 #[test]
@@ -592,5 +592,5 @@ fn which_follows_worktrees_like_git() {
     let r = which::which(&env, &config, &tree.display().to_string()).unwrap();
     assert_eq!(r.profile_id.as_deref(), Some("kunde-a"), "{r:?}");
     assert_eq!(r.git_email.as_deref(), Some("kunde-a@example.org"));
-    assert!(!r.notes.iter().any(|n| n.contains("anderen Key")), "{:?}", r.notes);
+    assert!(!r.notes.iter().any(|n| n.to_string().contains("anderen Key")), "{:?}", r.notes);
 }

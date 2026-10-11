@@ -12,6 +12,8 @@ export default defineConfig({
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL: "http://localhost:1420",
+    // The flows read the German texts; e2e/i18n.spec.ts runs in English.
+    locale: "de-DE",
     trace: "retain-on-failure",
     launchOptions: { executablePath },
   },

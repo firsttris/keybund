@@ -1,70 +1,110 @@
+use std::fmt;
 use std::path::Path;
 
-/// Central error type. The messages are meant to be shown to the user as-is,
-/// by the CLI as well as by the GUI.
-#[derive(Debug, thiserror::Error)]
+use crate::i18n::Msg;
+use crate::msg;
+
+/// Central error type. Its text is a [`Msg`] (`Error::msg`): the app
+/// translates the key, the CLI renders it with `Display`.
+#[derive(Debug)]
 pub enum Error {
-    #[error("Home-Verzeichnis nicht gefunden (HOME ist nicht gesetzt)")]
     NoHome,
-    #[error("Key „{0}“ existiert nicht")]
     ProfileNotFound(String),
-    #[error("Einen Key „{0}“ gibt es schon")]
     DuplicateId(String),
-    #[error("Ungültige Key-ID „{0}“ (erlaubt sind a–z, 0–9, - und _)")]
     InvalidId(String),
-    #[error("Key „{0}“ braucht einen Namen")]
     MissingName(String),
-    #[error("Key „{0}“ soll Commits signieren, hat aber keine eigene E-Mail")]
     SignWithoutEmail(String),
-    #[error("Ungültiger Wert für {field}: „{value}“")]
-    InvalidValue { field: String, value: String },
-    #[error("Standard-Key „{0}“ existiert nicht")]
+    /// `field` is a field id (`name`, `key`, `gitName`, `gitEmail`, `folder`,
+    /// `hostname`, `alias`, `user`), shown through the message `field_<id>`.
+    InvalidValue {
+        field: String,
+        value: String,
+    },
     DefaultProfileMissing(String),
-    #[error("Git-Ordner überschneiden sich: {0} und {1}")]
     NestedFolders(String, String),
-    #[error("Host „{0}“ gehört schon zu einem anderen Key")]
     DuplicateAlias(String),
-    #[error("Key fehlt: {0}")]
     KeyMissing(String),
-    #[error("Key existiert bereits: {0}")]
     KeyExists(String),
-    #[error("Ungültiger Public Key in {0}")]
     InvalidPublicKey(String),
-    #[error("Programm „{0}“ nicht gefunden – ist es installiert?")]
     ToolMissing(String),
-    #[error("{tool} fehlgeschlagen: {message}")]
-    ToolFailed { tool: String, message: String },
-    #[error("profiles.toml ist fehlerhaft: {0}")]
+    ToolFailed {
+        tool: String,
+        message: String,
+    },
     ConfigParse(String),
-    #[error("Ungültige Repo-URL: {0}")]
     InvalidUrl(String),
-    #[error("Zielordner existiert bereits: {0}")]
+    /// Only `https://` links are opened in the browser.
+    NotHttps(String),
     TargetExists(String),
-    #[error("Key „{0}“ hat keinen Git-Ordner")]
     NoFolder(String),
-    #[error("Key „{0}“ hat keinen Host")]
     NoHost(String),
-    #[error("Key „{0}“ ist archiviert")]
     Archived(String),
-    #[error("Die Konfiguration hat sich seit der Vorschau geändert: {0}")]
     StalePlan(String),
-    #[error("Ungültiger Ordner „{0}“ – bitte mit / oder ~/ angeben")]
     InvalidPath(String),
-    #[error("Der Host-Key von {0} ist nicht der bestätigte – Verbindung abgebrochen. Prüfen, ob der Server neu aufgesetzt wurde.")]
     HostKeyChanged(String),
-    #[error("Keine Verbindung zu {host}: {message}")]
-    Network { host: String, message: String },
-    #[error("Dateizugriff auf {path} fehlgeschlagen: {source}")]
+    Network {
+        host: String,
+        message: String,
+    },
     Io {
         path: String,
-        #[source]
         source: std::io::Error,
     },
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.msg().fmt(f)
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::Io { source, .. } => Some(source),
+            _ => None,
+        }
+    }
 }
 
 impl Error {
     pub(crate) fn io(path: impl AsRef<Path>, source: std::io::Error) -> Self {
         Error::Io { path: path.as_ref().display().to_string(), source }
+    }
+
+    /// The text for people, as a catalog key with arguments.
+    pub fn msg(&self) -> Msg {
+        match self {
+            Error::NoHome => msg!("error_noHome"),
+            Error::ProfileNotFound(id) => msg!("error_profileNotFound", id = id),
+            Error::DuplicateId(id) => msg!("error_duplicateId", id = id),
+            Error::InvalidId(id) => msg!("error_invalidId", id = id),
+            Error::MissingName(id) => msg!("error_missingName", id = id),
+            Error::SignWithoutEmail(id) => msg!("error_signWithoutEmail", id = id),
+            Error::InvalidValue { field, value } => {
+                msg!("error_invalidValue", value = value).nested("field", Msg::new(format!("field_{field}")))
+            }
+            Error::DefaultProfileMissing(id) => msg!("error_defaultProfileMissing", id = id),
+            Error::NestedFolders(a, b) => msg!("error_nestedFolders", a = a, b = b),
+            Error::DuplicateAlias(host) => msg!("error_duplicateAlias", host = host),
+            Error::KeyMissing(path) => msg!("error_keyMissing", path = path),
+            Error::KeyExists(path) => msg!("error_keyExists", path = path),
+            Error::InvalidPublicKey(path) => msg!("error_invalidPublicKey", path = path),
+            Error::ToolMissing(tool) => msg!("error_toolMissing", tool = tool),
+            Error::ToolFailed { tool, message } => msg!("error_toolFailed", tool = tool, detail = message),
+            Error::ConfigParse(detail) => msg!("error_configParse", detail = detail),
+            Error::InvalidUrl(url) => msg!("error_invalidUrl", url = url),
+            Error::NotHttps(url) => msg!("error_notHttps", url = url),
+            Error::TargetExists(path) => msg!("error_targetExists", path = path),
+            Error::NoFolder(id) => msg!("error_noFolder", id = id),
+            Error::NoHost(id) => msg!("error_noHost", id = id),
+            Error::Archived(id) => msg!("error_archived", id = id),
+            Error::StalePlan(path) => msg!("error_stalePlan", path = path),
+            Error::InvalidPath(path) => msg!("error_invalidPath", path = path),
+            Error::HostKeyChanged(host) => msg!("error_hostKeyChanged", host = host),
+            Error::Network { host, message } => msg!("error_network", host = host, detail = message),
+            Error::Io { path, source } => msg!("error_io", path = path, detail = source),
+        }
     }
 
     /// Stable machine-readable identifier, e.g. for the GUI.
@@ -87,6 +127,7 @@ impl Error {
             Error::ToolFailed { .. } => "tool_failed",
             Error::ConfigParse(_) => "config_parse",
             Error::InvalidUrl(_) => "invalid_url",
+            Error::NotHttps(_) => "not_https",
             Error::TargetExists(_) => "target_exists",
             Error::NoFolder(_) => "no_folder",
             Error::NoHost(_) => "no_host",
@@ -107,7 +148,7 @@ mod tests {
     use super::Error;
 
     #[test]
-    fn kinds_are_unique_and_messages_readable() {
+    fn kinds_are_unique_and_every_message_is_translated() {
         let io = || std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
         let all = [
             Error::NoHome,
@@ -116,7 +157,7 @@ mod tests {
             Error::InvalidId("a".into()),
             Error::MissingName("a".into()),
             Error::SignWithoutEmail("a".into()),
-            Error::InvalidValue { field: "a".into(), value: "b".into() },
+            Error::InvalidValue { field: "alias".into(), value: "b".into() },
             Error::DefaultProfileMissing("a".into()),
             Error::NestedFolders("a".into(), "b".into()),
             Error::DuplicateAlias("a".into()),
@@ -127,6 +168,7 @@ mod tests {
             Error::ToolFailed { tool: "a".into(), message: "b".into() },
             Error::ConfigParse("a".into()),
             Error::InvalidUrl("a".into()),
+            Error::NotHttps("a".into()),
             Error::TargetExists("a".into()),
             Error::NoFolder("a".into()),
             Error::NoHost("a".into()),
@@ -141,7 +183,14 @@ mod tests {
         kinds.sort();
         kinds.dedup();
         assert_eq!(kinds.len(), all.len());
-        assert!(all.iter().all(|e| !e.to_string().is_empty()));
+        // Every error has its text in both catalogs.
+        for e in &all {
+            let m = e.msg();
+            for lang in [crate::i18n::Lang::De, crate::i18n::Lang::En] {
+                let text = m.render(lang);
+                assert!(!text.contains('{') && text != m.key, "{} in {lang:?}: {text}", m.key);
+            }
+        }
         assert_eq!(Error::io("/x", io()).to_string(), "Dateizugriff auf /x fehlgeschlagen: denied");
     }
 }

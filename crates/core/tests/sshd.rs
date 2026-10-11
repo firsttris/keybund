@@ -294,12 +294,15 @@ fn connection_test_detects_a_login_with_another_key() {
     assert_eq!(r.used_key.as_deref(), Some("~/.ssh/privat_ed25519"));
     // The steps tell the story in plain words: the profile key was refused,
     // the other one from the user's config got in.
-    let texts: Vec<&str> = r.steps.iter().map(|s| s.text.as_str()).collect();
+    let texts: Vec<String> = r.steps.iter().map(|s| s.text.to_string()).collect();
     assert!(texts.iter().any(|t| t.starts_with("Verbinde mit 127.0.0.1")), "{texts:#?}");
     assert!(texts.iter().any(|t| t.starts_with("Anmelden als Benutzer „")), "{texts:#?}");
-    assert!(texts.contains(&"Biete Key an: ~/.ssh/test_ed25519"), "{texts:#?}");
-    assert!(r.steps.iter().any(|s| s.ok == Some(false) && s.text == "Server kennt diesen Key nicht"), "{texts:#?}");
-    assert!(texts.contains(&"Server akzeptiert ~/.ssh/privat_ed25519"), "{texts:#?}");
+    assert!(texts.iter().any(|t| t == "Biete Key an: ~/.ssh/test_ed25519"), "{texts:#?}");
+    assert!(
+        r.steps.iter().any(|s| s.ok == Some(false) && s.text.to_string() == "Server kennt diesen Key nicht"),
+        "{texts:#?}"
+    );
+    assert!(texts.iter().any(|t| t == "Server akzeptiert ~/.ssh/privat_ed25519"), "{texts:#?}");
     assert!(r.log.contains("debug1:"));
 
     // Once the server knows the profile key, it is used first and succeeds.

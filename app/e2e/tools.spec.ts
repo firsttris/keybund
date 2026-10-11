@@ -24,12 +24,12 @@ test("resolves a folder and a host", async ({ app }) => {
 test("doctor fixes the include position", async ({ app }) => {
   const todo = app.getByRole("list", { name: "Zu tun" });
   await expect(todo).toContainText("Include steht nicht ganz oben");
-  await expect(app.getByLabel("1 Hinweise")).toBeVisible();
+  await expect(app.getByLabel("1 Hinweis")).toBeVisible();
   await todo.getByRole("link", { name: "Zum Doctor" }).click();
   await app.getByRole("button", { name: "Include steht nicht ganz oben beheben" }).click();
   await expect(app.getByText("Include steht ganz oben in ~/.ssh/config")).toBeVisible();
   await expect(app.getByText("Alles in Ordnung")).toBeVisible();
-  await expect(app.getByLabel("1 Hinweise")).toHaveCount(0);
+  await expect(app.getByLabel("1 Hinweis")).toHaveCount(0);
 });
 
 test("clones into the matching profile", async ({ app }) => {

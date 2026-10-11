@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { msg } from "@/lib/mock/backend";
 import { renderApp } from "@/test/render";
 
 describe("profile page", () => {
@@ -70,13 +71,13 @@ describe("sidebar and home", () => {
     expect(first).toHaveTextContent("Standard · ~/dev/privat/ · GitHub · meinserver");
     expect(rest.map((l) => l.textContent)).toEqual(["Acme~/dev/acme/ · GitLab", "Kunde B~/dev/kunde-b/ · GitHub"]);
     expect(within(screen.getByRole("navigation", { name: "Archiv" })).getByText("Altprojekt")).toBeInTheDocument();
-    expect(await screen.findByLabelText("1 Hinweise")).toBeInTheDocument();
+    expect(await screen.findByLabelText("1 Hinweis")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Welcher Key?" })).not.toBeInTheDocument();
   });
 
   it("shows what needs attention on the home page", async () => {
     await renderApp("/", (b) => {
-      b.state.lastTests.set("kunde-b", { success: false, account: null, message: "GitHub kennt diesen Key nicht", at: Date.now() });
+      b.state.lastTests.set("kunde-b", { success: false, account: null, message: msg("probe_keyUnknown", { provider: "GitHub" }), at: Date.now() });
     });
     const todo = await screen.findByRole("list", { name: "Zu tun" });
     await waitFor(() => expect(within(todo).getAllByRole("listitem")).toHaveLength(3));
@@ -192,7 +193,7 @@ describe("apply page", () => {
     await screen.findByText("-kaputt");
     backend.state.applied.set("~/.config/keybund/git/kunde-b.gitconfig", "auch kaputt\n");
     await user.click(screen.getByRole("button", { name: "Neu schreiben" }));
-    expect(await screen.findByText(/Bitte Vorschau neu laden/)).toBeInTheDocument();
+    expect(await screen.findByText(/seit der Vorschau geändert/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Vorschau neu laden" }));
     expect(await screen.findByText("-auch kaputt")).toBeInTheDocument();
   });

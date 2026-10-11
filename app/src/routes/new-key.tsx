@@ -11,6 +11,7 @@ import { api, errorMessage } from "@/lib/api";
 import type { NewProject } from "@/lib/bindings";
 import { useCreateProject, useProfiles, useScanKeys } from "@/lib/queries";
 import { cn, PROFILE_COLORS, slugify } from "@/lib/utils";
+import { m } from "@/paraglide/messages";
 
 const mono = "font-mono text-[13px]";
 
@@ -48,15 +49,15 @@ export function NewKeyPage({ existingKey }: { existingKey?: string }) {
   const keyPath = mode === "existing" ? existingPath : (fresh?.key_path ?? `~/.ssh/${id}_ed25519`);
 
   const error = !trimmed
-    ? "Bitte einen Namen eingeben."
+    ? m.newKey_errorName()
     : !id
-      ? "Der Name braucht mindestens einen Buchstaben oder eine Ziffer."
+      ? m.newKey_errorNameChars()
       : fresh?.id_taken
-        ? `Einen Key „${trimmed}“ gibt es schon.`
+        ? m.newKey_errorTaken({ name: trimmed })
         : mode === "existing" && !existingPath
-          ? "Bitte einen vorhandenen Key wählen."
+          ? m.newKey_errorPick()
           : mode === "generate" && fresh?.key_exists
-            ? `${keyPath} gibt es schon – wähle „Vorhandenen Key nehmen“ oder einen anderen Namen.`
+            ? m.newKey_errorFileExists({ path: keyPath })
             : null;
 
   const submit = () => {
@@ -88,15 +89,12 @@ export function NewKeyPage({ existingKey }: { existingKey?: string }) {
   return (
     <>
       <div className="flex max-w-[640px] flex-col gap-1.5">
-        <h1 className="m-0 text-[26px] font-semibold tracking-tight">Neuer SSH-Key</h1>
-        <p className="m-0 leading-normal text-muted-foreground">
-          Gib dem Key einen Namen, an dem du ihn wiedererkennst. Wofür er gilt – Git-Ordner, GitHub, Server – legst du gleich
-          danach fest.
-        </p>
+        <h1 className="m-0 text-[26px] font-semibold tracking-tight">{m.newKey_title()}</h1>
+        <p className="m-0 leading-normal text-muted-foreground">{m.newKey_intro()}</p>
       </div>
       <Card className="max-w-[640px]">
         <form
-          aria-label="Neuer Key"
+          aria-label={m.sidebar_newKey()}
           className="flex flex-col gap-5"
           onSubmit={(e) => {
             e.preventDefault();
@@ -104,21 +102,21 @@ export function NewKeyPage({ existingKey }: { existingKey?: string }) {
           }}
         >
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="key-name">Name</Label>
+            <Label htmlFor="key-name">{m.newKey_name()}</Label>
             <Input
               id="key-name"
               autoFocus
-              placeholder="z. B. Privat, Kunde C oder NAS"
+              placeholder={m.newKey_namePlaceholder()}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           </div>
 
-          <div role="radiogroup" aria-label="Key" className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
+          <div role="radiogroup" aria-label={m.newKey_key()} className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
             {(
               [
-                { value: "generate", title: "Neuen Key erzeugen", text: id ? `ed25519 · ${keyPath}` : "empfohlen – ein eigener Key für diesen Zweck" },
-                { value: "existing", title: "Vorhandenen Key nehmen", text: "einen Key, der schon in ~/.ssh liegt" },
+                { value: "generate", title: m.newKey_generate(), text: id ? `ed25519 · ${keyPath}` : m.newKey_generateHint() },
+                { value: "existing", title: m.newKey_existing(), text: m.newKey_existingHint() },
               ] as const
             ).map((o) => (
               <button
@@ -145,33 +143,30 @@ export function NewKeyPage({ existingKey }: { existingKey?: string }) {
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="key-pass">
-                  Passphrase <span className="font-normal text-muted-foreground">(optional, empfohlen)</span>
+                  {m.newKey_passphrase()} <span className="font-normal text-muted-foreground">{m.newKey_passphraseOptional()}</span>
                 </Label>
                 <Input id="key-pass" type="password" autoComplete="new-password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
-                <FieldHint>
-                  Schützt den Key, falls jemand an deine Dateien kommt. Du gibst sie einmal pro Sitzung ein, danach merkt sich der
-                  ssh-agent den Key.
-                </FieldHint>
+                <FieldHint>{m.newKey_passphraseHint()}</FieldHint>
               </div>
               <details>
-                <summary className="cursor-pointer text-[13px] text-muted-foreground hover:text-foreground">Mehr Optionen</summary>
+                <summary className="cursor-pointer text-[13px] text-muted-foreground hover:text-foreground">{m.newKey_moreOptions()}</summary>
                 <div className="mt-3 flex flex-col gap-1.5">
-                  <Label htmlFor="key-comment">Kommentar</Label>
+                  <Label htmlFor="key-comment">{m.newKey_comment()}</Label>
                   <Input
                     id="key-comment"
                     className={mono}
                     value={comment ?? fresh?.key_comment ?? ""}
                     onChange={(e) => setComment(e.target.value)}
                   />
-                  <FieldHint>Steht am Ende des Pubkeys – daran erkennst du den Key bei GitHub oder auf dem Server wieder.</FieldHint>
+                  <FieldHint>{m.newKey_commentHint()}</FieldHint>
                 </div>
               </details>
             </div>
           ) : (
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-              <legend className="mb-2 text-[13px] font-medium">Key aus ~/.ssh</legend>
+              <legend className="mb-2 text-[13px] font-medium">{m.newKey_fromSsh()}</legend>
               {scan.isPending && <Spinner />}
-              {scan.isSuccess && unused.length === 0 && <FieldHint>Keine ungenutzten Keys gefunden.</FieldHint>}
+              {scan.isSuccess && unused.length === 0 && <FieldHint>{m.newKey_noUnused()}</FieldHint>}
               {unused.map((k) => (
                 <label
                   key={k.key.path}
@@ -193,7 +188,7 @@ export function NewKeyPage({ existingKey }: { existingKey?: string }) {
           <ErrorSlot message={(submitted && error) || (create.isError && errorMessage(create.error))} />
           <Button type="submit" size="lg" className="self-end" disabled={create.isPending}>
             {create.isPending && <Spinner className="size-3.5" />}
-            Key anlegen
+            {m.newKey_create()}
             <ArrowRight aria-hidden />
           </Button>
         </form>

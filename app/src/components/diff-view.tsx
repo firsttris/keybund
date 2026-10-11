@@ -1,7 +1,8 @@
 import type { FileChange } from "@/lib/bindings";
 import { cn } from "@/lib/utils";
+import { m } from "@/paraglide/messages";
 
-const KIND_LABEL = { create: "neu", modify: "geändert", delete: "gelöscht" } as const;
+const KIND_LABEL = { create: m.diff_create, modify: m.diff_modify, delete: m.diff_delete } as const;
 
 /** Lines of a unified diff without the file headers. */
 export function diffLines(diff: string): { kind: "add" | "del" | "ctx" | "hunk"; text: string }[] {
@@ -25,7 +26,7 @@ export function DiffSummary({ changes }: { changes: FileChange[] }) {
       {removed > 0 && <span className="text-danger"> −{removed}</span>}
       <span className="text-muted-foreground">
         {" "}
-        Zeilen · {changes.length} {changes.length === 1 ? "Datei" : "Dateien"}
+        {m.diff_summary({ n: changes.length })}
       </span>
     </span>
   );
@@ -35,7 +36,7 @@ export function DiffView({ changes, className }: { changes: FileChange[]; classN
   return (
     <div className={cn("overflow-hidden rounded-[10px] border border-border", className)}>
       <div className="flex items-center justify-between gap-3 border-b border-border bg-background px-3.5 py-2.5">
-        <span className="text-[13px] font-medium">Vorschau der Änderungen</span>
+        <span className="text-[13px] font-medium">{m.diff_title()}</span>
         <DiffSummary changes={changes} />
       </div>
       <div className="overflow-x-auto font-mono text-[12.5px] leading-[1.75]">
@@ -43,8 +44,8 @@ export function DiffView({ changes, className }: { changes: FileChange[]; classN
           <div key={c.path} data-testid="diff-file" className="pb-2">
             <div className="flex flex-wrap items-center gap-2 px-3.5 pt-2.5 pb-0.5 text-muted-foreground">
               <span>{c.path}</span>
-              <span>· {KIND_LABEL[c.kind]}</span>
-              {c.user_file && <span>· deine Datei, einmaliges Backup</span>}
+              <span>· {KIND_LABEL[c.kind]()}</span>
+              {c.user_file && <span>· {m.diff_userFile()}</span>}
             </div>
             {diffLines(c.diff).map((l, i) => (
               <div

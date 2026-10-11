@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { m } from "@/paraglide/messages";
 import { api, errorMessage } from "./api";
+import { t } from "./i18n";
 import { ensureHostKey } from "./host-keys";
 import type { Fix, HostEntry, ImportProposal, NewProject, Profile, Settings } from "./bindings";
 
@@ -54,7 +56,7 @@ function useInvalidateAll() {
 
 /** Changes are written right away; one toast says so (repeated saves replace it). */
 export function toastSaved() {
-  toast.success("Gespeichert", { id: "saved", description: "Git und ssh benutzen es ab sofort." });
+  toast.success(m.toast_saved(), { id: "saved", description: m.toast_savedDetail() });
 }
 
 /** Writes run one after another, so a quick second click never works on outdated data. */
@@ -71,7 +73,7 @@ export function useUpdateProfile(id: string) {
     scope: writes,
     mutationFn: async (change: (current: Profile) => Profile) => {
       const current = (await api.loadProfiles()).profiles.find((v) => v.profile.id === id)?.profile;
-      if (!current) throw new Error(`Key „${id}“ existiert nicht`);
+      if (!current) throw new Error(t({ key: "error_profileNotFound", args: { id } }));
       return api.updateProfile(change(current));
     },
     onSuccess: toastSaved,
@@ -95,7 +97,7 @@ export function useSetDefault() {
 export function useCopyPublicKey() {
   return useMutation({
     mutationFn: (id: string) => api.copyPublicKey(id),
-    onSuccess: () => toast.success("Pubkey in der Zwischenablage"),
+    onSuccess: () => toast.success(m.toast_pubkeyCopied()),
     onError: (e) => toast.error(errorMessage(e)),
   });
 }

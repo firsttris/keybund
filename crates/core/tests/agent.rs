@@ -112,11 +112,11 @@ fn agent_state_is_reported() {
     let report = doctor::run(&env);
     let agent_check = report.checks.iter().find(|c| c.id == "agent").unwrap();
     assert_eq!(agent_check.status, doctor::Status::Ok);
-    assert_eq!(agent_check.detail.as_deref(), Some("1 Keys geladen"));
+    assert_eq!(agent_check.detail.as_ref().map(|d| d.to_string()).as_deref(), Some("1 Keys geladen"));
 
     std::env::set_var("SSH_AUTH_SOCK", dir.path().join("nope.sock"));
     assert_eq!(which::agent_fingerprints(&env), None);
     let r = which::which(&env, &config, "~/dev/kunde-a").unwrap();
-    assert!(r.notes.iter().any(|n| n.contains("Kein ssh-agent")));
+    assert!(r.notes.iter().any(|n| n.to_string().contains("Kein ssh-agent")));
     std::env::remove_var("SSH_AUTH_SOCK");
 }

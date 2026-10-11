@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
+import { m } from "@/paraglide/messages";
 
-export function Spinner({ className, label = "Lädt …" }: { className?: string; label?: string }) {
+export function Spinner({ className, label = m.common_loading() }: { className?: string; label?: string }) {
   return (
     <span
       role="status"

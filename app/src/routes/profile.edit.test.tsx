@@ -171,7 +171,7 @@ describe("key page", () => {
     await user.click(within(server).getByRole("button", { name: "Key eintragen" }));
     expect(await within(server).findByText("meinserver ist nicht erreichbar")).toBeInTheDocument();
     await user.click(within(server).getByRole("button", { name: "Testen" }));
-    expect(await within(server).findByTestId("connection-status")).toHaveTextContent("meinserver kennt diesen Key nicht");
+    expect(await within(server).findByTestId("connection-status")).toHaveTextContent("Server kennt diesen Key nicht");
     expect(within(server).getByRole("list", { name: "Ablauf" })).toHaveTextContent("Keine Verbindung: Connection timed out");
   });
 
@@ -311,7 +311,7 @@ describe("key page", () => {
     });
     const server = await row("Server build");
     await user.click(within(server).getByRole("button", { name: "Testen" }));
-    expect(await within(server).findByTestId("connection-status")).toHaveTextContent("build kennt diesen Key nicht");
+    expect(await within(server).findByTestId("connection-status")).toHaveTextContent("Server kennt diesen Key nicht");
     await user.click(within(server).getByRole("button", { name: "Key auf build eintragen" }));
     expect(await within(server).findByText("Anmeldung erfolgreich")).toBeInTheDocument();
     expect(backend.state.installedKeys).toEqual(["10.0.0.9:~/.ssh/kunde-b_ed25519"]);

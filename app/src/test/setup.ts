@@ -24,6 +24,9 @@ Element.prototype.scrollIntoView ??= () => {};
 Element.prototype.hasPointerCapture ??= () => false;
 Element.prototype.releasePointerCapture ??= () => {};
 
+// The tests read the German texts; the English ones are checked in src/lib/i18n.test.ts and e2e/i18n.spec.ts.
+localStorage.setItem("keybund_lang", "de");
+
 afterEach(() => {
   cleanup();
   clearMocks();

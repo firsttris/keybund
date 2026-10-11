@@ -10,6 +10,8 @@ async function start() {
     const { installMockBackend } = await import("./lib/mock/install");
     installMockBackend();
   }
+  const { currentLang } = await import("./lib/i18n");
+  document.documentElement.lang = currentLang();
   const { App } = await import("./app");
   createRoot(document.getElementById("root")!).render(
     <StrictMode>

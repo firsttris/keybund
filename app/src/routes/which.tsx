@@ -10,7 +10,9 @@ import { FieldError } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
 import type { WhichResult } from "@/lib/bindings";
+import { t } from "@/lib/i18n";
 import { useProfiles } from "@/lib/queries";
+import { m } from "@/paraglide/messages";
 
 export function WhichPage({ initial }: { initial?: string }) {
   const profiles = useProfiles();
@@ -36,8 +38,8 @@ export function WhichPage({ initial }: { initial?: string }) {
       <div className="flex w-full max-w-[1040px] flex-wrap items-start gap-6">
         <section className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <h1 className="m-0 text-[22px] font-semibold tracking-tight">Welcher Key?</h1>
-            <p className="m-0 text-muted-foreground">Ordner oder Host eingeben. Keybund zeigt, was ssh und git dort wirklich verwenden.</p>
+            <h1 className="m-0 text-[22px] font-semibold tracking-tight">{m.which_title()}</h1>
+            <p className="m-0 text-muted-foreground">{m.which_intro()}</p>
           </div>
           <form
             className="flex flex-wrap gap-2"
@@ -47,22 +49,22 @@ export function WhichPage({ initial }: { initial?: string }) {
             }}
           >
             <label htmlFor="which-input" className="sr-only">
-              Ordner oder Host
+              {m.which_input()}
             </label>
             <Input
               id="which-input"
               className="h-10 flex-[1_1_280px] font-mono"
-              placeholder="~/dev/kunde-a/repo oder meinserver"
+              placeholder={m.which_placeholder()}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
             <Button type="submit" size="lg" disabled={!query.trim() || resolve.isPending}>
-              Auflösen
+              {m.which_resolve()}
             </Button>
           </form>
           {examples.length > 0 && (
             <div className="flex flex-wrap gap-2 text-xs">
-              <span className="self-center text-muted-foreground">Beispiele:</span>
+              <span className="self-center text-muted-foreground">{m.which_examples()}</span>
               {examples.map((ex) => (
                 <button
                   key={ex}
@@ -74,7 +76,7 @@ export function WhichPage({ initial }: { initial?: string }) {
               ))}
             </div>
           )}
-          {resolve.isPending && <Spinner label="Löse auf" />}
+          {resolve.isPending && <Spinner label={m.which_resolving()} />}
           {resolve.isError && <FieldError>{errorMessage(resolve.error)}</FieldError>}
           {resolve.data && <WhichCard result={resolve.data} />}
         </section>
@@ -88,16 +90,16 @@ function WhichCard({ result }: { result: WhichResult }) {
   const profiles = useProfiles();
   const profile = profiles.data?.profiles.find((p) => p.profile.id === result.profile_id)?.profile;
   const rows: [string, React.ReactNode][] = [];
-  if (result.source) rows.push(["Quelle", <span className="font-mono text-[12.5px] [overflow-wrap:anywhere]">{result.source}{result.via ? ` · via ${result.via}` : ""}</span>]);
-  if (result.git_email) rows.push(["Git-Identität", `${result.git_name ?? ""} <${result.git_email}>`]);
-  if (result.hostname) rows.push(["Ziel", <span className="font-mono text-[12.5px]">{result.user ? `${result.user}@` : ""}{result.hostname}{result.port ? `:${result.port}` : ""}</span>]);
-  if (result.identities_only != null) rows.push(["IdentitiesOnly", result.identities_only ? "ja, nur dieser Key wird angeboten" : "nein, ssh probiert mehrere Keys"]);
+  if (result.source) rows.push([m.which_source(), <span className="font-mono text-[12.5px] [overflow-wrap:anywhere]">{result.source}{result.via ? ` · via ${t(result.via)}` : ""}</span>]);
+  if (result.git_email) rows.push([m.which_identity(), `${result.git_name ?? ""} <${result.git_email}>`]);
+  if (result.hostname) rows.push([m.which_target(), <span className="font-mono text-[12.5px]">{result.user ? `${result.user}@` : ""}{result.hostname}{result.port ? `:${result.port}` : ""}</span>]);
+  if (result.identities_only != null) rows.push(["IdentitiesOnly", result.identities_only ? m.which_identitiesOnlyYes() : m.which_identitiesOnlyNo()]);
   if (result.agent_loaded != null)
     rows.push([
       "Agent",
       <span className="flex items-center gap-2">
         <span aria-hidden className={result.agent_loaded ? "size-[7px] rounded-full bg-emerald-500" : "size-[7px] rounded-full bg-amber-500"} />
-        {result.agent_loaded ? "geladen, keine Passphrase-Abfrage nötig" : "nicht geladen"}
+        {result.agent_loaded ? m.which_agentLoaded() : m.which_agentNotLoaded()}
       </span>,
     ]);
 
@@ -108,9 +110,9 @@ function WhichCard({ result }: { result: WhichResult }) {
           <KeyRound aria-hidden className="size-[18px]" />
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="font-mono text-sm font-medium">{result.key_path?.split("/").pop() ?? "kein fester Key"}</span>
+          <span className="font-mono text-sm font-medium">{result.key_path?.split("/").pop() ?? m.which_noFixedKey()}</span>
           <span className="text-[13px] text-muted-foreground">
-            {result.mode === "folder" ? "für git push, pull und fetch in diesem Ordner" : `für ssh ${result.query}`}
+            {result.mode === "folder" ? m.which_forFolder() : m.which_forHost({ host: result.query })}
           </span>
         </div>
         {profile && (
@@ -120,7 +122,7 @@ function WhichCard({ result }: { result: WhichResult }) {
             className="flex min-h-7 items-center gap-2 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-secondary-foreground no-underline"
           >
             <ColorDot color={profile.color} />
-            Key {profile.name}
+            {m.which_keyLink({ name: profile.name })}
           </Link>
         )}
       </div>
@@ -135,7 +137,7 @@ function WhichCard({ result }: { result: WhichResult }) {
       {result.notes.length > 0 && (
         <ul className="m-0 flex list-none flex-col gap-1 px-5 py-3 text-[13px] text-muted-foreground">
           {result.notes.map((n) => (
-            <li key={n}>{n}</li>
+            <li key={t(n)}>{t(n)}</li>
           ))}
         </ul>
       )}

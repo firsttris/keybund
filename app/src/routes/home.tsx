@@ -9,7 +9,9 @@ import type { ProfileView } from "@/lib/bindings";
 import { activeKeys, gitAccounts, servers, usageParts } from "@/lib/categories";
 import { errorMessage } from "@/lib/api";
 import { useDoctor, useProfiles } from "@/lib/queries";
+import { rich, t } from "@/lib/i18n";
 import { cn, formatRelative, providerLabel } from "@/lib/utils";
+import { m } from "@/paraglide/messages";
 
 export function HomePage() {
   const { data, isPending } = useProfiles();
@@ -18,31 +20,29 @@ export function HomePage() {
   if (isPending) return <Spinner />;
   return (
     <>
-      <h1 className="m-0 text-[26px] font-semibold tracking-tight">Übersicht</h1>
+      <h1 className="m-0 text-[26px] font-semibold tracking-tight">{m.home_title()}</h1>
       <Todo />
       <HowItWorks forceOpen={keys.length === 0} />
       {keys.length === 0 ? (
         <div className="flex max-w-[520px] flex-col gap-3 rounded-xl border border-dashed border-border p-8">
-          <span className="text-[15px] font-medium">Noch keine Keys</span>
-          <p className="m-0 text-muted-foreground">
-            Leg einen neuen Key an oder übernimm die Keys, die du schon in ~/.ssh hast.
-          </p>
+          <span className="text-[15px] font-medium">{m.sidebar_noKeys()}</span>
+          <p className="m-0 text-muted-foreground">{m.home_emptyText()}</p>
           <div className="flex flex-wrap gap-2">
             <Link to="/new" className={cn(buttonVariants(), "no-underline")}>
               <Plus aria-hidden />
-              Neuer Key
+              {m.sidebar_newKey()}
             </Link>
             <Link to={data && data.import_available > 0 ? "/import" : "/settings"} className={cn(buttonVariants({ variant: "outline" }), "no-underline")}>
-              Vorhandene Keys übernehmen
+              {m.home_takeOver()}
             </Link>
           </div>
         </div>
       ) : (
         <section aria-labelledby="keys-title" className="flex flex-col gap-3">
           <h2 id="keys-title" className="m-0 text-[15px] font-semibold">
-            Deine SSH-Keys
+            {m.home_yourKeys()}
           </h2>
-          <ul aria-label="Keys" className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 p-0">
+          <ul aria-label={m.sidebar_keys()} className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 p-0">
             {keys.map((v) => (
               <KeyCard key={v.profile.id} view={v} />
             ))}
@@ -73,12 +73,12 @@ function Todo() {
         tone: "danger",
         text: (
           <>
-            <span className="font-medium">{v.profile.name}:</span> {v.last_test.message}
+            <span className="font-medium">{v.profile.name}:</span> {t(v.last_test.message)}
           </>
         ),
         link: (
           <Link to="/profile/$id" params={{ id: v.profile.id }} className={linkClass}>
-            Beheben
+            {m.doctor_fix()}
           </Link>
         ),
       });
@@ -88,10 +88,10 @@ function Todo() {
     items.push({
       id: "doctor-failed",
       tone: "danger",
-      text: <span className="font-medium">Die Prüfung von ssh und Git ist fehlgeschlagen: {errorMessage(doctor.error)}</span>,
+      text: <span className="font-medium">{m.home_doctorFailed({ error: errorMessage(doctor.error) })}</span>,
       link: (
         <Link to="/doctor" className={linkClass}>
-          Zum Doctor
+          {m.home_toDoctor()}
         </Link>
       ),
     });
@@ -100,10 +100,10 @@ function Todo() {
     items.push({
       id: `doctor-${c.id}`,
       tone: c.status === "error" ? "danger" : "warn",
-      text: <span className="font-medium">{c.title}</span>,
+      text: <span className="font-medium">{t(c.title)}</span>,
       link: (
         <Link to="/doctor" className={linkClass}>
-          Zum Doctor
+          {m.home_toDoctor()}
         </Link>
       ),
     });
@@ -112,16 +112,12 @@ function Todo() {
     items.push({
       id: "import",
       tone: "info",
-      text: (
-        <>
-          In deiner <span className="font-mono">~/.ssh/config</span> stehen{" "}
-          {data.import_available === 1 ? "ein Eintrag" : `${data.import_available} Einträge`} mit eigenem Key, die Keybund
-          übernehmen kann.
-        </>
-      ),
+      text: rich((i) => m.home_importAvailable({ ...i, n: data.import_available }), {
+        file: <span className="font-mono">~/.ssh/config</span>,
+      }),
       link: (
         <Link to="/import" className={linkClass}>
-          Übernehmen
+          {m.home_takeOverShort()}
         </Link>
       ),
     });
@@ -131,14 +127,10 @@ function Todo() {
       items.push({
         id: `unused-${v.profile.id}`,
         tone: "info",
-        text: (
-          <>
-            <span className="font-medium">{v.profile.name}</span> wird noch nirgends benutzt.
-          </>
-        ),
+        text: rich(m.home_unused, { name: <span className="font-medium">{v.profile.name}</span> }),
         link: (
           <Link to="/profile/$id" params={{ id: v.profile.id }} className={linkClass}>
-            Festlegen
+            {m.home_decide()}
           </Link>
         ),
       });
@@ -149,7 +141,7 @@ function Todo() {
     return (
       <p role="status" className="m-0 flex items-center gap-2.5 rounded-[10px] border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-[13px]">
         <CheckCircle2 aria-hidden className="size-4 text-success" />
-        Alles in Ordnung – Git und ssh nehmen automatisch den richtigen Key.
+        {m.home_allFine()}
       </p>
     );
   }
@@ -158,7 +150,7 @@ function Todo() {
   return (
     <section aria-labelledby="todo-title" className="flex flex-col gap-2">
       <h2 id="todo-title" className="m-0 text-[15px] font-semibold">
-        Zu tun
+        {m.home_todo()}
       </h2>
       <ul aria-labelledby="todo-title" className="m-0 flex list-none flex-col overflow-hidden rounded-[10px] border border-border p-0">
         {items.map((item) => {
@@ -179,7 +171,7 @@ function Todo() {
 function KeyCard({ view }: { view: ProfileView }) {
   const { profile, last_test } = view;
   const usages = [
-    ...(view.is_default ? [{ icon: Star, text: "Standard für Git" }] : []),
+    ...(view.is_default ? [{ icon: Star, text: m.usage_defaultForGit() }] : []),
     ...profile.folders.map((f) => ({ icon: Folder, text: f })),
     ...gitAccounts(profile).map((h) => ({ icon: GitBranch, text: `${providerLabel(h.provider)}${h.alias ? ` (${h.alias})` : ""}` })),
     ...servers(profile).map((h) => ({ icon: Server, text: `ssh ${h.alias ?? h.hostname}` })),
@@ -196,13 +188,13 @@ function KeyCard({ view }: { view: ProfileView }) {
           <span className="flex-1 font-medium">{profile.name}</span>
           {last_test && (
             <span className={cn("text-xs", last_test.success ? "text-muted-foreground" : "text-danger")}>
-              {last_test.success ? "verbunden" : "Test fehlgeschlagen"} {formatRelative(last_test.at)}
+              {(last_test.success ? m.home_connected : m.home_testFailed)({ when: formatRelative(last_test.at) })}
             </span>
           )}
         </span>
         <span className="font-mono text-xs text-muted-foreground">{profile.key.path}</span>
         {usages.length > 0 ? (
-          <ul aria-label={`${profile.name} wird benutzt für`} className="m-0 flex list-none flex-col gap-1.5 p-0">
+          <ul aria-label={m.home_usedFor({ name: profile.name })} className="m-0 flex list-none flex-col gap-1.5 p-0">
             {usages.map(({ icon: Icon, text }) => (
               <li key={text} className="flex min-w-0 items-center gap-2 text-[13px] text-secondary-foreground">
                 <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
@@ -211,7 +203,7 @@ function KeyCard({ view }: { view: ProfileView }) {
             ))}
           </ul>
         ) : (
-          <span className="text-[13px] text-warning">Noch nirgends benutzt – öffnen und festlegen, wofür</span>
+          <span className="text-[13px] text-warning">{m.home_unusedCard()}</span>
         )}
       </Link>
     </li>

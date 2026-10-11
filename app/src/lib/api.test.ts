@@ -10,7 +10,7 @@ describe("api", () => {
 
   it("throws ApiError with the backend's kind", async () => {
     mockIPC(() => {
-      throw { kind: "invalid_url", message: "Ungültige Repo-URL: x" };
+      throw { kind: "invalid_url", message: { key: "error_invalidUrl", args: { url: "x" } } };
     });
     const error = await api.clonePreview("x").catch((e) => e);
     expect(error).toBeInstanceOf(ApiError);

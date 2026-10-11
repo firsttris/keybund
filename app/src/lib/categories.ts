@@ -1,3 +1,4 @@
+import { m } from "@/paraglide/messages";
 import { providerLabel } from "./utils";
 import type { HostEntry, Profile, ProfileView } from "./bindings";
 
@@ -18,14 +19,14 @@ export function gitAccounts(profile: Profile): HostEntry[] {
 export function usageParts(view: ProfileView): string[] {
   const { profile } = view;
   const parts: string[] = [];
-  if (view.is_default) parts.push("Standard");
+  if (view.is_default) parts.push(m.usage_default());
   if (profile.folders.length === 1) parts.push(profile.folders[0]);
-  else if (profile.folders.length > 1) parts.push(`${profile.folders.length} Ordner`);
+  else if (profile.folders.length > 1) parts.push(m.usage_folders({ n: profile.folders.length }));
   const providers = [...new Set(gitAccounts(profile).map((h) => providerLabel(h.provider)))];
   parts.push(...providers);
   const srv = servers(profile);
   if (srv.length === 1) parts.push(srv[0].alias ?? srv[0].hostname);
-  else if (srv.length > 1) parts.push(`${srv.length} Server`);
+  else if (srv.length > 1) parts.push(m.usage_servers({ n: srv.length }));
   return parts;
 }
 

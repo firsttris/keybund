@@ -280,30 +280,30 @@ fn check_values(p: &Profile) -> Result<()> {
             Ok(())
         }
     };
-    printable("Name", &p.name)?;
-    printable("Key", &p.key.path)?;
+    printable("name", &p.name)?;
+    printable("key", &p.key.path)?;
     // ssh expands % and ${…} in IdentityFile, and a quote would end the quoted path.
     if p.key.path.contains(['"', '%']) || p.key.path.contains("${") {
-        return Err(invalid("Key", &p.key.path));
+        return Err(invalid("key", &p.key.path));
     }
     if let Some(g) = &p.git {
-        printable("Git-Name", &g.name)?;
-        printable("Git-E-Mail", &g.email)?;
+        printable("gitName", &g.name)?;
+        printable("gitEmail", &g.email)?;
     }
     for f in &p.folders {
-        printable("Ordner", f)?;
+        printable("folder", f)?;
         // gitdir: patterns are globs: * ? [ \ would match other folders.
         if f.contains(['"', '*', '?', '[', '\\']) || !(f.starts_with('/') || f.starts_with("~/")) {
             return Err(Error::InvalidPath(f.clone()));
         }
     }
     for h in &p.hosts {
-        token("Hostname", &h.hostname)?;
+        token("hostname", &h.hostname)?;
         if let Some(a) = &h.alias {
-            token("Alias", a)?;
+            token("alias", a)?;
         }
         if let Some(u) = &h.user {
-            token("Benutzer", u)?;
+            token("user", u)?;
         }
     }
     Ok(())

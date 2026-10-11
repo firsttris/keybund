@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::Msg;
 use crate::model::{Config, KeyRef, Profile};
+use crate::msg;
 use crate::{gitenv, keygen, process, Env, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,7 +29,7 @@ pub struct WhichResult {
     /// Where the setting comes from, e.g. a gitconfig file or `ssh -G`.
     pub source: Option<String>,
     /// How it got there, e.g. `includeIf "gitdir:~/dev/kunde/"`.
-    pub via: Option<String>,
+    pub via: Option<Msg>,
     pub identities_only: Option<bool>,
     pub git_name: Option<String>,
     pub git_email: Option<String>,
@@ -36,7 +38,7 @@ pub struct WhichResult {
     pub port: Option<u16>,
     /// Whether the key is loaded in ssh-agent (`None`: no agent).
     pub agent_loaded: Option<bool>,
-    pub notes: Vec<String>,
+    pub notes: Vec<Msg>,
 }
 
 impl WhichResult {
@@ -72,11 +74,11 @@ pub fn which(env: &Env, config: &Config, query: &str) -> Result<WhichResult> {
         let info = keygen::key_info(env, &KeyRef { path: key.clone(), comment: None });
         result.fingerprint = info.fingerprint.clone();
         if !info.private_exists {
-            result.notes.push(format!("Die Key-Datei {key} existiert nicht."));
+            result.notes.push(msg!("which_keyFileMissing", path = key));
         }
         match (agent_fingerprints(env), &info.fingerprint) {
             (Some(loaded), Some(fp)) => result.agent_loaded = Some(loaded.contains(fp)),
-            (None, _) => result.notes.push("Kein ssh-agent erreichbar.".into()),
+            (None, _) => result.notes.push(msg!("which_noAgent")),
             _ => {}
         }
     }
@@ -114,36 +116,33 @@ fn which_folder(env: &Env, config: &Config, query: &str) -> Result<WhichResult> 
         result.git_name = git_get(env, &dir, "user.name").map(|(_, v)| v);
         result.git_email = git_get(env, &dir, "user.email").map(|(_, v)| v);
         if let Some((p, folder)) = &folder_match {
-            result.via = Some(format!("includeIf \"gitdir:{folder}\""));
+            result.via = Some(msg!("common_text", text = format!("includeIf \"gitdir:{folder}\"")));
             if result.key_path.as_deref().map(|k| same_key(env, k, &p.key.path)) == Some(false) {
-                result.notes.push(format!(
-                    "Der Ordner gehört zum Key „{}“, git verwendet aber einen anderen Key. Lokale Repo-Config prüfen.",
-                    p.name
-                ));
+                result.notes.push(msg!("which_localOverride", name = &p.name));
             }
         }
         if result.key_path.is_none() {
-            result.notes.push("Git setzt hier kein core.sshCommand – ssh wählt den Key selbst.".into());
+            result.notes.push(msg!("which_noSshCommand"));
         }
     } else if let Some((p, folder)) = &folder_match {
         result.key_path = Some(p.key.path.clone());
         result.identities_only = Some(true);
         result.source = Some(env.contract(&env.profile_gitconfig(&p.id)));
-        result.via = Some(format!("includeIf \"gitdir:{folder}\""));
+        result.via = Some(msg!("common_text", text = format!("includeIf \"gitdir:{folder}\"")));
         // Empty fields of the key fall back to ~/.gitconfig, like git does.
         let global = gitenv::global_identity(env);
         let own = |v: Option<&String>| v.filter(|v| !v.trim().is_empty()).cloned();
         result.git_name = own(p.git.as_ref().map(|g| &g.name)).or(global.name);
         result.git_email = own(p.git.as_ref().map(|g| &g.email)).or(global.email);
-        result.notes.push("Kein Git-Repo: gilt für alle Repos in diesem Ordner.".into());
+        result.notes.push(msg!("which_notARepo"));
     } else if let Some(def) = config.default_entry() {
         result.key_path = Some(def.key.path.clone());
         result.identities_only = Some(true);
         result.source = Some(env.contract(&env.index_gitconfig()));
-        result.via = Some("Standard-Key".into());
-        result.notes.push("Ordner gehört zu keinem Key, es gilt der Standard-Key.".into());
+        result.via = Some(msg!("which_viaDefault"));
+        result.notes.push(msg!("which_defaultApplies"));
     } else {
-        result.notes.push("Ordner gehört zu keinem Key und es gibt keinen Standard-Key.".into());
+        result.notes.push(msg!("which_noKey"));
     }
 
     // GIT_SSH_COMMAND beats every core.sshCommand, including Keybund's.
@@ -152,20 +151,11 @@ fn which_folder(env: &Env, config: &Config, query: &str) -> Result<WhichResult> 
         result.key_path = identity_from_ssh_command(&o.value).map(|k| contract_str(env, &k));
         result.identities_only = Some(o.value.contains("IdentitiesOnly=yes"));
         result.source = Some(o.origin.clone());
-        result.via = Some("GIT_SSH_COMMAND".into());
-        result.notes.insert(
-            0,
-            format!("GIT_SSH_COMMAND ist gesetzt ({}) und übersteuert Keybund: git benutzt „{}“.", o.origin, o.value),
-        );
+        result.via = Some(msg!("common_text", text = "GIT_SSH_COMMAND"));
+        result.notes.insert(0, msg!("which_gitSshCommand", origin = &o.origin, value = &o.value));
     }
     if let Some(o) = overrides.iter().find(|o| o.name == "GIT_CONFIG_GLOBAL") {
-        result.notes.insert(
-            0,
-            format!(
-                "GIT_CONFIG_GLOBAL zeigt auf {} ({}) – ~/.gitconfig mit Keybund wird nicht gelesen.",
-                o.value, o.origin
-            ),
-        );
+        result.notes.insert(0, msg!("which_gitConfigGlobal", origin = &o.origin, value = &o.value));
     }
 
     result.profile_id = result
@@ -204,13 +194,13 @@ fn which_host(env: &Env, config: &Config, host: &str) -> Result<WhichResult> {
         result.profile_id = Some(p.id.clone());
         if p.hosts.iter().any(|h| h.ssh_patterns().iter().any(|s| s.eq_ignore_ascii_case(host))) {
             result.source = Some(env.contract(&env.ssh_keybund_conf()));
-            result.via = Some(format!("Host {host}"));
+            result.via = Some(msg!("common_text", text = format!("Host {host}")));
         }
     } else {
         let existing: Vec<&String> = identities.iter().filter(|i| env.expand(&contract_str(env, i)).exists()).collect();
         result.key_path = existing.first().map(|i| contract_str(env, i));
         if existing.len() > 1 && result.identities_only != Some(true) {
-            result.notes.push(format!("ssh probiert {} Keys nacheinander durch.", existing.len()));
+            result.notes.push(msg!("which_triesKeys", n = existing.len()));
         }
     }
 
@@ -221,10 +211,7 @@ fn which_host(env: &Env, config: &Config, host: &str) -> Result<WhichResult> {
         .collect();
     if !git_profiles.is_empty() {
         let names: Vec<&str> = git_profiles.iter().map(|p| p.name.as_str()).collect();
-        result.notes.push(format!(
-            "Für Git-Repos entscheidet der Ordner, nicht der Host ({hostname} wird von {} genutzt).",
-            names.join(", ")
-        ));
+        result.notes.push(msg!("which_folderDecides", host = &hostname, names = names.join(", ")));
     }
     Ok(result)
 }

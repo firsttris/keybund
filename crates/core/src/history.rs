@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::Msg;
 use crate::probe::ProbeResult;
 use crate::{fsutil, Env, Result};
 
@@ -15,7 +16,9 @@ use crate::{fsutil, Env, Result};
 pub struct LastTest {
     pub success: bool,
     pub account: Option<String>,
-    pub message: String,
+    #[serde(deserialize_with = "message_or_text")]
+    #[cfg_attr(feature = "specta", specta(type = Msg))]
+    pub message: Msg,
     /// Milliseconds since the epoch.
     pub at: f64,
 }
@@ -25,6 +28,20 @@ impl LastTest {
         let at = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0);
         LastTest { success: result.success, account: result.account.clone(), message: result.message.clone(), at }
     }
+}
+
+/// Files from before the messages were keys hold the German text: kept as it is.
+fn message_or_text<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Msg, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Msg(Msg),
+        Text(String),
+    }
+    Ok(match Stored::deserialize(d)? {
+        Stored::Msg(m) => m,
+        Stored::Text(text) => crate::msg!("common_text", text = text),
+    })
 }
 
 /// All stored results by profile id. A damaged file counts as empty: it is
@@ -74,7 +91,11 @@ mod tests {
             success,
             host: "github.com".into(),
             account: success.then(|| "@t".to_string()),
-            message: if success { "Verbunden als @t".into() } else { "GitHub kennt diesen Key nicht".into() },
+            message: if success {
+                crate::msg!("probe_connected", account = "@t")
+            } else {
+                crate::msg!("probe_keyUnknown", provider = "GitHub")
+            },
             output: String::new(),
             command: String::new(),
             used_key: None,
@@ -98,7 +119,7 @@ mod tests {
         assert_eq!(load(&env).len(), 2);
         forget(&env, "a").unwrap();
         assert!(get(&env, "a").is_none());
-        assert_eq!(get(&env, "b").unwrap().message, "GitHub kennt diesen Key nicht");
+        assert_eq!(get(&env, "b").unwrap().message.to_string(), "GitHub kennt diesen Key nicht");
 
         std::fs::write(env.last_tests_file(), "kaputt").unwrap();
         assert!(load(&env).is_empty());

@@ -1,12 +1,17 @@
-import { commands, type CmdError } from "./bindings";
+import { m } from "@/paraglide/messages";
+import { commands, type CmdError, type Msg } from "./bindings";
+import { t } from "./i18n";
 
 /** Error thrown by every command wrapper; carries the backend's kind. */
 export class ApiError extends Error {
   kind: string;
+  /** The backend's message; `message` is its text in the current language. */
+  msg: Msg;
   constructor(error: CmdError) {
-    super(error.message);
+    super(t(error.message));
     this.name = "ApiError";
     this.kind = error.kind;
+    this.msg = error.message;
   }
 }
 
@@ -42,5 +47,5 @@ export const api = new Proxy({} as Unwrapped, {
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
-  return "Unbekannter Fehler";
+  return m.error_unknown();
 }

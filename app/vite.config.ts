@@ -1,5 +1,6 @@
 /// <reference types="vitest/config" />
 import { fileURLToPath, URL } from "node:url";
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
@@ -8,7 +9,13 @@ import { defineConfig } from "vite";
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    // messages/{de,en}.json → src/paraglide (typed message functions); the language
+    // itself is chosen in src/lib/i18n.ts.
+    paraglideVitePlugin({ project: "./project.inlang", outdir: "./src/paraglide", strategy: ["baseLocale"] }),
+  ],
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
@@ -37,7 +44,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
-      exclude: ["src/lib/bindings.ts", "src/test/**", "src/main.tsx", "**/*.test.*"],
+      exclude: ["src/lib/bindings.ts", "src/paraglide/**", "src/test/**", "src/main.tsx", "**/*.test.*"],
       thresholds: { lines: 90, statements: 90, functions: 90, branches: 80 },
     },
   },
