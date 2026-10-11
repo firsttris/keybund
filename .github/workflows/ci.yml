@@ -106,12 +106,29 @@ jobs:
           path: app/coverage
           if-no-files-found: ignore
 
-  e2e:
-    name: Frontend · Playwright E2E
+  playwright-image:
+    name: Frontend · Playwright image
     # Draft pull requests do not build; "Ready for review" starts the run
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.version.outputs.image }}
+    steps:
+      - id: version
+        uses: firsttris/workflows/actions/playwright-image@v1
+        with:
+          lockfile: app/pnpm-lock.yaml
+
+  e2e:
+    name: Frontend · Playwright E2E
+    needs: playwright-image
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # The official image of the @playwright/test version in the lockfile: browsers, their libraries
+    # and fonts are in it, so no playwright install runs and every run sees the same browser.
+    container:
+      image: ${{ needs.playwright-image.outputs.image }}
+      options: --ipc=host
     defaults:
       run:
         working-directory: app
@@ -120,13 +137,12 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: app/package.json
+      # Node comes with the image; this only caches the pnpm store.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
           cache: pnpm
           cache-dependency-path: app/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -135,4 +151,3 @@ jobs:
           path: |
             app/playwright-report
             app/test-results
-

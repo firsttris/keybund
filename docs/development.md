@@ -137,7 +137,7 @@ To add a text: add the key to both catalogs (`area_name`, e.g. `settings_languag
 | Rust | `cargo fmt --check`, `clippy -D warnings`, `cargo test --workspace` (with a real `sshd`) |
 | Rust coverage | `cargo llvm-cov`; core and CLI must stay above 85 % of lines |
 | Frontend | Biome (`biome check`), `tsc -b`, Vitest with coverage thresholds (90 % lines), `vite build` |
-| Playwright | every end-to-end flow on a desktop and a narrow viewport |
+| Playwright | every end-to-end flow on a desktop and a narrow viewport, in the official Playwright image of the version in `pnpm-lock.yaml` |
 
 ## Releases
 
