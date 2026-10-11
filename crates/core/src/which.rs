@@ -169,10 +169,15 @@ fn which_folder(env: &Env, config: &Config, query: &str) -> Result<WhichResult> 
 
 fn which_host(env: &Env, config: &Config, host: &str) -> Result<WhichResult> {
     let mut result = WhichResult::new(host, WhichMode::Host);
-    let mut cmd = env.command("ssh");
-    // `--`: a query starting with `-` is a host, not an option.
-    cmd.args(["-G", "--", host]);
-    let out = process::stdout(cmd)?;
+    // `--` inside: a query starting with `-` is a host, not an option.
+    let out = match env.ssh_g(host) {
+        Some(out) => out,
+        None => {
+            let mut cmd = env.command("ssh");
+            cmd.args(["-G", "--", host]);
+            process::stdout(cmd)?
+        }
+    };
     let mut identities = Vec::new();
     for line in out.lines() {
         let Some((k, v)) = line.split_once(' ') else { continue };
@@ -181,7 +186,7 @@ fn which_host(env: &Env, config: &Config, host: &str) -> Result<WhichResult> {
             "user" => result.user = Some(v.to_string()),
             "port" => result.port = v.parse().ok(),
             "identitiesonly" => result.identities_only = Some(v == "yes"),
-            "identityfile" => identities.push(v.to_string()),
+            "identityfile" => identities.push(env.from_ssh(v).display().to_string()),
             _ => {}
         }
     }
@@ -190,6 +195,7 @@ fn which_host(env: &Env, config: &Config, host: &str) -> Result<WhichResult> {
     // ssh lists its default identity files when none is configured; prefer
     // the one that belongs to a profile.
     let by_profile = identities.iter().find_map(|i| profile_for_key(env, config, i).map(|p| (i, p)));
+    let existing: Vec<&String> = identities.iter().filter(|i| env.expand(&contract_str(env, i)).exists()).collect();
     if let Some((identity, p)) = by_profile {
         result.key_path = Some(contract_str(env, identity));
         result.profile_id = Some(p.id.clone());
@@ -198,11 +204,12 @@ fn which_host(env: &Env, config: &Config, host: &str) -> Result<WhichResult> {
             result.via = Some(msg!("common_text", text = format!("Host {host}")));
         }
     } else {
-        let existing: Vec<&String> = identities.iter().filter(|i| env.expand(&contract_str(env, i)).exists()).collect();
         result.key_path = existing.first().map(|i| contract_str(env, i));
-        if existing.len() > 1 && result.identities_only != Some(true) {
-            result.notes.push(msg!("which_triesKeys", n = existing.len()));
-        }
+    }
+    // ssh tries every listed key that exists (agent-loaded ones first), so
+    // the key named above is not necessarily the one that logs in.
+    if existing.len() > 1 && result.identities_only != Some(true) {
+        result.notes.push(msg!("which_triesKeys", n = existing.len()));
     }
 
     let hostname = result.hostname.clone().unwrap_or_else(|| host.to_string());

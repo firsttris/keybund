@@ -819,3 +819,25 @@ fn host_keys_go_where_ssh_looks_for_them() {
     fs::write(env.known_hosts(), format!("github.com {}\n", hostkeys::PINNED[0].1)).unwrap();
     assert!(!hostkeys::is_known(&env, &settings, profile, github));
 }
+
+/// Several keys for a host and no IdentitiesOnly: ssh tries them all, so
+/// `which` must say so even when the first one belongs to a key – that key
+/// is not necessarily the one that logs in.
+#[test]
+fn which_says_when_ssh_tries_several_keys() {
+    if !has("ssh") || !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    keygen::generate(
+        &env,
+        &GenerateOptions { path: "~/.ssh/id_ed25519".into(), comment: "x".into(), passphrase: None },
+    )
+    .unwrap();
+    fs::write(env.ssh_config(), "Host *\n    IdentityFile ~/.ssh/privat_ed25519\n    IdentityFile ~/.ssh/id_ed25519\n")
+        .unwrap();
+    let r = which::which(&env, &config, "example.org").unwrap();
+    assert_eq!(r.key_path.as_deref(), Some("~/.ssh/privat_ed25519"));
+    assert_eq!(r.profile_id.as_deref(), Some("privat"));
+    assert!(r.notes.iter().any(|n| n.key == "which_triesKeys"), "{:?}", r.notes);
+}
