@@ -77,8 +77,11 @@ HOME=$(mktemp -d) cargo run -p keybund-cli -- doctor
 Run `just dev-mock` and open http://localhost:1420 – the full app against demo data, with hot
 reload, in any browser. Every text is a message in both languages (see [Translations](#translations));
 keep texts short and explain in plain words what happens (the app is meant for people who are not
-ssh experts). Components come from shadcn/ui (zinc theme,
-dark). After a visible change, `just screenshots` updates the documentation pictures.
+ssh experts). Components come from shadcn/ui (zinc theme, light and dark). Colours are tokens in
+`src/styles.css` (`:root` light, `:root.dark` dark); a colour outside the tokens needs both variants
+(`text-red-700 dark:text-red-300`). `public/theme.js` sets the class before the first paint,
+`src/lib/theme.ts` keeps it up to date. After a visible change, `just screenshots` updates the
+documentation pictures (they show the dark theme).
 
 ### The mock backend
 

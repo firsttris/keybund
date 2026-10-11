@@ -39,7 +39,7 @@ export function ProbeDetails({ result }: { result: ProbeResult }) {
                 ) : (
                   <Info aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                 )}
-                <span className={cn("[overflow-wrap:anywhere]", step.ok === false && "text-red-300")}>
+                <span className={cn("[overflow-wrap:anywhere]", step.ok === false && "text-red-700 dark:text-red-300")}>
                   {t(step.text)}
                 </span>
               </li>

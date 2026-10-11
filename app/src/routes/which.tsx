@@ -126,7 +126,7 @@ function WhichCard({ result }: { result: WhichResult }) {
   return (
     <div data-testid="which-result" className="overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex flex-wrap items-center gap-3 border-b border-border px-5 py-[18px]">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-blue-500/15 text-blue-300">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-blue-500/15 text-blue-700 dark:text-blue-300">
           <KeyRound aria-hidden className="size-[18px]" />
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">

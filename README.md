@@ -99,6 +99,7 @@ first ten minutes: [first steps](https://firsttris.github.io/keybund/getting-sta
 | 🛡️ **Host keys** | Fingerprints confirmed before the first connection, GitHub/GitLab/Bitbucket keys pinned, known_hosts per key |
 | ⌨️ **CLI** | Everything also as `keybund …`, scriptable with `--yes` and exit codes |
 | 🌍 **English and German** | Follows the system language, switchable in the settings – error messages, doctor and connection tests included |
+| 🌓 **Light and dark** | Follows the light or dark mode of your desktop, or a fixed choice in the settings |
 
 ## 📸 Screenshots
 

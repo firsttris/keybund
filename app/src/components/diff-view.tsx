@@ -50,9 +50,9 @@ export function DiffView({ changes, className }: { changes: FileChange[]; classN
                 key={i}
                 className={cn(
                   "px-3.5 whitespace-pre",
-                  l.kind === "add" && "bg-emerald-500/10 text-emerald-200",
-                  l.kind === "del" && "bg-red-500/10 text-red-200",
-                  l.kind === "hunk" && "text-cyan-300/70",
+                  l.kind === "add" && "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200",
+                  l.kind === "del" && "bg-red-500/10 text-red-800 dark:text-red-200",
+                  l.kind === "hunk" && "text-cyan-700 dark:text-cyan-300/70",
                   l.kind === "ctx" && "text-secondary-foreground",
                 )}
               >

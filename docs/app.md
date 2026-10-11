@@ -133,12 +133,14 @@ option to remove the old entries afterwards (with a backup). Details in
 
 ## Settings
 
-![Settings: default key, folders for new repositories and keys, language, keys in ~/.ssh](screenshot-settings.png)
+![Settings: default key, folders for new repositories and keys, language, appearance, keys in ~/.ssh](screenshot-settings.png)
 
 - **Default key for Git** – the default key, or **None – ssh chooses itself**.
 - **New keys** – **Folder for Git repositories** (where Git folders are suggested, `~/dev`) and
   **Folder for keys** (where new keys are created, `~/.ssh`).
 - **Language** – like the system, **English** or **Deutsch**.
+- **Appearance** – the colour scheme: like the system (follows the light or dark mode of your desktop,
+  also while the app is open), **Light** or **Dark**.
 - **Keys in ~/.ssh** – every key pair in `~/.ssh` with fingerprint, comment and age; keys Keybund does
   not know yet can be taken over with **Take over as key**.
 - **Advanced**:

@@ -2,8 +2,31 @@
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
 
-/* shadcn/ui "zinc" theme, dark only – matches the mockup. */
+/* Dark mode follows the class on <html>, which public/theme.js sets before the first paint
+   and src/lib/theme.ts keeps up to date (setting "like the system", light or dark). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* shadcn/ui "zinc" theme, light and dark. */
 :root {
+  --background: #ffffff;
+  --foreground: #09090b;
+  --card: #ffffff;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --secondary-foreground: #3f3f46;
+  --border: #e4e4e7;
+  --border-subtle: #ececef;
+  --input: #d4d4d8;
+  --ring: #71717a;
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --success: #047857;
+  --warning: #b45309;
+  --danger: #dc2626;
+  color-scheme: light;
+}
+
+:root.dark {
   --background: #09090b;
   --foreground: #fafafa;
   --card: #0c0c0e;

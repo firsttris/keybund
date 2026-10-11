@@ -9,7 +9,7 @@ export const AlertDialogTrigger = Primitive.Trigger;
 export function AlertDialogContent({ className, children, ...props }: React.ComponentProps<typeof Primitive.Content>) {
   return (
     <Primitive.Portal>
-      <Primitive.Overlay className="fixed inset-0 z-50 bg-black/60" />
+      <Primitive.Overlay className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60" />
       <Primitive.Content
         className={cn(
           "fixed top-1/2 left-1/2 z-50 flex w-[min(440px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-xl border border-border bg-card p-6 text-foreground",

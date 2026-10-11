@@ -23,5 +23,5 @@ export function ErrorSlot({ message, className }: { message?: string | null | fa
 }
 
 export function FieldError({ className, ...props }: React.ComponentProps<"p">) {
-  return <p role="alert" className={cn("text-xs text-red-300", className)} {...props} />;
+  return <p role="alert" className={cn("text-xs text-red-700 dark:text-red-300", className)} {...props} />;
 }

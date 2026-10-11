@@ -23,6 +23,7 @@ import {
   useSettings,
   useUpdateSettings,
 } from "@/lib/queries";
+import { setTheme, storedTheme, systemTheme, type Theme } from "@/lib/theme";
 import { formatAge } from "@/lib/utils";
 import { m } from "@/paraglide/messages";
 
@@ -64,6 +65,7 @@ export function SettingsPage() {
         <SettingsCard />
 
         <LanguageCard />
+        <ThemeCard />
 
         <Card className="col-span-full" aria-labelledby="import-title">
           <CardTitle id="import-title">{m.settings_keysTitle()}</CardTitle>
@@ -296,6 +298,33 @@ function LanguageCard() {
           ))}
         </Select>
         <FieldHint>{m.settings_languageHint()}</FieldHint>
+      </div>
+    </Card>
+  );
+}
+
+function ThemeCard() {
+  const [choice, setChoice] = useState<Theme | "">(() => storedTheme() ?? "");
+  const label = { light: m.settings_themeLight, dark: m.settings_themeDark };
+  return (
+    <Card aria-labelledby="theme-title">
+      <CardTitle id="theme-title">{m.settings_theme()}</CardTitle>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="theme">{m.settings_themeLabel()}</Label>
+        <Select
+          id="theme"
+          value={choice}
+          onChange={(e) => {
+            const theme = (e.target.value || null) as Theme | null;
+            setChoice(theme ?? "");
+            setTheme(theme);
+          }}
+        >
+          <option value="">{m.settings_themeSystem({ theme: label[systemTheme()]() })}</option>
+          <option value="light">{label.light()}</option>
+          <option value="dark">{label.dark()}</option>
+        </Select>
+        <FieldHint>{m.settings_themeHint()}</FieldHint>
       </div>
     </Card>
   );

@@ -179,7 +179,7 @@ function UsageCard({ view }: { view: ProfileView }) {
         <ul aria-label={m.usage_list()} className="m-0 flex list-none flex-col gap-2 p-0">
           {view.is_default && (
             <UsageRow
-              icon={<Star aria-hidden className="size-4 text-amber-400" />}
+              icon={<Star aria-hidden className="size-4 text-amber-500 dark:text-amber-400" />}
               title={m.usage_defaultForGit()}
               detail={m.usage_defaultDetail()}
               actions={
@@ -295,7 +295,7 @@ function EmptyUsage({
             key={t.kind}
             type="button"
             onClick={() => onPick(t.kind)}
-            className="flex gap-3 rounded-[10px] border border-border bg-transparent p-4 text-left hover:border-zinc-500"
+            className="flex gap-3 rounded-[10px] border border-border bg-transparent p-4 text-left hover:border-zinc-400 dark:hover:border-zinc-500"
           >
             <span className="mt-0.5 text-muted-foreground">{t.icon}</span>
             <span className="flex flex-col gap-1">

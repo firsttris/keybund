@@ -155,7 +155,7 @@ function Todo() {
     );
   }
   const icon = { danger: XCircle, warn: AlertTriangle, info: Info };
-  const color = { danger: "text-danger", warn: "text-warning", info: "text-blue-400" };
+  const color = { danger: "text-danger", warn: "text-warning", info: "text-blue-600 dark:text-blue-400" };
   return (
     <section aria-labelledby="todo-title" className="flex flex-col gap-2">
       <h2 id="todo-title" className="m-0 text-[15px] font-semibold">
@@ -199,7 +199,7 @@ function KeyCard({ view }: { view: ProfileView }) {
       <Link
         to="/profile/$id"
         params={{ id: profile.id }}
-        className="flex h-full flex-col gap-3 rounded-xl border border-border bg-card p-4 text-foreground no-underline hover:border-zinc-600"
+        className="flex h-full flex-col gap-3 rounded-xl border border-border bg-card p-4 text-foreground no-underline hover:border-zinc-400 dark:hover:border-zinc-600"
       >
         <span className="flex items-center gap-2.5">
           <ColorDot color={profile.color} className="size-2.5" />

@@ -142,7 +142,7 @@ export function NewKeyPage({ existingKey }: { existingKey?: string }) {
                 <span
                   className={cn(
                     "mt-px size-[18px] shrink-0 rounded-full border",
-                    mode === o.value ? "border-[5px] border-foreground" : "border-zinc-600",
+                    mode === o.value ? "border-[5px] border-foreground" : "border-zinc-400 dark:border-zinc-600",
                   )}
                 />
                 <span className="flex min-w-0 flex-col gap-1">
