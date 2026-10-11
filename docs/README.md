@@ -25,6 +25,7 @@ Also as a website with search: **https://firsttris.github.io/keybund/**
 | [Modules](modules.md) | every module of the core, the CLI, the Tauri backend and the frontend |
 | [Development](development.md) | toolbox setup, `just` recipes, bindings, mock backend, screenshots, releases |
 | [Testing](testing.md) | the test layers, from snapshot tests to a real `sshd` and Playwright |
+| [Review 2026-10](review-2026-10.md) | what the code review found, what is fixed, what is still open – with the handover prompt |
 
 ## How Keybund works, in one minute
 
