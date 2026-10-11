@@ -10,10 +10,11 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::env::Platform;
 use crate::i18n::Msg;
 use crate::model::{HostEntry, Profile};
 use crate::msg;
-use crate::{keygen, Env, Error, Result};
+use crate::{fsutil, keygen, Env, Error, Result};
 
 /// POSIX sh, run via `sh -c` so it works whatever the login shell is (fish).
 /// Reads the key from stdin, appends it once, keeps the file's last line
@@ -34,11 +35,38 @@ pub struct InstallResult {
 const ASKPASS: [&str; 4] =
     ["/usr/bin/ksshaskpass", "/usr/libexec/openssh/ssh-askpass", "/usr/lib/ssh/ssh-askpass", "/usr/bin/ssh-askpass"];
 
-pub fn askpass_program() -> Option<String> {
-    std::env::var("SSH_ASKPASS")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .or_else(|| ASKPASS.iter().find(|p| Path::new(p).exists()).map(|p| p.to_string()))
+/// The password dialog ssh should use: `$SSH_ASKPASS`, a known one on
+/// Linux, or on macOS – which ships none – Keybund's own (see
+/// [`MACOS_ASKPASS`]), written to `~/.config/keybund/askpass-macos`.
+pub fn askpass_program(env: &Env) -> Option<String> {
+    if let Some(own) = std::env::var("SSH_ASKPASS").ok().filter(|s| !s.is_empty()) {
+        return Some(own);
+    }
+    match env.platform {
+        Platform::Linux => ASKPASS.iter().find(|p| Path::new(p).exists()).map(|p| p.to_string()),
+        Platform::MacOs => macos_askpass(env).ok().map(|p| p.display().to_string()),
+    }
+}
+
+/// ssh's askpass protocol (readpass.c): the prompt is `$1`, the answer goes
+/// to stdout, a non-zero exit is "cancelled". With `SSH_ASKPASS_PROMPT=confirm`
+/// only the exit status counts (a yes/no question). The dialog comes from
+/// `osascript`, which every macOS has.
+pub const MACOS_ASKPASS: &str = r#"#!/bin/sh
+# Keybund's password dialog for ssh on macOS (SSH_ASKPASS). Written by Keybund.
+if [ "$SSH_ASKPASS_PROMPT" = confirm ]; then
+  exec osascript -e 'on run argv' -e 'display dialog (item 1 of argv) with title "Keybund" with icon caution' -e 'end run' "$1" >/dev/null
+fi
+exec osascript -e 'on run argv' -e 'display dialog (item 1 of argv) default answer "" with hidden answer with title "Keybund" with icon caution' -e 'text returned of result' -e 'end run' "$1"
+"#;
+
+fn macos_askpass(env: &Env) -> Result<std::path::PathBuf> {
+    fsutil::ensure_dir(&env.config_dir, Some(0o700))?;
+    let path = env.config_dir.join("askpass-macos");
+    if std::fs::read_to_string(&path).ok().as_deref() != Some(MACOS_ASKPASS) {
+        fsutil::atomic_write(&path, MACOS_ASKPASS, Some(0o700))?;
+    }
+    Ok(path)
 }
 
 /// ssh's default keys: with Keybund's Host block setting an IdentityFile,
@@ -125,7 +153,7 @@ fn install_prompting(
     let mut cmd = env.command("ssh");
     cmd.args(extra_args).args(ssh_args(env, host)).stdout(Stdio::piped()).stderr(Stdio::piped());
     if prompt == crate::probe::Prompt::Detached {
-        crate::probe::detach(&mut cmd);
+        crate::probe::detach(env, &mut cmd);
     }
     // The key goes in through stdin after the login (also after a password prompt).
     cmd.stdin(Stdio::piped());
@@ -268,6 +296,50 @@ mod tests {
         let text = std::fs::read_to_string(&file).unwrap();
         assert_eq!(text.lines().count(), 2, "{text}");
         assert!(text.ends_with("AAAAIBBB nas\n"));
+    }
+
+    /// The macOS dialog, run here with a stand-in `osascript`: the prompt
+    /// reaches the dialog, the answer goes to ssh, Cancel is a failure, and
+    /// a yes/no question answers through the exit status only.
+    #[test]
+    #[cfg(unix)]
+    fn macos_askpass_hands_the_prompt_to_a_dialog() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = Env { platform: Platform::MacOs, ..Env::with_home(dir.path()) };
+        let script = askpass_program(&env).filter(|_| std::env::var("SSH_ASKPASS").is_err());
+        let Some(script) = script else { return };
+        assert_eq!(script, env.config_dir.join("askpass-macos").display().to_string());
+        assert_eq!(fsutil::mode(Path::new(&script)), Some(0o700));
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let fake = bin.join("osascript");
+        // Prints the last argument (the prompt) to a log, answers "geheim" or fails.
+        std::fs::write(&fake, "#!/bin/sh\nfor a; do last=$a; done\necho \"$last\" >> \"$LOG\"\n[ -z \"$CANCEL\" ] || exit 1\necho geheim\n")
+            .unwrap();
+        fsutil::set_mode(&fake, 0o755).unwrap();
+        let log = dir.path().join("log");
+        let run = |cancel: bool, confirm: bool| {
+            let mut cmd = std::process::Command::new(&script);
+            cmd.arg("Enter passphrase for key '/Users/t/.ssh/nas':")
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .env("LOG", &log);
+            if cancel {
+                cmd.env("CANCEL", "1");
+            }
+            if confirm {
+                cmd.env("SSH_ASKPASS_PROMPT", "confirm");
+            }
+            cmd.output().unwrap()
+        };
+        let out = run(false, false);
+        assert!(out.status.success());
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "geheim\n");
+        assert!(!run(true, false).status.success());
+        let confirm = run(false, true);
+        assert!(confirm.status.success() && confirm.stdout.is_empty());
+        let prompts = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(prompts.lines().count(), 3);
+        assert!(prompts.lines().all(|l| l == "Enter passphrase for key '/Users/t/.ssh/nas':"), "{prompts}");
     }
 
     #[test]

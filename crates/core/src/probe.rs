@@ -216,7 +216,7 @@ pub fn probe_with(env: &Env, profile: &Profile, host: &HostEntry, prompt: Prompt
     let mut cmd = env.command("ssh");
     cmd.args(&args);
     if prompt == Prompt::Detached {
-        detach(&mut cmd);
+        detach(env, &mut cmd);
     }
     let out = process::output_timeout(cmd, TIMEOUT)?;
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -230,9 +230,9 @@ pub fn probe_with(env: &Env, profile: &Profile, host: &HostEntry, prompt: Prompt
 /// through the askpass program (forced, so it is used even when the app was
 /// started from a terminal); without one, ssh runs in its own session so it
 /// cannot open /dev/tty and reports that instead of waiting forever.
-pub fn detach(cmd: &mut std::process::Command) {
+pub fn detach(env: &Env, cmd: &mut std::process::Command) {
     cmd.stdin(std::process::Stdio::null());
-    match crate::keyinstall::askpass_program() {
+    match crate::keyinstall::askpass_program(env) {
         Some(askpass) => {
             cmd.env("SSH_ASKPASS", askpass).env("SSH_ASKPASS_REQUIRE", "force");
         }

@@ -903,3 +903,21 @@ fn macos_configs_work_with_an_ssh_without_keychain_support() {
     let out = git(&env, &repo, &["config", "user.email"]);
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "kunde-a@example.org");
 }
+
+/// macOS: no Dolphin check (there is no Dolphin), and the agent hint talks
+/// about launchd instead of KDE and GNOME.
+#[test]
+fn the_doctor_speaks_macos_on_a_mac() {
+    use keybund_core::env::Platform;
+    if !has("ssh-keygen") || std::env::var_os("SSH_AUTH_SOCK").is_some() {
+        return;
+    }
+    let (_dir, env, _config) = setup();
+    let mac = Env { platform: Platform::MacOs, ..env.clone() };
+    let report = doctor::run(&mac);
+    assert!(report.checks.iter().all(|c| !c.id.starts_with("dolphin")), "{:?}", report.checks);
+    let agent = report.checks.iter().find(|c| c.id == "agent").unwrap();
+    assert_eq!(agent.detail.as_ref().unwrap().key, "doctor_agent_missing_detail_macos");
+    let agent = doctor::run(&env).checks.into_iter().find(|c| c.id == "agent").unwrap();
+    assert_eq!(agent.detail.unwrap().key, "doctor_agent_missing_detail");
+}

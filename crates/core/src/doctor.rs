@@ -5,6 +5,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::env::Platform;
 use crate::i18n::Msg;
 use crate::model::Config;
 use crate::msg;
@@ -116,8 +117,11 @@ pub fn run(env: &Env) -> Report {
     checks.extend(own_ssh_command_check(env, &config));
     checks.extend(key_age_checks(env, &config));
     checks.extend(folder_checks(env, &config));
-    let dolphin = process::find_program("dolphin").is_some() || kio_sftp_installed();
-    checks.extend(dolphin_check(dolphin, libssh_version(), &config));
+    // Dolphin and KIO only exist on Linux desktops.
+    if env.platform == Platform::Linux {
+        let dolphin = process::find_program("dolphin").is_some() || kio_sftp_installed();
+        checks.extend(dolphin_check(dolphin, libssh_version(), &config));
+    }
     Report { checks }
 }
 
@@ -336,9 +340,11 @@ fn agent_check(env: &Env) -> Check {
     match terminal {
         Some(sock) => Check::new("agent", Status::Warn, msg!("doctor_agent_terminalOnly"))
             .detail(msg!("doctor_agent_terminalOnly_detail", socket = sock)),
-        None => {
-            Check::new("agent", Status::Warn, msg!("doctor_agent_missing")).detail(msg!("doctor_agent_missing_detail"))
-        }
+        None => Check::new("agent", Status::Warn, msg!("doctor_agent_missing")).detail(match env.platform {
+            Platform::Linux => msg!("doctor_agent_missing_detail"),
+            // launchd starts one for every login; without it something unset SSH_AUTH_SOCK.
+            Platform::MacOs => msg!("doctor_agent_missing_detail_macos"),
+        }),
     }
 }
 
