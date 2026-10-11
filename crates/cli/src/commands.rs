@@ -1022,12 +1022,14 @@ pub fn edit(env: &Env, args: EditArgs) -> Result<ExitCode> {
         ui::success("Keine Änderung");
         return Ok(ExitCode::SUCCESS);
     }
-    store::save(env, &config)?;
-    // Only after validation, so a rejected folder leaves nothing behind.
+    // Validated first, so a rejected folder leaves nothing behind; created
+    // before saving, so a folder that cannot be created saves nothing either.
+    store::validate_in(env, &config)?;
     for folder in &args.add_folder {
         let path = env.expand(folder.trim());
         std::fs::create_dir_all(&path).with_context(|| format!("Ordner {folder} kann nicht angelegt werden"))?;
     }
+    store::save(env, &config)?;
     for c in &changes {
         ui::row("", c);
     }

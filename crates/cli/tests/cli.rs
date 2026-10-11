@@ -855,3 +855,22 @@ fn the_last_test_is_kept_per_host() {
             .and(predicate::str::contains("backup: Server kennt diesen Key nicht")),
     );
 }
+
+/// A Git folder that cannot be created: nothing is saved, the key stays as
+/// it was, and the message names the folder.
+#[test]
+fn edit_saves_nothing_when_a_folder_cannot_be_created() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    sb.new_profile("Foo", &["--provider", "github", "--host", "github.com", "--no-browser"]);
+    let before = sb.read(".config/keybund/profiles.toml");
+    fs::write(sb.path("afile"), "not a directory").unwrap();
+    sb.cmd()
+        .args(["edit", "foo", "--add-folder", "~/afile/dev", "--yes"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("Ordner ~/afile/dev kann nicht angelegt werden"));
+    assert_eq!(sb.read(".config/keybund/profiles.toml"), before);
+}
