@@ -713,7 +713,9 @@ pub fn set_default(env: &Env, id: Option<&str>) -> Result<ExitCode> {
         Some(id) => ui::success(&format!("Standard-Key: {id}")),
         None => ui::success("Kein Standard-Key mehr – außerhalb der Git-Ordner wählt ssh den Key selbst"),
     }
-    ui::hint("Mit `keybund apply` übernehmen.");
+    // Like the app: the choice applies right away.
+    let plan = apply::plan(env, &config)?;
+    confirm_and_apply(env, &plan, true)?;
     Ok(ExitCode::SUCCESS)
 }
 

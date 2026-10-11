@@ -73,8 +73,10 @@ fn new_generates_key_and_writes_configs() {
     assert!(!toml.contains("default_profile"), "the standard key is only set on request");
     sb.cmd().args(["default", "kunde-c"]).assert().success();
     assert!(sb.read(".config/keybund/profiles.toml").contains("default_profile = \"kunde-c\""));
+    assert!(sb.read(".config/keybund/git/index.gitconfig").contains("# Standard-Key: "), "written right away");
     sb.cmd().args(["default", "--unset"]).assert().success();
     assert!(!sb.read(".config/keybund/profiles.toml").contains("default_profile"));
+    assert!(!sb.read(".config/keybund/git/index.gitconfig").contains("Standard-Key"));
     assert!(sb.read(".ssh/config").starts_with("Include ~/.ssh/config.d/keybund.conf"));
     assert!(sb.read(".config/keybund/git/index.gitconfig").contains("[includeIf \"gitdir:~/dev/kunde-c/\"]"));
     assert!(sb.read(".config/keybund/git/kunde-c.gitconfig").contains("email = t@c.de"));
@@ -440,8 +442,8 @@ fn import_takes_over_an_existing_ssh_config() {
         return;
     }
     let sb = Sandbox::new();
-    std::fs::create_dir_all(sb.path(".ssh/pflegeabc")).unwrap();
-    for key in [".ssh/privat_ed25519", ".ssh/pflegeabc/id_ed25519"] {
+    std::fs::create_dir_all(sb.path(".ssh/nebenjob")).unwrap();
+    for key in [".ssh/privat_ed25519", ".ssh/nebenjob/id_ed25519"] {
         std::process::Command::new("ssh-keygen")
             .args(["-q", "-t", "ed25519", "-N", "", "-f"])
             .arg(sb.path(key))
@@ -450,20 +452,20 @@ fn import_takes_over_an_existing_ssh_config() {
     }
     std::fs::write(
         sb.path(".ssh/config"),
-        "# Privater Account\nHost github.com\n    User git\n    IdentityFile ~/.ssh/privat_ed25519\n\n# Pflegeabc Account\nHost pflegeabc\n    HostName github.com\n    IdentityFile ~/.ssh/pflegeabc/id_ed25519\n",
+        "# Privater Account\nHost github.com\n    User git\n    IdentityFile ~/.ssh/privat_ed25519\n\n# Nebenjob Account\nHost nebenjob\n    HostName github.com\n    IdentityFile ~/.ssh/nebenjob/id_ed25519\n",
     )
     .unwrap();
 
     // Without --all it only lists.
     sb.cmd().arg("import").assert().success().stdout(
         predicate::str::contains("Privater Account (privat) Default")
-            .and(predicate::str::contains("pflegeabc → github.com"))
+            .and(predicate::str::contains("nebenjob → github.com"))
             .and(predicate::str::contains("keybund import --all")),
     );
     assert!(!sb.path(".config/keybund/profiles.toml").exists());
 
     sb.cmd().args(["import", "--all", "--yes"]).assert().success().stdout(
-        predicate::str::contains("2 Key(s) übernommen: privat, pflegeabc")
+        predicate::str::contains("2 Key(s) übernommen: privat, nebenjob")
             .and(predicate::str::contains("Übernommene Einträge aus ~/.ssh/config entfernen"))
             .and(
                 predicate::str::contains("-IdentityFile ~/.ssh/privat_ed25519")
@@ -472,7 +474,7 @@ fn import_takes_over_an_existing_ssh_config() {
     );
     assert_eq!(sb.read(".ssh/config"), "Include ~/.ssh/config.d/keybund.conf\n");
     assert!(sb.read(".ssh/config.keybund-backup").contains("Privater Account"));
-    assert!(sb.read(".ssh/config.d/keybund.conf").contains("Host pflegeabc"));
+    assert!(sb.read(".ssh/config.d/keybund.conf").contains("Host nebenjob"));
     sb.cmd().arg("list").assert().success().stdout(predicate::str::contains("Privater Account (privat) Standard"));
     sb.cmd().arg("import").assert().success().stdout(predicate::str::contains("Nichts zu übernehmen"));
 }
