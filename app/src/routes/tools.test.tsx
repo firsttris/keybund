@@ -143,4 +143,13 @@ describe("settings", () => {
     expect(screen.queryByText(/nicht zu deinen Keys/)).not.toBeInTheDocument();
     expect(within(advanced).getByRole("link", { name: "Entfernen …" })).toBeInTheDocument();
   });
+
+  it("leaves out the Dolphin switch on macOS", async () => {
+    const { user } = await renderApp("/settings", (b) => {
+      b.state.platform = "macos";
+    });
+    await user.click(await screen.findByText("Erweitert"));
+    expect(await screen.findByRole("switch", { name: "Server-Fingerprints pro Key" })).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Include mit vollem Pfad" })).not.toBeInTheDocument();
+  });
 });

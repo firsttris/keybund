@@ -26,6 +26,7 @@ import type {
   NewProject,
   Paths,
   Plan,
+  Platform,
   ProbeResult,
   Profile,
   ProfileDefaults,
@@ -139,6 +140,8 @@ export interface MockState {
   globalIdentity: GlobalIdentity;
   /** libssh version of an installed Dolphin (`null`: no Dolphin). */
   dolphinLibssh: string | null;
+  /** The system the backend runs on (`Env::platform`). */
+  platform: Platform;
   /** known_hosts names (`host` or `[host]:port`) whose key is stored. */
   knownHosts: string[];
   /** profiles.toml cannot be parsed: the detail of the `config_parse` error every load fails with. */
@@ -250,6 +253,7 @@ export function seedState(): MockState {
     accountKeys: [],
     knownHosts: ["1.2.3.4", "gitlab.kunde.de"],
     dolphinLibssh: null,
+    platform: "linux",
     agentKeys: ["~/.ssh/privat_ed25519", "~/.ssh/acme_ed25519"],
     lastApplied: Date.now() - 3 * 3_600_000,
     globalIdentity: { name: "Tristan Teufel", email: "tristanteufel@example.org" },
@@ -1302,6 +1306,7 @@ export function createMockBackend(state: MockState = seedState()) {
           ssh_keybund_conf: "~/.ssh/config.d/keybund.conf",
           gitconfig: "~/.gitconfig",
           index_gitconfig: "~/.config/keybund/git/index.gitconfig",
+          platform: state.platform,
         };
         return result;
       }

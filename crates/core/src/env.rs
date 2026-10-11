@@ -6,10 +6,13 @@ use crate::{Error, Result};
 /// The operating system Keybund writes configs for. Rendering stays pure:
 /// it takes the platform from [`Env`] instead of asking `cfg!` itself, so
 /// tests render the macOS files on Linux too.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[serde(rename_all = "lowercase")]
 pub enum Platform {
     #[default]
     Linux,
+    #[serde(rename = "macos")]
     MacOs,
 }
 

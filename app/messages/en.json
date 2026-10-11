@@ -168,13 +168,8 @@
   "usage_default": "Default",
   "usage_folders": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "{n} folder",
         "nPlural=other": "{n} folders"
@@ -183,13 +178,8 @@
   ],
   "usage_servers": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "{n} server",
         "nPlural=other": "{n} servers"
@@ -221,13 +211,8 @@
   "sidebar_doctorHint": "Checks that ssh and Git are set up correctly",
   "sidebar_hints": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "{n} hint",
         "nPlural=other": "{n} hints"
@@ -246,13 +231,8 @@
   "diff_delete": "deleted",
   "diff_summary": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "lines · {n} file",
         "nPlural=other": "lines · {n} files"
@@ -279,7 +259,7 @@
   "howItWorks_rulesTitle": "Rules instead of trial and error",
   "howItWorks_rulesText": "Keybund writes small rules into the config of Git and ssh: “repositories in ~/dev/client-a/ → key A”, “server nas → key B”. So no repository ever takes the wrong key by accident.",
   "howItWorks_runsTitle": "Works without Keybund",
-  "howItWorks_runsText": "Git and ssh read these rules themselves. Keybund does not have to run for that – you work as usual in the terminal, the IDE or Dolphin.",
+  "howItWorks_runsText": "Git and ssh read these rules themselves. Keybund does not have to run for that – you work as usual in the terminal, the IDE or the file manager.",
   "howItWorks_show": "How does Keybund work?",
   "howItWorks_title": "How Keybund works",
   "howItWorks_hide": "Hide the explanation",
@@ -287,13 +267,8 @@
   "status_lastWritten": "last written {when}",
   "status_pending": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "{n} config file does not match your keys – was it changed outside Keybund?",
         "nPlural=other": "{n} config files do not match your keys – were they changed outside Keybund?"
@@ -310,13 +285,8 @@
   "home_toDoctor": "Open doctor",
   "home_importAvailable": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "Your {file} has an entry with its own key that Keybund can take over.",
         "nPlural=other": "Your {file} has {n} entries with their own key that Keybund can take over."
@@ -379,13 +349,8 @@
   "apply_intro": "What you change in Keybund is written right away. These files still do not match your keys – usually because they were edited or deleted by hand. Keybund only writes its own files and one include line each in ~/.ssh/config and ~/.gitconfig; your files are backed up first.",
   "apply_written": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "{n} file written",
         "nPlural=other": "{n} files written"
@@ -409,13 +374,8 @@
   "import_nothingLeft": "All taken over – nothing in ~/.ssh/config mixes with Keybund any more.",
   "import_done": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "All taken over: {n} key",
         "nPlural=other": "All taken over: {n} keys"
@@ -424,13 +384,8 @@
   ],
   "import_doneRemoved": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "All taken over: {n} key, old entries removed",
         "nPlural=other": "All taken over: {n} keys, old entries removed"
@@ -449,13 +404,8 @@
   "import_removeOldHint": "As long as they are there, ssh offers their keys as well – a login can then succeed with the wrong key. A backup is made first (~/.ssh/config.keybund-backup).",
   "import_button": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "Take over {n} key",
         "nPlural=other": "Take over {n} keys"
@@ -544,7 +494,7 @@
   "usage_makeDefault": "Make default",
   "usage_folderTile": "All repositories in a folder, e.g. ~/dev/client-c/ – with their own name and e-mail in the commits.",
   "usage_accountTile": "GitHub, GitLab or Bitbucket – Keybund helps you add the key there so you can push.",
-  "usage_serverTile": "ssh, scp and sftp to a computer or an IP – also in Dolphin.",
+  "usage_serverTile": "ssh, scp and sftp to a computer or an IP – also in sftp clients and file managers.",
   "usage_orDefault": "Or: use it as the default for Git (wherever no other key applies)",
   "test_running": "Testing the connection",
   "test_last": "Last tested {when}: {result}",

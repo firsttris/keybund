@@ -550,6 +550,8 @@ pub struct Paths {
     pub ssh_keybund_conf: String,
     pub gitconfig: String,
     pub index_gitconfig: String,
+    /// The system: the app hides what only exists on Linux (Dolphin's libssh).
+    pub platform: keybund_core::env::Platform,
 }
 
 pub fn paths(env: &Env) -> Paths {
@@ -559,6 +561,7 @@ pub fn paths(env: &Env) -> Paths {
         ssh_keybund_conf: env.contract(&env.ssh_keybund_conf()),
         gitconfig: env.contract(&env.gitconfig()),
         index_gitconfig: env.contract(&env.index_gitconfig()),
+        platform: env.platform,
     }
 }
 

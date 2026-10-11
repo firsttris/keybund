@@ -250,6 +250,8 @@ function FoldersForm({ saved }: { saved: Settings }) {
 function AdvancedCard() {
   const settings = useSettings();
   const update = useUpdateSettings();
+  // Dolphin and its libssh only exist on Linux.
+  const linux = usePaths().data?.platform !== "macos";
   const s = settings.data;
   if (settings.error) return <LoadFailed id="advanced-title" title={m.settings_special()} error={settings.error} />;
   if (!s) return <Spinner />;
@@ -270,18 +272,20 @@ function AdvancedCard() {
           onCheckedChange={(v) => toggle({ known_hosts_per_profile: v })}
         />
       </label>
-      <label className="flex items-start justify-between gap-4">
-        <span className="flex flex-col gap-0.5">
-          <span className="text-[13px] font-medium">{m.settings_absoluteInclude()}</span>
-          <span className="text-xs text-muted-foreground">{m.settings_absoluteIncludeHint()}</span>
-        </span>
-        <Switch
-          aria-label={m.settings_absoluteInclude()}
-          checked={s.absolute_ssh_include}
-          disabled={update.isPending}
-          onCheckedChange={(v) => toggle({ absolute_ssh_include: v })}
-        />
-      </label>
+      {linux && (
+        <label className="flex items-start justify-between gap-4">
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-medium">{m.settings_absoluteInclude()}</span>
+            <span className="text-xs text-muted-foreground">{m.settings_absoluteIncludeHint()}</span>
+          </span>
+          <Switch
+            aria-label={m.settings_absoluteInclude()}
+            checked={s.absolute_ssh_include}
+            disabled={update.isPending}
+            onCheckedChange={(v) => toggle({ absolute_ssh_include: v })}
+          />
+        </label>
+      )}
     </Card>
   );
 }

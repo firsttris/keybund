@@ -168,13 +168,8 @@
   "usage_default": "Standard",
   "usage_folders": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "{n} Ordner",
         "nPlural=other": "{n} Ordner"
@@ -183,13 +178,8 @@
   ],
   "usage_servers": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "{n} Server",
         "nPlural=other": "{n} Server"
@@ -221,13 +211,8 @@
   "sidebar_doctorHint": "Prüft, ob ssh und Git richtig eingerichtet sind",
   "sidebar_hints": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "{n} Hinweis",
         "nPlural=other": "{n} Hinweise"
@@ -246,13 +231,8 @@
   "diff_delete": "gelöscht",
   "diff_summary": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "Zeilen · {n} Datei",
         "nPlural=other": "Zeilen · {n} Dateien"
@@ -279,7 +259,7 @@
   "howItWorks_rulesTitle": "Regeln statt Ausprobieren",
   "howItWorks_rulesText": "Keybund schreibt kleine Regeln in die Config von Git und ssh: „Repos in ~/dev/kunde-a/ → Key A“, „Server nas → Key B“. So nimmt nie ein Repo versehentlich den falschen Key.",
   "howItWorks_runsTitle": "Läuft ohne Keybund",
-  "howItWorks_runsText": "Git und ssh lesen diese Regeln selbst. Keybund muss dafür nicht laufen – du arbeitest wie gewohnt im Terminal, in der IDE oder in Dolphin.",
+  "howItWorks_runsText": "Git und ssh lesen diese Regeln selbst. Keybund muss dafür nicht laufen – du arbeitest wie gewohnt im Terminal, in der IDE oder im Dateimanager.",
   "howItWorks_show": "Wie funktioniert Keybund?",
   "howItWorks_title": "So funktioniert Keybund",
   "howItWorks_hide": "Erklärung ausblenden",
@@ -287,13 +267,8 @@
   "status_lastWritten": "zuletzt geschrieben {when}",
   "status_pending": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "{n} Config-Datei passt nicht zu deinen Keys – wurde sie außerhalb von Keybund geändert?",
         "nPlural=other": "{n} Config-Dateien passen nicht zu deinen Keys – wurden sie außerhalb von Keybund geändert?"
@@ -310,13 +285,8 @@
   "home_toDoctor": "Zum Doctor",
   "home_importAvailable": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "In deiner {file} steht ein Eintrag mit eigenem Key, den Keybund übernehmen kann.",
         "nPlural=other": "In deiner {file} stehen {n} Einträge mit eigenem Key, die Keybund übernehmen kann."
@@ -379,13 +349,8 @@
   "apply_intro": "Was du in Keybund änderst, wird sofort geschrieben. Diese Dateien passen trotzdem nicht zu deinen Keys – meist, weil sie von Hand geändert oder gelöscht wurden. Keybund schreibt nur seine eigenen Dateien und je eine Include-Zeile in ~/.ssh/config und ~/.gitconfig; von deinen Dateien gibt es vorher ein Backup.",
   "apply_written": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "{n} Datei geschrieben",
         "nPlural=other": "{n} Dateien geschrieben"
@@ -409,13 +374,8 @@
   "import_nothingLeft": "Alles übernommen – in ~/.ssh/config steht nichts mehr, das sich mit Keybund mischt.",
   "import_done": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "Alles übernommen: {n} Key",
         "nPlural=other": "Alles übernommen: {n} Keys"
@@ -424,13 +384,8 @@
   ],
   "import_doneRemoved": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "Alles übernommen: {n} Key, alte Einträge entfernt",
         "nPlural=other": "Alles übernommen: {n} Keys, alte Einträge entfernt"
@@ -449,13 +404,8 @@
   "import_removeOldHint": "Solange sie dort stehen, bietet ssh ihre Keys zusätzlich an – eine Anmeldung kann dann mit dem falschen Key gelingen. Vorher wird ein Backup angelegt (~/.ssh/config.keybund-backup).",
   "import_button": [
     {
-      "declarations": [
-        "input n",
-        "local nPlural = n: plural"
-      ],
-      "selectors": [
-        "nPlural"
-      ],
+      "declarations": ["input n", "local nPlural = n: plural"],
+      "selectors": ["nPlural"],
       "match": {
         "nPlural=one": "{n} Key übernehmen",
         "nPlural=other": "{n} Keys übernehmen"
@@ -544,7 +494,7 @@
   "usage_makeDefault": "Als Standard",
   "usage_folderTile": "Alle Repos in einem Ordner, z. B. ~/dev/kunde-c/ – mit eigenem Namen und E-Mail in den Commits.",
   "usage_accountTile": "GitHub, GitLab oder Bitbucket – Keybund trägt den Key dort ein, damit du pushen kannst.",
-  "usage_serverTile": "ssh, scp und sftp zu einem Rechner oder einer IP – auch in Dolphin.",
+  "usage_serverTile": "ssh, scp und sftp zu einem Rechner oder einer IP – auch in sftp-Programmen und Dateimanagern.",
   "usage_orDefault": "Oder: als Standard für Git benutzen (überall, wo kein anderer Key gilt)",
   "test_running": "Teste Verbindung",
   "test_last": "Zuletzt getestet {when}: {result}",

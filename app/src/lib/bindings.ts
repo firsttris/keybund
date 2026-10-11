@@ -320,11 +320,20 @@ export type Paths = {
 	ssh_keybund_conf: string,
 	gitconfig: string,
 	index_gitconfig: string,
+	/**  The system: the app hides what only exists on Linux (Dolphin's libssh). */
+	platform: Platform,
 };
 
 export type Plan = {
 	changes: FileChange[],
 };
+
+/**
+ *  The operating system Keybund writes configs for. Rendering stays pure:
+ *  it takes the platform from [`Env`] instead of asking `cfg!` itself, so
+ *  tests render the macOS files on Linux too.
+ */
+export type Platform = "linux" | "macos";
 
 export type ProbeResult = {
 	success: boolean,
