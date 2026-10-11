@@ -720,3 +720,72 @@ fn a_key_comment_cannot_add_lines_to_the_pub_file() {
     assert_eq!(err.kind(), "invalid_value");
     assert!(!env.expand("~/.ssh/x").exists());
 }
+
+/// ssh refuses a config file others may write to ("Bad owner or
+/// permissions") – then no Host block applies, Keybund's included. The
+/// doctor sees it and the fix takes only the group/other write bits away;
+/// a 0400 key stays 0400.
+#[test]
+#[cfg(unix)]
+fn doctor_checks_the_config_files_ssh_refuses() {
+    use std::os::unix::fs::PermissionsExt;
+    if !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    apply::apply_config(&env, &config).unwrap();
+    let by_id = |report: &doctor::Report, id: &str| report.checks.iter().find(|c| c.id == id).map(|c| c.status);
+    assert_eq!(by_id(&doctor::run(&env), "config-perms"), Some(doctor::Status::Ok));
+
+    fs::set_permissions(env.ssh_config(), fs::Permissions::from_mode(0o664)).unwrap();
+    fs::set_permissions(env.ssh_keybund_conf(), fs::Permissions::from_mode(0o602)).unwrap();
+    let key = env.expand("~/.ssh/privat_ed25519");
+    fs::set_permissions(&key, fs::Permissions::from_mode(0o400)).unwrap();
+    let report = doctor::run(&env);
+    assert_eq!(by_id(&report, "config-perms"), Some(doctor::Status::Error));
+    assert_eq!(by_id(&report, "key-perms"), Some(doctor::Status::Ok), "0400 is fine for ssh");
+
+    doctor::fix(&env, &doctor::Fix::Permissions).unwrap();
+    let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(&env.ssh_config()), 0o644);
+    assert_eq!(mode(&env.ssh_keybund_conf()), 0o600);
+    assert_eq!(mode(&key), 0o400, "the fix only touches what is wrong");
+    assert_eq!(by_id(&doctor::run(&env), "config-perms"), Some(doctor::Status::Ok));
+}
+
+/// `git config --show-origin` C-quotes a path with non-ASCII bytes; `which`
+/// must still show `~/…`, also for a user named jörg.
+#[test]
+fn which_shows_the_origin_in_a_non_ascii_home() {
+    if !has("git") || !has("ssh-keygen") {
+        return;
+    }
+    let outer = tempfile::tempdir().unwrap();
+    let home = outer.path().canonicalize().unwrap().join("jörg");
+    fs::create_dir_all(&home).unwrap();
+    let env = Env::with_home(&home);
+    fs::create_dir_all(env.ssh_dir()).unwrap();
+    let path = keygen::default_key_path("acme");
+    keygen::generate(&env, &GenerateOptions { path: path.clone(), comment: "t".into(), passphrase: None }).unwrap();
+    fs::create_dir_all(home.join("dev/acme/app")).unwrap();
+    let config = Config {
+        profiles: vec![Profile {
+            id: "acme".into(),
+            name: "Acme".into(),
+            key: KeyRef { path, comment: None },
+            folders: vec![store::normalize_folder(&env, "~/dev/acme")],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    store::save(&env, &config).unwrap();
+    apply::apply_config(&env, &config).unwrap();
+    git(&env, &home.join("dev/acme/app"), &["init", "-q"]);
+    let r = which::which(&env, &config, "~/dev/acme/app").unwrap();
+    assert_eq!(r.source.as_deref(), Some("~/.config/keybund/git/acme.gitconfig"), "{r:?}");
+    assert_eq!(r.profile_id.as_deref(), Some("acme"));
+    // A repository's own setting: the origin names the repository, not `.git/config`.
+    git(&env, &home.join("dev/acme/app"), &["config", "core.sshCommand", "ssh -i ~/.ssh/other"]);
+    let r = which::which(&env, &config, "~/dev/acme/app").unwrap();
+    assert_eq!(r.source.as_deref(), Some("~/dev/acme/app/.git/config"), "{r:?}");
+}

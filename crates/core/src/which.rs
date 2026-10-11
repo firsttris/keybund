@@ -170,7 +170,8 @@ fn which_folder(env: &Env, config: &Config, query: &str) -> Result<WhichResult> 
 fn which_host(env: &Env, config: &Config, host: &str) -> Result<WhichResult> {
     let mut result = WhichResult::new(host, WhichMode::Host);
     let mut cmd = env.command("ssh");
-    cmd.args(["-G", host]);
+    // `--`: a query starting with `-` is a host, not an option.
+    cmd.args(["-G", "--", host]);
     let out = process::stdout(cmd)?;
     let mut identities = Vec::new();
     for line in out.lines() {
@@ -218,8 +219,16 @@ fn which_host(env: &Env, config: &Config, host: &str) -> Result<WhichResult> {
 
 /// Fingerprints of the keys loaded in ssh-agent; `None` if no agent runs.
 pub fn agent_fingerprints(env: &Env) -> Option<Vec<String>> {
+    agent_fingerprints_at(env, None)
+}
+
+/// The keys of the agent at `socket` (`None`: the own `SSH_AUTH_SOCK`).
+pub fn agent_fingerprints_at(env: &Env, socket: Option<&str>) -> Option<Vec<String>> {
     let mut cmd = env.command("ssh-add");
     cmd.arg("-l");
+    if let Some(sock) = socket {
+        cmd.env("SSH_AUTH_SOCK", sock);
+    }
     let out = process::output(cmd).ok()?;
     match out.status.code() {
         Some(0) => Some(
@@ -247,15 +256,20 @@ fn git_dir(env: &Env, dir: &Path) -> Option<PathBuf> {
     process::stdout(cmd).ok().map(|s| PathBuf::from(s.trim())).filter(|p| p.is_absolute())
 }
 
-/// `git config --show-origin --get <key>` → (origin, value).
+/// `git config --show-origin --get <key>` → (origin, value). With `-z` git
+/// prints the origin raw (otherwise a non-ASCII home like `/home/jörg`
+/// comes back C-quoted); a relative origin (`.git/config`) is anchored at `dir`.
 fn git_get(env: &Env, dir: &Path, key: &str) -> Option<(String, String)> {
     let mut cmd = env.command("git");
-    cmd.arg("-C").arg(dir).args(["config", "--show-origin", "--get", key]);
+    cmd.arg("-C").arg(dir).args(["config", "-z", "--show-origin", "--get", key]);
     let out = process::stdout(cmd).ok()?;
-    let line = out.lines().next()?;
-    let (origin, value) = line.split_once('\t')?;
+    let mut parts = out.split('\0');
+    let origin = parts.next()?;
+    let value = parts.next()?;
     let origin = origin.strip_prefix("file:").unwrap_or(origin);
-    Some((contract_str(env, origin), value.to_string()))
+    let origin =
+        if Path::new(origin).is_absolute() { origin.to_string() } else { dir.join(origin).display().to_string() };
+    Some((contract_str(env, &origin), value.to_string()))
 }
 
 /// Extracts the `-i` argument from an ssh command line.

@@ -6,6 +6,7 @@
 use std::io::Write;
 use std::path::Path;
 use std::process::Stdio;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -104,12 +105,30 @@ pub fn ssh_args(env: &Env, host: &HostEntry) -> Vec<String> {
 /// Installs the profile's public key on `host`. `extra_args` go before the
 /// target (tests use them for an isolated ssh config).
 pub fn install_with(env: &Env, profile: &Profile, host: &HostEntry, extra_args: &[String]) -> Result<InstallResult> {
+    install_prompting(env, profile, host, extra_args, crate::probe::Prompt::Terminal)
+}
+
+/// Like [`install`], for the app: a password or passphrase goes through the
+/// askpass dialog, never through a terminal the app may have been started from.
+pub fn install_detached(env: &Env, profile: &Profile, host: &HostEntry) -> Result<InstallResult> {
+    install_prompting(env, profile, host, &[], crate::probe::Prompt::Detached)
+}
+
+fn install_prompting(
+    env: &Env,
+    profile: &Profile,
+    host: &HostEntry,
+    extra_args: &[String],
+    prompt: crate::probe::Prompt,
+) -> Result<InstallResult> {
     let public = keygen::read_public(env, &profile.key)?.line();
     let mut cmd = env.command("ssh");
-    cmd.args(extra_args).args(ssh_args(env, host)).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    if let Some(askpass) = askpass_program() {
-        cmd.env("SSH_ASKPASS", askpass).env("SSH_ASKPASS_REQUIRE", "prefer");
+    cmd.args(extra_args).args(ssh_args(env, host)).stdout(Stdio::piped()).stderr(Stdio::piped());
+    if prompt == crate::probe::Prompt::Detached {
+        crate::probe::detach(&mut cmd);
     }
+    // The key goes in through stdin after the login (also after a password prompt).
+    cmd.stdin(Stdio::piped());
     let mut child = cmd.spawn().map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             Error::ToolMissing("ssh".into())
@@ -120,10 +139,45 @@ pub fn install_with(env: &Env, profile: &Profile, host: &HostEntry, extra_args: 
     if let Some(mut stdin) = child.stdin.take() {
         let _ = stdin.write_all(public.as_bytes());
     }
-    let out = child.wait_with_output().map_err(|e| Error::ToolFailed { tool: "ssh".into(), message: e.to_string() })?;
+    let out = wait_with_timeout(child, Duration::from_secs(60))?;
     let output =
         format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)).trim().to_string();
     Ok(interpret(&output, out.status.success(), host))
+}
+
+/// `wait_with_output` with a deadline: an ssh waiting on a password prompt
+/// nobody answers must not hang the app.
+fn wait_with_timeout(mut child: std::process::Child, timeout: Duration) -> Result<std::process::Output> {
+    use std::io::Read;
+    let tool =
+        || Error::ToolFailed { tool: "ssh".into(), message: format!("keine Antwort nach {} s", timeout.as_secs()) };
+    let mut stdout = child.stdout.take();
+    let mut stderr = child.stderr.take();
+    let reader = std::thread::spawn(move || {
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        if let Some(p) = stdout.as_mut() {
+            let _ = p.read_to_end(&mut out);
+        }
+        if let Some(p) = stderr.as_mut() {
+            let _ = p.read_to_end(&mut err);
+        }
+        (out, err)
+    });
+    let start = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if start.elapsed() > timeout => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(tool());
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            Err(e) => return Err(Error::ToolFailed { tool: "ssh".into(), message: e.to_string() }),
+        }
+    };
+    let (stdout, stderr) = reader.join().unwrap_or_default();
+    Ok(std::process::Output { status, stdout, stderr })
 }
 
 pub fn install(env: &Env, profile: &Profile, host: &HostEntry) -> Result<InstallResult> {

@@ -97,6 +97,17 @@ pub fn scan_files(env: &Env) -> Vec<EnvOverride> {
     out
 }
 
+/// A variable as the user's login shell sets it (`.bashrc`, `.zshrc` …),
+/// which a GUI started from the desktop does not see.
+pub fn login_shell_var(env: &Env, name: &str) -> Option<String> {
+    let shell = env.login_shell.as_deref()?;
+    shell_vars(shell, &env.home, Duration::from_secs(4))?
+        .into_iter()
+        .find(|(k, _)| k == name)
+        .map(|(_, v)| v)
+        .filter(|v| !v.is_empty())
+}
+
 /// Environment of an interactive login shell (`$SHELL -l -i -c env`), with
 /// a timeout in case a shell config starts something long-running.
 pub fn shell_vars(shell: &Path, home: &Path, timeout: Duration) -> Option<Vec<(String, String)>> {

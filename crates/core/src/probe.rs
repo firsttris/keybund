@@ -1,5 +1,7 @@
 //! Connection test: `ssh -T` with only the profile's key.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 use crate::i18n::Msg;
@@ -83,10 +85,10 @@ pub fn steps(env: &Env, output: &str) -> Vec<ProbeStep> {
             Some(ProbeStep::ok(msg!("step_hostKeyOk")))
         } else if let Some(rest) = line.strip_prefix("Offering public key: ") {
             offered = true;
-            Some(ProbeStep::info(msg!("step_offer", key = short(rest.split_whitespace().next().unwrap_or(rest)))))
+            Some(ProbeStep::info(msg!("step_offer", key = short(key_path(rest)))))
         } else if let Some(rest) = line.strip_prefix("Server accepts key: ") {
             offered = false;
-            Some(ProbeStep::ok(msg!("step_accepted", key = short(rest.split_whitespace().next().unwrap_or(rest)))))
+            Some(ProbeStep::ok(msg!("step_accepted", key = short(key_path(rest)))))
         } else if line.starts_with("Authentications that can continue") && offered {
             offered = false;
             Some(ProbeStep::fail(msg!("step_rejected")))
@@ -179,8 +181,31 @@ pub fn ssh_args(profile: &Profile, host: &HostEntry) -> Vec<String> {
     args
 }
 
-/// Runs the connection test against one host of a profile.
+/// How ssh may ask for a passphrase during the test.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Prompt {
+    /// On the terminal the command runs in (the CLI).
+    Terminal,
+    /// Through an askpass dialog (ksshaskpass …), never on a terminal: the
+    /// app must not block on a terminal it may have been started from.
+    Detached,
+}
+
+/// Longer than this and something is waiting for input nobody sees.
+const TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Runs the connection test against one host of a profile, asking for a
+/// passphrase on the terminal if needed.
 pub fn probe(env: &Env, profile: &Profile, host: &HostEntry) -> Result<ProbeResult> {
+    probe_with(env, profile, host, Prompt::Terminal)
+}
+
+/// The test for the app: a passphrase goes through the askpass dialog.
+pub fn probe_detached(env: &Env, profile: &Profile, host: &HostEntry) -> Result<ProbeResult> {
+    probe_with(env, profile, host, Prompt::Detached)
+}
+
+pub fn probe_with(env: &Env, profile: &Profile, host: &HostEntry, prompt: Prompt) -> Result<ProbeResult> {
     let mut args = ssh_args(profile, host);
     let key_idx = args.iter().position(|a| a == "-i").map(|i| i + 1).unwrap_or(0);
     let display_args: Vec<String> = args.iter().map(|a| shell_quote(a)).collect();
@@ -190,12 +215,42 @@ pub fn probe(env: &Env, profile: &Profile, host: &HostEntry) -> Result<ProbeResu
 
     let mut cmd = env.command("ssh");
     cmd.args(&args);
-    let out = process::output(cmd)?;
+    if prompt == Prompt::Detached {
+        detach(&mut cmd);
+    }
+    let out = process::output_timeout(cmd, TIMEOUT)?;
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     let output = format!("{stdout}{stderr}").trim().to_string();
     let expected = keygen::read_public(env, &profile.key).ok().map(|k| k.fingerprint());
     Ok(evaluate(env, host, &output, out.status.code(), format!("ssh {}", display_args.join(" ")), expected.as_deref()))
+}
+
+/// Keeps ssh away from any terminal: a passphrase or password is asked
+/// through the askpass program (forced, so it is used even when the app was
+/// started from a terminal); without one, ssh runs in its own session so it
+/// cannot open /dev/tty and reports that instead of waiting forever.
+pub fn detach(cmd: &mut std::process::Command) {
+    cmd.stdin(std::process::Stdio::null());
+    match crate::keyinstall::askpass_program() {
+        Some(askpass) => {
+            cmd.env("SSH_ASKPASS", askpass).env("SSH_ASKPASS_REQUIRE", "force");
+        }
+        None => {
+            cmd.env_remove("SSH_ASKPASS");
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // SAFETY: setsid only changes the session of the child, nothing else runs between fork and exec.
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+    }
 }
 
 /// Interprets the output of `ssh -v` and checks that the server accepted
@@ -214,6 +269,31 @@ pub fn evaluate(
     let mut result = interpret(host, &strip_debug(output), code, command);
     result.steps = steps(env, output);
     result.log = output.to_string();
+    // The passphrase: ssh only asks after the server accepted the public key,
+    // so a failure after asking is about the passphrase, not the key. It asks
+    // up to three times; one request and then nothing means the dialog was
+    // cancelled; ssh says so when it has no terminal and no askpass at all.
+    let asks = output.matches("read_passphrase: requested to askpass").count();
+    let no_tty = output.contains("read_passphrase: can't open /dev/tty");
+    if !result.success && result.account.is_none() && (asks > 0 || no_tty) {
+        result.message = if no_tty {
+            msg!("probe_noPassphrasePrompt")
+        } else if asks >= 2 {
+            msg!("probe_wrongPassphrase")
+        } else {
+            msg!("probe_passphraseCancelled")
+        };
+        result.key_rejected = false;
+    }
+    // A server that only runs a forced command (backup accounts, git-shell,
+    // Gitea's git user) accepts the key and then exits non-zero: logged in.
+    if !result.success && host.provider == Provider::Generic && output.contains("\nAuthenticated to ") {
+        if let Some(code) = code.filter(|c| *c != 0 && *c != 255) {
+            result.success = true;
+            result.key_rejected = false;
+            result.message = msg!("probe_loggedIn_noCommand", code = code);
+        }
+    }
     if let Some((path, fingerprint)) = &accepted {
         result.used_key = Some(env.contract(std::path::Path::new(path)));
         if result.success && expected.is_some_and(|e| e != fingerprint) {
@@ -230,14 +310,21 @@ pub fn evaluate(
     result
 }
 
+/// The path from ssh's `path TYPE SHA256:… [explicit] [agent]` key
+/// description (sshconnect2.c format_identity); a path may contain spaces.
+fn key_path(identity: &str) -> &str {
+    identity
+        .split_once(" SHA256:")
+        .and_then(|(before, _)| before.rsplit_once(' '))
+        .map_or(identity, |(path, _type)| path)
+}
+
 /// `(path, fingerprint)` from ssh's "Server accepts key" debug line.
 pub fn accepted_key(output: &str) -> Option<(String, String)> {
     let line = output.lines().rev().find(|l| l.contains("Server accepts key: "))?;
     let rest = &line[line.find("Server accepts key: ")? + "Server accepts key: ".len()..];
-    let mut parts = rest.split_whitespace();
-    let path = parts.next()?.to_string();
-    let fingerprint = parts.find(|p| p.starts_with("SHA256:"))?.to_string();
-    Some((path, fingerprint))
+    let fingerprint = rest.split_whitespace().find(|p| p.starts_with("SHA256:"))?.to_string();
+    Some((key_path(rest).to_string(), fingerprint))
 }
 
 /// Removes ssh's debug lines from the output shown to the user.
@@ -385,6 +472,72 @@ mod tests {
             String::new(),
         );
         assert!(!r.key_rejected, "an unreachable host says nothing about the key");
+    }
+
+    /// ssh asks for the passphrase only after the server accepted the key, so
+    /// a failure after asking is about the passphrase – and ssh's -v log
+    /// tells how often it asked.
+    #[test]
+    fn passphrase_outcomes_from_the_debug_log() {
+        let env = Env::with_home("/home/t");
+        let server = HostEntry { hostname: "10.0.0.2".into(), provider: Provider::Generic, ..Default::default() };
+        let log = |asks: usize, extra: &str| {
+            let mut s = String::from(
+                "debug1: Offering public key: /home/t/.ssh/nas ED25519 SHA256:aaaa explicit\n\
+                 debug1: Server accepts key: /home/t/.ssh/nas ED25519 SHA256:aaaa explicit\n",
+            );
+            for _ in 0..asks {
+                s.push_str("debug1: read_passphrase: requested to askpass\n");
+            }
+            s.push_str(extra);
+            s.push_str("debug1: No more authentication methods to try.\nroot@10.0.0.2: Permission denied (publickey).");
+            s
+        };
+        let eval = |text: &str| evaluate(&env, &server, text, Some(255), String::new(), Some("SHA256:aaaa"));
+        let r = eval(&log(3, ""));
+        assert!(!r.success && !r.key_rejected);
+        assert_eq!(r.message.key, "probe_wrongPassphrase");
+        let r = eval(&log(1, ""));
+        assert_eq!(r.message.key, "probe_passphraseCancelled");
+        let r = eval(&log(0, "debug1: read_passphrase: can't open /dev/tty\n"));
+        assert_eq!(r.message.key, "probe_noPassphrasePrompt");
+        assert!(!r.key_rejected, "the key is fine, nobody could type the passphrase");
+        // Without any prompt the server simply does not know the key.
+        let r = eval(&log(0, ""));
+        assert_eq!(r.message.key, "probe_keyUnknown_server");
+        assert!(r.key_rejected);
+    }
+
+    /// A forced command (backup accounts, git-shell) accepts the key and
+    /// exits non-zero: the login worked, the test says so.
+    #[test]
+    fn a_forced_command_still_counts_as_a_login() {
+        let env = Env::with_home("/home/t");
+        let server = HostEntry { hostname: "10.0.0.2".into(), provider: Provider::Generic, ..Default::default() };
+        let text = "debug1: Offering public key: /home/t/.ssh/nas ED25519 SHA256:aaaa explicit\n\
+                    debug1: Server accepts key: /home/t/.ssh/nas ED25519 SHA256:aaaa explicit\n\
+                    Authenticated to 10.0.0.2 ([10.0.0.2]:22) using \"publickey\".\n\
+                    debug1: Exit status 3";
+        let r = evaluate(&env, &server, text, Some(3), String::new(), Some("SHA256:aaaa"));
+        assert!(r.success, "{}", r.message);
+        assert_eq!(r.message.key, "probe_loggedIn_noCommand");
+        assert_eq!(r.used_key.as_deref(), Some("~/.ssh/nas"));
+        // … but not when another key got in.
+        let r = evaluate(&env, &server, text, Some(3), String::new(), Some("SHA256:other"));
+        assert!(!r.success && r.other_key);
+        // A real connection failure (255) is no login.
+        let r = evaluate(&env, &server, "ssh: connect to host 10.0.0.2: timed out", Some(255), String::new(), None);
+        assert!(!r.success);
+    }
+
+    #[test]
+    fn key_paths_with_spaces_survive_the_steps() {
+        let env = Env::with_home("/home/t");
+        let text = "debug1: Offering public key: /home/t/.ssh/Kunde Key ED25519 SHA256:aaaa explicit\n\
+                    debug1: Server accepts key: /home/t/.ssh/Kunde Key ED25519 SHA256:aaaa explicit";
+        let texts: Vec<String> = steps(&env, text).iter().map(|s| s.text.to_string()).collect();
+        assert_eq!(texts, ["Biete Key an: ~/.ssh/Kunde Key", "Server akzeptiert ~/.ssh/Kunde Key"]);
+        assert_eq!(accepted_key(text), Some(("/home/t/.ssh/Kunde Key".into(), "SHA256:aaaa".into())));
     }
 
     const VERBOSE_OK: &str = "OpenSSH_9.6p1 Ubuntu-3ubuntu13\n\

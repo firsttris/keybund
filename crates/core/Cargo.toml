@@ -22,6 +22,10 @@ sha2 = "0.11"
 base64 = "0.23"
 serde_json.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+# setsid for the connection test in the app (no terminal may be touched)
+libc = "0.2"
+
 [dev-dependencies]
 insta = "1"
 tempfile = "3"

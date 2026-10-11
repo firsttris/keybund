@@ -273,6 +273,42 @@ pub(crate) fn is_keybund_include(line: &str) -> bool {
         && parts.any(|p| p.trim_matches('"').ends_with("config.d/keybund.conf"))
 }
 
+/// `true` if the line includes keybund.conf, also through a pattern such as
+/// `Include ~/.ssh/config.d/*.conf` (ssh globs Include arguments; relative
+/// ones are anchored at ~/.ssh). Such a line is the user's own and is never
+/// removed – but it does make Keybund's own Include unnecessary.
+pub(crate) fn includes_keybund_conf(line: &str) -> bool {
+    let t = line.trim();
+    let mut parts = t.split_whitespace();
+    if !matches!(parts.next(), Some(k) if k.eq_ignore_ascii_case("include")) {
+        return false;
+    }
+    parts.any(|p| {
+        let p = p.trim_matches('"');
+        let rel = p.rsplit_once("/.ssh/").map_or(p, |(_, rest)| rest);
+        glob_match(rel, "config.d/keybund.conf")
+    })
+}
+
+/// The user's own `Include` pattern that reaches keybund.conf.
+fn is_glob_include(line: &str) -> bool {
+    includes_keybund_conf(line) && line.contains(['*', '?'])
+}
+
+/// `*` and `?` as in ssh's Include globbing, `*` not crossing a `/`.
+fn glob_match(pattern: &str, name: &str) -> bool {
+    fn go(p: &[u8], n: &[u8]) -> bool {
+        match (p.first(), n.first()) {
+            (None, None) => true,
+            (Some(b'*'), _) => go(&p[1..], n) || (n.first().is_some_and(|c| *c != b'/') && go(p, &n[1..])),
+            (Some(b'?'), Some(c)) if *c != b'/' => go(&p[1..], &n[1..]),
+            (Some(a), Some(b)) if a == b => go(&p[1..], &n[1..]),
+            _ => false,
+        }
+    }
+    go(pattern.as_bytes(), name.as_bytes())
+}
+
 /// The `Include` line without Keybund's path: `None` when the line held
 /// nothing else, the remaining line when the user put other files on it
 /// (`Include ~/.ssh/config.d/keybund.conf ~/.ssh/work.conf`).
@@ -289,21 +325,23 @@ fn is_directive(line: &str) -> bool {
     !t.is_empty() && !t.starts_with('#')
 }
 
-/// `true` if Keybund's `Include` is the first directive of the SSH config.
+/// `true` if Keybund's `Include` (or a pattern reaching it) is the first
+/// directive of the SSH config.
 pub fn ssh_include_on_top(content: &str) -> bool {
-    content.lines().find(|l| is_directive(l)).is_some_and(is_keybund_include)
+    content.lines().find(|l| is_directive(l)).is_some_and(includes_keybund_conf)
 }
 
-/// `true` if the SSH config contains Keybund's `Include` anywhere.
+/// `true` if the SSH config includes keybund.conf anywhere.
 pub fn ssh_include_present(content: &str) -> bool {
-    content.lines().any(is_keybund_include)
+    content.lines().any(includes_keybund_conf)
 }
 
 /// Makes `include` (Keybund's `Include` line) the first directive of
 /// `~/.ssh/config`. An `Include` below a `Host` block would only apply to
 /// that host; another variant of the line (`~` or full path) is replaced.
 pub fn ensure_ssh_include(content: &str, include: &str) -> String {
-    if content.lines().find(|l| is_directive(l)).is_some_and(|l| l.trim() == include) {
+    // Already first: our own line, or the user's pattern that reaches it.
+    if content.lines().find(|l| is_directive(l)).is_some_and(|l| l.trim() == include || is_glob_include(l)) {
         return content.to_string();
     }
     let rest: Vec<String> = content
@@ -424,6 +462,30 @@ mod tests {
             "Include ~/.ssh/config.d/keybund.conf\n\nInclude ~/.ssh/work.conf\n\nHost a\n"
         );
         assert_eq!(crate::uninstall::without_ssh_include(shared), "Include ~/.ssh/work.conf\n\nHost a\n");
+    }
+
+    /// `Include ~/.ssh/config.d/*.conf` already reaches keybund.conf: no
+    /// second line is added, the doctor sees the include, and an uninstall
+    /// leaves the user's pattern alone.
+    #[test]
+    fn a_glob_include_counts_but_is_never_removed() {
+        for content in [
+            "Include ~/.ssh/config.d/*.conf\n\nHost a\n",
+            "Include config.d/*\n\nHost a\n",
+            "Include \"/home/t/.ssh/config.d/keybund.c?nf\"\n",
+        ] {
+            assert!(ssh_include_on_top(content), "{content:?}");
+            assert!(ssh_include_present(content), "{content:?}");
+            assert_eq!(ensure_ssh_include(content, SSH_INCLUDE_LINE), content);
+            assert_eq!(crate::uninstall::without_ssh_include(content), content);
+        }
+        for content in
+            ["Include ~/.ssh/other/*.conf\n", "Include ~/.ssh/config.d/work.conf\n", "Include ~/*/keybund.conf\n"]
+        {
+            assert!(!ssh_include_present(content), "{content:?}");
+        }
+        assert!(glob_match("config.d/*", "config.d/keybund.conf"));
+        assert!(!glob_match("*", "config.d/keybund.conf"), "* does not cross a slash");
     }
 
     #[test]

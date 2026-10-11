@@ -1,6 +1,8 @@
 //! Health checks for everything Keybund depends on. Each pitfall from the
 //! plan has a check here; some come with an automatic fix.
 
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 
 use crate::i18n::Msg;
@@ -228,7 +230,47 @@ fn permission_checks(env: &Env, config: &Config) -> Vec<Check> {
             Check::new("key-perms", Status::Error, msg!("doctor_keyPerms_bad")).list(&bad).fix(Fix::Permissions)
         });
     }
+    // What the ssh client itself refuses: a config file (also an included
+    // one) that others may write to, or that belongs to someone else
+    // ("Bad owner or permissions", readconf.c) – then no Host block applies.
+    let unsafe_files: Vec<String> = ssh_config_files(env)
+        .into_iter()
+        .filter(|f| f.exists() && !config_file_ok(env, f))
+        .map(|f| env.contract(&f))
+        .collect();
+    if env.ssh_config().exists() {
+        checks.push(if unsafe_files.is_empty() {
+            Check::new("config-perms", Status::Ok, msg!("doctor_sshConfigPerms_ok"))
+        } else {
+            Check::new("config-perms", Status::Error, msg!("doctor_sshConfigPerms_bad"))
+                .list(&unsafe_files)
+                .detail(msg!("doctor_sshConfigPerms_bad_detail"))
+                .fix(Fix::Permissions)
+        });
+    }
     checks
+}
+
+/// The files ssh reads for its configuration: the user's and Keybund's.
+fn ssh_config_files(env: &Env) -> Vec<std::path::PathBuf> {
+    vec![env.ssh_config(), env.ssh_keybund_conf()]
+}
+
+/// ssh's rule for a config file: owned by the user (or root) and not
+/// writable by group or others.
+fn config_file_ok(env: &Env, path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let Ok(meta) = std::fs::metadata(path) else { return true };
+        let me = std::fs::metadata(&env.home).map(|m| m.uid()).unwrap_or(meta.uid());
+        (meta.uid() == me || meta.uid() == 0) && meta.mode() & 0o022 == 0
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (env, path);
+        true
+    }
 }
 
 fn include_checks(env: &Env) -> Vec<Check> {
@@ -282,10 +324,18 @@ fn git_env_check(env: &Env) -> Check {
 }
 
 fn agent_check(env: &Env) -> Check {
-    match which::agent_fingerprints(env) {
-        Some(keys) => {
-            Check::new("agent", Status::Ok, msg!("doctor_agent_ok")).detail(msg!("doctor_agent_keys", n = keys.len()))
-        }
+    if let Some(keys) = which::agent_fingerprints(env) {
+        return Check::new("agent", Status::Ok, msg!("doctor_agent_ok"))
+            .detail(msg!("doctor_agent_keys", n = keys.len()));
+    }
+    // An agent started in .bashrc/.zshrc exists for the terminal only: git
+    // there works, while the app, Dolphin and the IDE from the menu ask again.
+    let own = std::env::var("SSH_AUTH_SOCK").unwrap_or_default();
+    let terminal = gitenv::login_shell_var(env, "SSH_AUTH_SOCK")
+        .filter(|sock| *sock != own && which::agent_fingerprints_at(env, Some(sock)).is_some());
+    match terminal {
+        Some(sock) => Check::new("agent", Status::Warn, msg!("doctor_agent_terminalOnly"))
+            .detail(msg!("doctor_agent_terminalOnly_detail", socket = sock)),
         None => {
             Check::new("agent", Status::Warn, msg!("doctor_agent_missing")).detail(msg!("doctor_agent_missing_detail"))
         }
@@ -406,13 +456,14 @@ fn global_identity_file_check(env: &Env) -> Vec<Check> {
 /// standard key outside the git folders – worth knowing.
 fn own_ssh_command_check(env: &Env, config: &Config) -> Vec<Check> {
     let Some(def) = config.default_entry() else { return Vec::new() };
-    let mut cmd = env.command("git");
-    cmd.arg("config").arg("--file").arg(env.gitconfig()).args(["--get", "core.sshCommand"]);
-    let Ok(own) = crate::process::stdout(cmd) else { return Vec::new() };
-    let own = own.trim();
-    if own.is_empty() {
-        return Vec::new();
-    }
+    // git reads both global files; ~/.gitconfig after ~/.config/git/config.
+    let own = [env.xdg_gitconfig(), env.gitconfig()].into_iter().filter(|f| f.exists()).find_map(|file| {
+        let mut cmd = env.command("git");
+        cmd.arg("config").arg("--file").arg(file).args(["--get", "core.sshCommand"]);
+        crate::process::stdout(cmd).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    });
+    let Some(own) = own else { return Vec::new() };
+    let own = own.as_str();
     vec![Check::new("git-own-ssh-command", Status::Warn, msg!("doctor_ownSshCommand")).detail(msg!(
         "doctor_ownSshCommand_detail",
         command = own,
@@ -450,15 +501,22 @@ fn folder_checks(env: &Env, config: &Config) -> Vec<Check> {
 /// Runs an automatic fix.
 pub fn fix(env: &Env, fix: &Fix) -> Result<()> {
     match fix {
+        // Only what is wrong is touched: a 0400 key stays 0400, a private
+        // directory keeps its mode.
         Fix::Permissions => {
-            if env.ssh_dir().exists() {
+            if fsutil::mode(&env.ssh_dir()).is_some_and(|m| m & 0o022 != 0) {
                 fsutil::set_mode(&env.ssh_dir(), 0o700)?;
             }
             let config = store::load(env)?;
             for p in config.active_profiles() {
                 let path = env.expand(&p.key.path);
-                if path.exists() {
+                if fsutil::mode(&path).is_some_and(|m| m & 0o077 != 0) {
                     fsutil::set_mode(&path, 0o600)?;
+                }
+            }
+            for file in ssh_config_files(env) {
+                if let Some(mode) = fsutil::mode(&file).filter(|m| m & 0o022 != 0) {
+                    fsutil::set_mode(&file, mode & !0o022)?;
                 }
             }
             Ok(())

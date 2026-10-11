@@ -86,6 +86,11 @@ impl Env {
     pub fn gitconfig(&self) -> PathBuf {
         self.home.join(".gitconfig")
     }
+    /// `~/.config/git/config` (or under `XDG_CONFIG_HOME`): git reads it
+    /// before `~/.gitconfig`, so the latter wins.
+    pub fn xdg_gitconfig(&self) -> PathBuf {
+        self.config_dir.parent().map(Path::to_path_buf).unwrap_or_else(|| self.home.join(".config")).join("git/config")
+    }
     pub fn profiles_file(&self) -> PathBuf {
         self.config_dir.join("profiles.toml")
     }
