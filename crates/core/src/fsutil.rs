@@ -10,10 +10,7 @@ use crate::{Error, Result};
 /// on). A symlink (dotfile managers) is written through, not replaced.
 pub fn atomic_write(path: &Path, content: &str, mode: Option<u32>) -> Result<()> {
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let target = match fs::symlink_metadata(path) {
-        Ok(m) if m.file_type().is_symlink() => fs::canonicalize(path).map_err(|e| Error::io(path, e))?,
-        _ => path.to_path_buf(),
-    };
+    let target = resolve_link(path)?;
     let path = target.as_path();
     let mode = mode.or_else(|| self::mode(path));
     let dir = path.parent().unwrap_or(Path::new("."));
@@ -35,6 +32,23 @@ pub fn atomic_write(path: &Path, content: &str, mode: Option<u32>) -> Result<()>
         let _ = fs::remove_file(&tmp);
     }
     result
+}
+
+/// Follows symlinks by hand, so a dangling link (a dotfiles repository
+/// not checked out yet) still names the file to create.
+fn resolve_link(path: &Path) -> Result<PathBuf> {
+    let mut current = path.to_path_buf();
+    for _ in 0..40 {
+        match fs::symlink_metadata(&current) {
+            Ok(m) if m.file_type().is_symlink() => {
+                let target = fs::read_link(&current).map_err(|e| Error::io(&current, e))?;
+                current =
+                    if target.is_absolute() { target } else { current.parent().unwrap_or(Path::new(".")).join(target) };
+            }
+            _ => return Ok(current),
+        }
+    }
+    Err(Error::io(path, std::io::Error::other("symlink loop")))
 }
 
 /// Copies `path` to `<path>.keybund-backup`, replacing an older backup.
@@ -132,5 +146,18 @@ mod tests {
         // An explicit mode still wins.
         atomic_write(&config, "x\n", Some(0o644)).unwrap();
         assert_eq!(mode(&config), Some(0o644));
+    }
+
+    /// A dotfiles link whose repository is not checked out yet: the file is
+    /// created where the link points, the link stays.
+    #[test]
+    fn writes_through_a_dangling_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let link = dir.path().join(".gitconfig");
+        std::os::unix::fs::symlink("dotfiles/git/config", &link).unwrap();
+        atomic_write(&link, "[user]\n", None).unwrap();
+        assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert_eq!(fs::read_to_string(dir.path().join("dotfiles/git/config")).unwrap(), "[user]\n");
+        assert_eq!(fs::read_to_string(&link).unwrap(), "[user]\n");
     }
 }

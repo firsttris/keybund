@@ -4,7 +4,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::apply::{self, ApplyReport, Plan};
-use crate::render::SSH_INCLUDE_LINE;
 use crate::{fsutil, Env, Result};
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
@@ -30,14 +29,16 @@ pub struct UninstallPreview {
 /// Keybund put after it).
 pub fn without_ssh_include(content: &str) -> String {
     let lines: Vec<&str> = content.lines().collect();
-    let mut out: Vec<&str> = Vec::new();
+    let mut out: Vec<String> = Vec::new();
     let mut skip_blank = false;
     for line in lines {
-        let t = line.trim();
-        let is_ours = t == SSH_INCLUDE_LINE
-            || (t.to_ascii_lowercase().starts_with("include")
-                && t.trim_end_matches('"').ends_with("config.d/keybund.conf"));
-        if is_ours {
+        if apply::is_keybund_include(line) {
+            // The user's other paths on the same line stay.
+            if let Some(rest) = apply::without_keybund_path(line) {
+                out.push(rest);
+                skip_blank = false;
+                continue;
+            }
             skip_blank = true;
             continue;
         }
@@ -46,9 +47,9 @@ pub fn without_ssh_include(content: &str) -> String {
             continue;
         }
         skip_blank = false;
-        out.push(line);
+        out.push(line.to_string());
     }
-    join(out)
+    join(out.iter().map(String::as_str).collect())
 }
 
 /// `~/.gitconfig` without the `[include]` of Keybund's index (and the
@@ -131,7 +132,8 @@ pub fn preview(env: &Env, opts: UninstallOptions) -> Result<UninstallPreview> {
         } else {
             without_git_include(&current, &index)
         };
-        files.push((path, Some(new), true));
+        // Nothing left: the file only ever held Keybund's line, so it goes away.
+        files.push((path, (!new.trim().is_empty()).then_some(new), true));
     }
     files.push((env.ssh_keybund_conf(), None, false));
     files.push((env.allowed_signers(), None, false));
@@ -146,6 +148,12 @@ pub fn preview(env: &Env, opts: UninstallOptions) -> Result<UninstallPreview> {
     }
     if opts.purge {
         files.push((env.profiles_file(), None, false));
+        files.push((env.last_tests_file(), None, false));
+        if let Ok(entries) = std::fs::read_dir(env.known_hosts_dir()) {
+            let mut own: Vec<_> = entries.flatten().map(|e| e.path()).filter(|p| p.is_file()).collect();
+            own.sort();
+            files.extend(own.into_iter().map(|p| (p, None, false)));
+        }
     }
     Ok(UninstallPreview { plan: apply::plan_files(env, files)?, backups_available })
 }
@@ -153,7 +161,16 @@ pub fn preview(env: &Env, opts: UninstallOptions) -> Result<UninstallPreview> {
 /// Applies a previewed uninstall and removes directories that became empty.
 pub fn uninstall(env: &Env, plan: &Plan) -> Result<ApplyReport> {
     let report = apply::apply(env, plan)?;
+    // A restored backup is used up: left behind, a later "restore" would
+    // bring back a state that is no longer the one from before Keybund.
+    for change in plan.changes.iter().filter(|c| c.user_file) {
+        let backup = fsutil::backup_path(&change.abs_path);
+        if std::fs::read_to_string(&backup).ok() == change.new {
+            let _ = std::fs::remove_file(backup);
+        }
+    }
     for dir in [
+        env.known_hosts_dir(),
         env.git_dir(),
         env.ssh_keybund_conf().parent().map(|p| p.to_path_buf()).unwrap_or_default(),
         env.config_dir.clone(),

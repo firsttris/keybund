@@ -17,7 +17,7 @@ use crate::{keygen, Env, Error, Result};
 /// POSIX sh, run via `sh -c` so it works whatever the login shell is (fish).
 /// Reads the key from stdin, appends it once, keeps the file's last line
 /// intact. `KEYBUND_AUTHORIZED_KEYS` only exists for tests.
-const REMOTE_SCRIPT: &str = r#"umask 077; f=${KEYBUND_AUTHORIZED_KEYS:-$HOME/.ssh/authorized_keys}; mkdir -p "$(dirname "$f")" && touch "$f" && k=$(cat) && if grep -qxF "$k" "$f"; then echo KEYBUND_PRESENT; else if [ -s "$f" ] && [ -n "$(tail -c1 "$f")" ]; then echo >> "$f"; fi; printf "%s\n" "$k" >> "$f" && echo KEYBUND_ADDED; fi"#;
+const REMOTE_SCRIPT: &str = r#"umask 077; f=${KEYBUND_AUTHORIZED_KEYS:-$HOME/.ssh/authorized_keys}; mkdir -p "$(dirname "$f")" && touch "$f" && k=$(cat) && b=$(printf "%s" "$k" | cut -d" " -f1,2) && if grep -qF -- "$b" "$f"; then echo KEYBUND_PRESENT; else if [ -s "$f" ] && [ -n "$(tail -c1 "$f")" ]; then echo >> "$f"; fi; printf "%s\n" "$k" >> "$f" && echo KEYBUND_ADDED; fi; if command -v restorecon >/dev/null 2>&1; then restorecon -F "$(dirname "$f")" "$f" 2>/dev/null || :; fi"#;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -186,6 +186,34 @@ mod tests {
         assert_eq!(args[args.len() - 2], "admin@nas");
         assert!(args.last().unwrap().starts_with("sh -c '"));
         assert!(!REMOTE_SCRIPT.contains('\''), "the script is wrapped in single quotes");
+    }
+
+    /// The remote script, run locally: a key that is already there with
+    /// another comment counts as present, a new one is appended once.
+    #[test]
+    #[cfg(unix)]
+    fn remote_script_matches_keys_not_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("authorized_keys");
+        std::fs::write(&file, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAA old-comment").unwrap();
+        let run = |key: &str| {
+            use std::io::Write;
+            let mut child = std::process::Command::new("sh")
+                .args(["-c", REMOTE_SCRIPT])
+                .env("KEYBUND_AUTHORIZED_KEYS", &file)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            child.stdin.take().unwrap().write_all(key.as_bytes()).unwrap();
+            String::from_utf8(child.wait_with_output().unwrap().stdout).unwrap()
+        };
+        assert_eq!(run("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAA new-comment").trim(), "KEYBUND_PRESENT");
+        assert_eq!(std::fs::read_to_string(&file).unwrap().lines().count(), 1);
+        assert_eq!(run("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBB nas").trim(), "KEYBUND_ADDED");
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert_eq!(text.lines().count(), 2, "{text}");
+        assert!(text.ends_with("AAAAIBBB nas\n"));
     }
 
     #[test]

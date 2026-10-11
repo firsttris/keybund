@@ -465,9 +465,7 @@ fn run_probe(env: &Env, profile: &Profile, only: Option<&str>) -> Result<ExitCod
         .hosts
         .iter()
         .filter(|h| {
-            only.map_or(true, |name| {
-                h.target_name().eq_ignore_ascii_case(name) || h.hostname.eq_ignore_ascii_case(name)
-            })
+            only.is_none_or(|name| h.target_name().eq_ignore_ascii_case(name) || h.hostname.eq_ignore_ascii_case(name))
         })
         .collect();
     if let (true, Some(name)) = (hosts.is_empty(), only) {
@@ -1081,9 +1079,7 @@ pub fn trust(env: &Env, id: &str, host: Option<&str>, yes: bool) -> Result<ExitC
         .hosts
         .iter()
         .filter(|h| {
-            host.map_or(true, |name| {
-                h.target_name().eq_ignore_ascii_case(name) || h.hostname.eq_ignore_ascii_case(name)
-            })
+            host.is_none_or(|name| h.target_name().eq_ignore_ascii_case(name) || h.hostname.eq_ignore_ascii_case(name))
         })
         .collect();
     if targets.is_empty() {
@@ -1114,7 +1110,7 @@ pub fn install_key(env: &Env, id: &str, host: Option<&str>) -> Result<ExitCode> 
         .hosts
         .iter()
         .filter(|h| {
-            host.map_or(true, |name| {
+            host.is_none_or(|name| {
                 h.ssh_patterns().iter().any(|s| s.eq_ignore_ascii_case(name)) || h.hostname.eq_ignore_ascii_case(name)
             })
         })

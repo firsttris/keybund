@@ -181,6 +181,26 @@ pub fn to_toml(config: &Config) -> String {
     toml::to_string_pretty(&raw).expect("profile data is always serializable")
 }
 
+/// Holds `~/.config/keybund/.lock` while a process changes profiles.toml
+/// and the configs (load → change → save → apply). The app and the CLI
+/// (or two CLI runs) would otherwise save each other's profiles away and
+/// delete each other's gitconfigs as stale. Released when dropped.
+pub struct WriteLock(#[allow(dead_code)] std::fs::File);
+
+/// Takes the lock, waiting for another process to finish.
+pub fn lock(env: &Env) -> Result<WriteLock> {
+    fsutil::ensure_dir(&env.config_dir, Some(0o700))?;
+    let path = env.config_dir.join(".lock");
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .map_err(|e| Error::io(&path, e))?;
+    file.lock().map_err(|e| Error::io(&path, e))?;
+    Ok(WriteLock(file))
+}
+
 /// Loads `profiles.toml`; a missing file yields an empty config.
 pub fn load(env: &Env) -> Result<Config> {
     match fsutil::read_optional(&env.profiles_file())? {

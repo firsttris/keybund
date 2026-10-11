@@ -68,10 +68,13 @@ pub fn parse_ssh_config(text: &str) -> Vec<HostBlock> {
         if patterns.len() != 1 || patterns[0].contains(['*', '?', '!']) {
             continue;
         }
-        // A comment directly above the Host line belongs to the block.
+        // One comment line directly above the Host line belongs to the block.
+        // A longer comment is the file's header ("managed by chezmoi", "do not
+        // edit"), not the block's name, and stays where it is.
+        let is_comment = |n: usize| lines[n].trim_start().starts_with('#');
         let mut start = i;
-        while start > 0 && lines[start - 1].trim_start().starts_with('#') {
-            start -= 1;
+        if i >= 1 && is_comment(i - 1) && (i == 1 || !is_comment(i - 2)) {
+            start = i - 1;
         }
         let comment = (start < i)
             .then(|| lines[i - 1].trim_start().trim_start_matches('#').trim().to_string())
@@ -385,6 +388,26 @@ Host *.internal !x.internal
 Match host foo
     IdentityFile ~/.ssh/foo
 ";
+
+    #[test]
+    fn a_file_header_is_not_a_block_comment() {
+        // A longer comment above the first block is the file's header: it is
+        // neither the block's name nor removed with the block.
+        let text = "# ~/.ssh/config – managed by chezmoi\n# DO NOT EDIT by hand\nHost github.com\n    IdentityFile ~/.ssh/a\n\nHost b\n    User x\n";
+        let blocks = parse_ssh_config(text);
+        assert_eq!(blocks[0].comment, None);
+        assert_eq!(blocks[0].start, 2);
+        assert_eq!(
+            without_blocks(text, &[&blocks[0]]),
+            "# ~/.ssh/config – managed by chezmoi\n# DO NOT EDIT by hand\nHost b\n    User x\n"
+        );
+        // One comment line directly above is the block's name, also at the top of the file.
+        let blocks = parse_ssh_config("# Work\nHost work\n    User x\n");
+        assert_eq!(blocks[0].comment.as_deref(), Some("Work"));
+        let blocks = parse_ssh_config("Host a\n    User x\n\n# Work\nHost work\n    User y\n");
+        assert_eq!(blocks[1].comment.as_deref(), Some("Work"));
+        assert_eq!(blocks[1].start, 3);
+    }
 
     #[test]
     fn parses_host_blocks() {

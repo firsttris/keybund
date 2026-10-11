@@ -139,6 +139,7 @@ fn append(path: &Path, name: &str, keys: &[String]) -> Result<()> {
     }
     // A hand-edited file may lack the final newline; the first key would glue onto its last line.
     let needs_newline = std::fs::read(path).ok().is_some_and(|c| !c.is_empty() && !c.ends_with(b"\n"));
+    let existed = path.exists();
     let mut file = std::fs::OpenOptions::new().create(true).append(true).open(path).map_err(|e| Error::io(path, e))?;
     if needs_newline {
         writeln!(file).map_err(|e| Error::io(path, e))?;
@@ -146,7 +147,12 @@ fn append(path: &Path, name: &str, keys: &[String]) -> Result<()> {
     for key in keys {
         writeln!(file, "{name} {key}").map_err(|e| Error::io(path, e))?;
     }
-    fsutil::set_mode(path, 0o600)
+    // A file Keybund creates is private; the user's own known_hosts keeps its mode.
+    if existed {
+        Ok(())
+    } else {
+        fsutil::set_mode(path, 0o600)
+    }
 }
 
 /// Checks the host key before connecting: known, pinned (added now), or

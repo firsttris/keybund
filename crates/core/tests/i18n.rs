@@ -121,7 +121,7 @@ fn every_key_used_in_rust_is_in_both_catalogs_with_its_placeholders() {
 
 #[test]
 fn the_field_names_of_invalid_values_exist() {
-    for field in ["name", "key", "gitName", "gitEmail", "folder", "hostname", "alias", "user"] {
+    for field in ["name", "key", "gitName", "gitEmail", "folder", "hostname", "alias", "user", "comment"] {
         for lang in [Lang::De, Lang::En] {
             assert!(catalog(lang).contains_key(&format!("field_{field}")), "field_{field} in {lang:?}");
         }

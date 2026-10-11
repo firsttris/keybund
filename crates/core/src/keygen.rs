@@ -123,6 +123,10 @@ pub struct GenerateOptions {
 
 /// Creates a new ed25519 key with `ssh-keygen`.
 pub fn generate(env: &Env, opts: &GenerateOptions) -> Result<KeyInfo> {
+    // The comment is the rest of the line in the .pub file: a line break would add lines to it.
+    if opts.comment.chars().any(char::is_control) {
+        return Err(Error::InvalidValue { field: "comment".into(), value: opts.comment.clone() });
+    }
     let path = env.expand(&opts.path);
     if path.exists() || Path::new(&format!("{}.pub", path.display())).exists() {
         return Err(Error::KeyExists(opts.path.clone()));

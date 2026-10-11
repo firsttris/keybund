@@ -44,11 +44,18 @@ impl CmdError {
 pub type CmdResult<T> = Result<T, CmdError>;
 
 /// GUI commands run on parallel threads; changes to `profiles.toml` and the
-/// configs must not interleave (load → change → save → apply).
+/// configs must not interleave (load → change → save → apply). The file
+/// lock also keeps the CLI out while the app writes, and vice versa.
 static WRITES: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-pub fn writing() -> std::sync::MutexGuard<'static, ()> {
-    WRITES.lock().unwrap_or_else(|e| e.into_inner())
+pub struct WriteGuard {
+    _mem: std::sync::MutexGuard<'static, ()>,
+    _file: store::WriteLock,
+}
+
+pub fn writing(env: &Env) -> CmdResult<WriteGuard> {
+    let mem = WRITES.lock().unwrap_or_else(|e| e.into_inner());
+    Ok(WriteGuard { _mem: mem, _file: store::lock(env)? })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -237,7 +244,7 @@ pub struct CreatedProject {
 /// Creates the key (if requested), the project folders and the profile,
 /// then writes all configs.
 pub fn create_project(env: &Env, project: &NewProject) -> CmdResult<CreatedProject> {
-    let _write = writing();
+    let _write = writing(env)?;
     let mut config = with_new_profile(env, project)?;
     let id = project.profile.id.clone();
     if let KeyChoice::Generate { comment, passphrase } = &project.key {
@@ -270,7 +277,7 @@ fn save_and_apply(env: &Env, config: &Config) -> CmdResult<ApplyReport> {
 
 /// Saves changes to an existing key (the id cannot change) and applies them.
 pub fn update_profile(env: &Env, profile: Profile) -> CmdResult<ProfileView> {
-    let _write = writing();
+    let _write = writing(env)?;
     let mut config = store::load(env)?;
     let profile = normalized(env, profile);
     let slot = config.profile_mut(&profile.id)?;
@@ -296,7 +303,7 @@ pub fn preview_add_host(env: &Env, id: &str, host: HostEntry) -> CmdResult<Plan>
 
 /// Adds the server to the profile and writes the configs.
 pub fn add_host(env: &Env, id: &str, host: HostEntry) -> CmdResult<ProfileView> {
-    let _write = writing();
+    let _write = writing(env)?;
     let config = with_host(env, id, host)?;
     save_and_apply(env, &config)?;
     let profile = config.profile(id)?;
@@ -323,7 +330,7 @@ pub fn host_key_check(env: &Env, id: &str, host: Option<&str>) -> CmdResult<Host
 
 /// Stores the host keys the user confirmed.
 pub fn trust_host_key(env: &Env, id: &str, host: Option<&str>, fingerprints: &[String]) -> CmdResult<()> {
-    let _write = writing();
+    let _write = writing(env)?;
     let config = store::load(env)?;
     let profile = config.profile(id)?;
     hostkeys::trust(env, &config.settings, profile, host_of(profile, host)?, fingerprints)?;
@@ -336,7 +343,7 @@ pub fn settings(env: &Env) -> CmdResult<Settings> {
 
 /// Saves the settings and rewrites the configs they affect.
 pub fn update_settings(env: &Env, settings: Settings) -> CmdResult<Settings> {
-    let _write = writing();
+    let _write = writing(env)?;
     let mut config = store::load(env)?;
     config.settings = Settings {
         projects_dir: store::normalize_dir(env, &settings.projects_dir)?,
@@ -348,7 +355,7 @@ pub fn update_settings(env: &Env, settings: Settings) -> CmdResult<Settings> {
 }
 
 pub fn set_default_profile(env: &Env, id: Option<String>) -> CmdResult<()> {
-    let _write = writing();
+    let _write = writing(env)?;
     let mut config = store::load(env)?;
     config.default_profile = id;
     save_and_apply(env, &config)?;
@@ -368,7 +375,7 @@ pub fn plan_changes(env: &Env) -> CmdResult<Plan> {
 /// user has seen. Changes made in the GUI are applied right away, so this
 /// is for files that were changed outside Keybund.
 pub fn apply_changes(env: &Env, expected_diffs: &[String]) -> CmdResult<ApplyReport> {
-    let _write = writing();
+    let _write = writing(env)?;
     let plan = plan_changes(env)?;
     let current: Vec<&str> = plan.changes.iter().map(|c| c.diff.as_str()).collect();
     if current != expected_diffs.iter().map(String::as_str).collect::<Vec<_>>() {
@@ -422,7 +429,7 @@ pub fn clone_repo(env: &Env, url: &str, profile_id: &str, target: Option<String>
 }
 
 pub fn archive_profile(env: &Env, id: &str) -> CmdResult<archive::ArchiveResult> {
-    let _write = writing();
+    let _write = writing(env)?;
     let mut config = store::load(env)?;
     let result = archive::archive(env, &mut config, id)?;
     apply::apply_config(env, &config)?;
@@ -444,7 +451,7 @@ pub struct ImportDone {
 /// the configs and (with `remove_old`) removes the old blocks from
 /// `~/.ssh/config`, which gets a backup first.
 pub fn import_profiles(env: &Env, chosen: &[ImportProposal], remove_old: bool) -> CmdResult<ImportDone> {
-    let _write = writing();
+    let _write = writing(env)?;
     let ids = import::import(env, chosen)?;
     let mut report = apply::apply_config(env, &store::load(env)?)?;
     if remove_old {
@@ -461,7 +468,7 @@ pub fn cleanup_preview(env: &Env) -> CmdResult<Plan> {
 }
 
 pub fn cleanup_apply(env: &Env, expected_diffs: &[String]) -> CmdResult<ApplyReport> {
-    let _write = writing();
+    let _write = writing(env)?;
     let plan = import::plan_cleanup(env)?;
     let current: Vec<&str> = plan.changes.iter().map(|c| c.diff.as_str()).collect();
     if current != expected_diffs.iter().map(String::as_str).collect::<Vec<_>>() {
@@ -476,7 +483,7 @@ pub fn uninstall_preview(env: &Env, opts: UninstallOptions) -> CmdResult<Uninsta
 
 /// Uninstalls, but only if the plan still matches the previewed diffs.
 pub fn uninstall_apply(env: &Env, opts: UninstallOptions, expected_diffs: &[String]) -> CmdResult<ApplyReport> {
-    let _write = writing();
+    let _write = writing(env)?;
     let plan = uninstall::preview(env, opts)?.plan;
     let current: Vec<&str> = plan.changes.iter().map(|c| c.diff.as_str()).collect();
     if current != expected_diffs.iter().map(String::as_str).collect::<Vec<_>>() {

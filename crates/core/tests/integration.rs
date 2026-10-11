@@ -637,3 +637,86 @@ fn apply_refuses_an_invalid_profiles_file() {
         assert_eq!(fs::read_to_string(env.ssh_keybund_conf()).unwrap(), before);
     }
 }
+
+/// `<file>.keybund-backup`, next to the file.
+fn backup_of(path: &Path) -> std::path::PathBuf {
+    let mut name = path.file_name().unwrap().to_os_string();
+    name.push(".keybund-backup");
+    path.with_file_name(name)
+}
+
+/// A fresh machine: no ~/.ssh/config, no ~/.gitconfig before Keybund. An
+/// uninstall takes both files away again, leaves no backup that would only
+/// hold Keybund's own line, and a later "restore backups" has nothing to do.
+#[test]
+fn uninstall_after_a_fresh_install_leaves_nothing_behind() {
+    if !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    fs::remove_file(env.ssh_config()).unwrap();
+    fs::remove_file(env.gitconfig()).unwrap();
+    apply::apply_config(&env, &config).unwrap();
+    assert!(env.ssh_config().exists() && env.gitconfig().exists());
+    assert!(!backup_of(&env.ssh_config()).exists());
+
+    let opts = keybund_core::uninstall::UninstallOptions { restore_backups: false, purge: true };
+    let preview = keybund_core::uninstall::preview(&env, opts).unwrap();
+    assert!(!preview.backups_available);
+    keybund_core::uninstall::uninstall(&env, &preview.plan).unwrap();
+    assert!(!env.ssh_config().exists(), "an empty file is not 'as before'");
+    assert!(!env.gitconfig().exists());
+    assert!(!backup_of(&env.ssh_config()).exists());
+    assert!(!backup_of(&env.gitconfig()).exists());
+    assert!(!env.last_tests_file().exists());
+
+    let again = keybund_core::uninstall::UninstallOptions { restore_backups: true, purge: false };
+    let preview = keybund_core::uninstall::preview(&env, again).unwrap();
+    assert!(!preview.backups_available);
+    assert!(preview.plan.changes.is_empty(), "{:?}", preview.plan.changes);
+}
+
+/// A restored backup is used up: "restore" twice does not bring Keybund back.
+#[test]
+fn a_restored_backup_is_not_restored_twice() {
+    if !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, config) = setup();
+    apply::apply_config(&env, &config).unwrap();
+    let opts = keybund_core::uninstall::UninstallOptions { restore_backups: true, purge: false };
+    let preview = keybund_core::uninstall::preview(&env, opts).unwrap();
+    assert!(preview.backups_available);
+    keybund_core::uninstall::uninstall(&env, &preview.plan).unwrap();
+    assert_eq!(fs::read_to_string(env.ssh_config()).unwrap(), "Host github.com\n    User git\n");
+    assert!(!backup_of(&env.ssh_config()).exists());
+    let preview = keybund_core::uninstall::preview(&env, opts).unwrap();
+    assert!(!preview.backups_available);
+    assert!(preview.plan.changes.is_empty());
+}
+
+/// The archive keeps what is there: a stale `.pub` in it blocks the move
+/// as much as a stale private key.
+#[test]
+fn archive_refuses_to_overwrite_a_public_key_in_the_archive() {
+    if !has("ssh-keygen") {
+        return;
+    }
+    let (_dir, env, mut config) = setup();
+    fs::create_dir_all(env.ssh_archive_dir()).unwrap();
+    fs::write(env.ssh_archive_dir().join("kunde-b_ed25519.pub"), "old").unwrap();
+    let err = archive::archive(&env, &mut config, "kunde-b").unwrap_err();
+    assert_eq!(err.kind(), "key_exists");
+    assert!(env.expand("~/.ssh/kunde-b_ed25519").exists(), "nothing moved");
+    assert!(!config.profile("kunde-b").unwrap().archived);
+}
+
+#[test]
+fn a_key_comment_cannot_add_lines_to_the_pub_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let env = Env::with_home(dir.path());
+    let opts = GenerateOptions { path: "~/.ssh/x".into(), comment: "a\nHost evil".into(), passphrase: None };
+    let err = keygen::generate(&env, &opts).unwrap_err();
+    assert_eq!(err.kind(), "invalid_value");
+    assert!(!env.expand("~/.ssh/x").exists());
+}

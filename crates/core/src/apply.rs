@@ -35,11 +35,11 @@ pub struct FileChange {
     /// added); they get a one-time backup before the first write.
     pub user_file: bool,
     #[serde(skip)]
-    abs_path: PathBuf,
+    pub(crate) abs_path: PathBuf,
     #[serde(skip)]
-    old: Option<String>,
+    pub(crate) old: Option<String>,
     #[serde(skip)]
-    new: Option<String>,
+    pub(crate) new: Option<String>,
     #[serde(skip)]
     mode: Option<u32>,
 }
@@ -211,7 +211,11 @@ pub fn apply(env: &Env, plan: &Plan) -> Result<ApplyReport> {
 
     let mut report = ApplyReport::default();
     for change in &plan.changes {
-        if change.user_file {
+        // A write that takes Keybund out again (uninstall) is not a takeover:
+        // the backup from before Keybund stays as it is, and a file Keybund
+        // created itself gets none (it would only hold Keybund's own line).
+        let keeps_keybund = change.new.as_deref().is_some_and(|n| keybund_in(env, &change.abs_path, n));
+        if change.user_file && keeps_keybund {
             // The backup holds the file as it was before Keybund: taken anew
             // whenever Keybund is not (or no longer) in it, e.g. after an
             // uninstall, so "restore" never brings back an outdated state.
@@ -262,11 +266,22 @@ pub fn apply_config(env: &Env, config: &Config) -> Result<ApplyReport> {
     apply(env, &plan(env, config)?)
 }
 
-fn is_keybund_include(line: &str) -> bool {
+pub(crate) fn is_keybund_include(line: &str) -> bool {
     let t = line.trim();
     let mut parts = t.split_whitespace();
     matches!(parts.next(), Some(k) if k.eq_ignore_ascii_case("include"))
         && parts.any(|p| p.trim_matches('"').ends_with("config.d/keybund.conf"))
+}
+
+/// The `Include` line without Keybund's path: `None` when the line held
+/// nothing else, the remaining line when the user put other files on it
+/// (`Include ~/.ssh/config.d/keybund.conf ~/.ssh/work.conf`).
+pub fn without_keybund_path(line: &str) -> Option<String> {
+    let indent = &line[..line.len() - line.trim_start().len()];
+    let mut parts = line.split_whitespace();
+    let keyword = parts.next()?;
+    let rest: Vec<&str> = parts.filter(|p| !p.trim_matches('"').ends_with("config.d/keybund.conf")).collect();
+    (!rest.is_empty()).then(|| format!("{indent}{keyword} {}", rest.join(" ")))
 }
 
 fn is_directive(line: &str) -> bool {
@@ -291,7 +306,10 @@ pub fn ensure_ssh_include(content: &str, include: &str) -> String {
     if content.lines().find(|l| is_directive(l)).is_some_and(|l| l.trim() == include) {
         return content.to_string();
     }
-    let rest: Vec<&str> = content.lines().filter(|l| !is_keybund_include(l)).collect();
+    let rest: Vec<String> = content
+        .lines()
+        .filter_map(|l| if is_keybund_include(l) { without_keybund_path(l) } else { Some(l.to_string()) })
+        .collect();
     let mut out = format!("{include}\n");
     if rest.iter().any(|l| !l.trim().is_empty()) {
         out.push('\n');
@@ -390,6 +408,22 @@ mod tests {
         assert_eq!(fixed.matches("keybund/git/index.gitconfig").count(), 1);
         assert!(fixed.contains("email = me@global.com"));
         assert!(fixed.find("me@global.com").unwrap() < fixed.find("index.gitconfig").unwrap());
+    }
+
+    #[test]
+    fn an_include_line_shared_with_other_paths_keeps_them() {
+        // ssh allows several paths on one Include; the user's other file must not vanish.
+        let shared = "Include ~/.ssh/config.d/keybund.conf ~/.ssh/work.conf\n\nHost a\n";
+        assert_eq!(
+            without_keybund_path("Include ~/.ssh/config.d/keybund.conf ~/.ssh/work.conf"),
+            Some("Include ~/.ssh/work.conf".into())
+        );
+        assert_eq!(without_keybund_path("  Include ~/.ssh/config.d/keybund.conf"), None);
+        assert_eq!(
+            ensure_ssh_include(shared, SSH_INCLUDE_LINE),
+            "Include ~/.ssh/config.d/keybund.conf\n\nInclude ~/.ssh/work.conf\n\nHost a\n"
+        );
+        assert_eq!(crate::uninstall::without_ssh_include(shared), "Include ~/.ssh/work.conf\n\nHost a\n");
     }
 
     #[test]

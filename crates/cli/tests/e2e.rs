@@ -289,3 +289,38 @@ fn a_server_from_first_contact_to_git_over_ssh() {
         predicate::str::contains("nas_ed25519").and(predicate::str::contains(format!("{me}@127.0.0.1:{port}"))),
     );
 }
+
+/// The app and the CLI, or a setup script and the user, writing at the same
+/// time: every profile survives and every config is written (a file lock
+/// serializes load → change → save → apply across processes).
+#[test]
+fn parallel_runs_do_not_lose_profiles() {
+    if !has_tools() {
+        return;
+    }
+    let sb = Sandbox::new();
+    let children: Vec<_> = (0..6)
+        .map(|n| {
+            let name = format!("Kunde {n}");
+            let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("keybund"));
+            cmd.args(["new", "--name", &name, "--provider", "github", "--host", "github.com", "--yes", "--no-browser"]);
+            cmd.env("HOME", &sb.home)
+                .env("PATH", format!("{}:{}", sb.bin.display(), std::env::var("PATH").unwrap_or_default()))
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .env_remove("SSH_AUTH_SOCK")
+                .env_remove("DISPLAY");
+            cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped()).spawn().unwrap()
+        })
+        .collect();
+    for child in children {
+        let out = child.wait_with_output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    }
+    let profiles = sb.read(".config/keybund/profiles.toml");
+    assert_eq!(profiles.matches("[[profile]]").count(), 6, "{profiles}");
+    for n in 0..6 {
+        assert!(sb.path(&format!(".config/keybund/git/kunde-{n}.gitconfig")).exists(), "kunde-{n}");
+        assert!(sb.path(&format!(".ssh/kunde-{n}_ed25519")).exists(), "key {n}");
+    }
+    sb.cmd().args(["apply", "--dry-run"]).assert().success().stdout(predicate::str::contains("Configs sind aktuell"));
+}

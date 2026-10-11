@@ -157,6 +157,22 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     let env = keybund_core::Env::from_system()?;
+    // Commands that change profiles.toml or the configs wait for the app
+    // or another keybund run to finish.
+    let writes = matches!(
+        cli.command,
+        Command::New(_)
+            | Command::Edit(_)
+            | Command::Apply { .. }
+            | Command::Doctor { fix: true }
+            | Command::Import { .. }
+            | Command::Default { .. }
+            | Command::Config { .. }
+            | Command::Uninstall { .. }
+            | Command::Archive { .. }
+            | Command::Trust { .. }
+    );
+    let _lock = if writes { Some(keybund_core::store::lock(&env)?) } else { None };
     match cli.command {
         Command::List { all } => commands::list(&env, all),
         Command::Show { profile } => commands::show(&env, &profile),
