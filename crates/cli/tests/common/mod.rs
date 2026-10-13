@@ -108,28 +108,23 @@ impl Sandbox {
     /// Puts a fake `ssh` first in PATH that prints `output` and exits with `code`.
     #[cfg(unix)]
     pub fn fake_ssh(&self, output: &str, code: i32) {
-        use std::os::unix::fs::PermissionsExt;
         let script = self.bin.join("ssh");
         let log = self.dir.path().join("ssh-args.log");
-        fs::write(
+        write_executable(
             &script,
-            format!(
+            &format!(
                 "#!/bin/sh\necho \"$@\" >> '{}'\necho '{}' >&2\nexit {code}\n",
                 log.display(),
                 output.replace('\'', "")
             ),
-        )
-        .unwrap();
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        );
     }
 
     /// A fake `ssh` that answers `ssh -G` with the given lines on stdout.
     #[cfg(unix)]
     pub fn fake_ssh_g(&self, lines: &str) {
-        use std::os::unix::fs::PermissionsExt;
         let script = self.bin.join("ssh");
-        fs::write(&script, format!("#!/bin/sh\ncat <<'EOF'\n{lines}\nEOF\n")).unwrap();
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        write_executable(&script, &format!("#!/bin/sh\ncat <<'EOF'\n{lines}\nEOF\n"));
     }
 
     pub fn ssh_log(&self) -> String {
@@ -140,10 +135,8 @@ impl Sandbox {
     /// A fake `ssh-keyscan` printing `output` (known_hosts lines).
     #[cfg(unix)]
     pub fn fake_keyscan(&self, output: &str) {
-        use std::os::unix::fs::PermissionsExt;
         let script = self.bin.join("ssh-keyscan");
-        fs::write(&script, format!("#!/bin/sh\ncat <<'EOF'\n{output}\nEOF\n")).unwrap();
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        write_executable(&script, &format!("#!/bin/sh\ncat <<'EOF'\n{output}\nEOF\n"));
     }
 
     /// A fake browser opener (`xdg-open` on Linux, `open` on macOS) that
@@ -160,10 +153,8 @@ impl Sandbox {
     /// An executable script in the sandbox's `bin`, which comes first on PATH.
     #[cfg(unix)]
     pub fn script(&self, name: &str, body: &str) {
-        use std::os::unix::fs::PermissionsExt;
         let path = self.bin.join(name);
-        fs::write(&path, body).unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        write_executable(&path, body);
     }
 
     pub fn new_profile(&self, name: &str, extra: &[&str]) {
@@ -182,20 +173,17 @@ impl Sandbox {
     /// then the user's config, in the order ssh itself reads them.
     #[cfg(unix)]
     pub fn ssh_shim(&self) {
-        use std::os::unix::fs::PermissionsExt;
         let real = real_tool("ssh").expect("ssh in PATH");
         let script = self.bin.join("ssh");
-        fs::write(
+        write_executable(
             &script,
-            format!(
+            &format!(
                 "#!/bin/sh\numask 077\ncfg=\"$HOME/.ssh/.test-config\"\n\
                  sed \"s|~/|$HOME/|g\" \"$HOME/.ssh/config.d/keybund.conf\" \"$HOME/.ssh/config\" 2>/dev/null \
                  | grep -v '^Include ' > \"$cfg\"\nexec '{}' -F \"$cfg\" \"$@\"\n",
                 real.display()
             ),
-        )
-        .unwrap();
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        );
     }
 
     /// `ssh -G <host>` through the shim: what ssh resolves from the generated files.
@@ -317,4 +305,21 @@ pub fn start_sshd_with(sshd: &Path, dir: &Path, authorized: &Path, extra: &str) 
 /// The user sshd logs in as.
 pub fn user() -> String {
     String::from_utf8(std::process::Command::new("id").arg("-un").output().unwrap().stdout).unwrap().trim().to_string()
+}
+
+/// Writes an executable stand-in script. Written in the test process, the file would be open for
+/// writing while another test thread forks, the child would inherit that handle, and Linux refuses
+/// to execute a file that is open for writing (ETXTBSY, `execve(2)`). A short `sh` child writes
+/// it instead, so no write handle ever lives in the test process.
+#[cfg(unix)]
+pub fn write_executable(path: &Path, content: &str) {
+    use std::io::Write;
+    let mut child = std::process::Command::new("sh")
+        .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+        .arg(path)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(content.as_bytes()).unwrap();
+    assert!(child.wait().unwrap().success(), "could not write {}", path.display());
 }

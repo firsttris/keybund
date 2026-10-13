@@ -167,11 +167,7 @@ fn two_companies_on_github_a_private_account_and_two_servers() {
     let public = |id: &str| sb.read(&format!(".ssh/{id}_ed25519.pub")).trim().to_string();
 
     // Each account and server knows its own key, as after "Add key".
-    fs::write(github.join("gate"), gate_script(&github)).unwrap();
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(github.join("gate"), fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    common::write_executable(&github.join("gate"), &gate_script(&github));
     let gate_line = |account: &str| {
         format!(
             "command=\"{} {account}\",no-pty,no-port-forwarding {}\n",

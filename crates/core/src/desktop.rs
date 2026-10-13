@@ -181,17 +181,13 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn falls_back_when_an_opener_fails() {
-        use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         let log = dir.path().join("log");
         let script = |name: &str, code: i32| {
-            let path = dir.path().join(name);
-            std::fs::write(
-                &path,
-                format!("#!/bin/sh\necho \"{name} $@ APPDIR=$APPDIR\" >> '{}'\nexit {code}\n", log.display()),
-            )
-            .unwrap();
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            crate::fsutil::write_test_script(
+                &dir.path().join(name),
+                &format!("#!/bin/sh\necho \"{name} $@ APPDIR=$APPDIR\" >> '{}'\nexit {code}\n", log.display()),
+            );
         };
         script("xdg-open", 3);
         script("gio", 0);

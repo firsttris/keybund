@@ -298,6 +298,22 @@ mod tests {
         assert!(text.ends_with("AAAAIBBB nas\n"));
     }
 
+    /// Runs the askpass script that `askpass_program` has just written: while another test thread
+    /// forks, the file Keybund itself wrote can be briefly busy (ETXTBSY, see
+    /// `fsutil::write_test_script`).
+    #[cfg(unix)]
+    fn output_when_not_busy(cmd: &mut std::process::Command) -> std::process::Output {
+        for _ in 0..100 {
+            match cmd.output() {
+                Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                out => return out.unwrap(),
+            }
+        }
+        panic!("the askpass script stays busy");
+    }
+
     /// The macOS dialog, run here with a stand-in `osascript`: the prompt
     /// reaches the dialog, the answer goes to ssh, Cancel is a failure, and
     /// a yes/no question answers through the exit status only.
@@ -312,11 +328,11 @@ mod tests {
         assert_eq!(fsutil::mode(Path::new(&script)), Some(0o700));
         let bin = dir.path().join("bin");
         std::fs::create_dir_all(&bin).unwrap();
-        let fake = bin.join("osascript");
         // Prints the last argument (the prompt) to a log, answers "geheim" or fails.
-        std::fs::write(&fake, "#!/bin/sh\nfor a; do last=$a; done\necho \"$last\" >> \"$LOG\"\n[ -z \"$CANCEL\" ] || exit 1\necho geheim\n")
-            .unwrap();
-        fsutil::set_mode(&fake, 0o755).unwrap();
+        fsutil::write_test_script(
+            &bin.join("osascript"),
+            "#!/bin/sh\nfor a; do last=$a; done\necho \"$last\" >> \"$LOG\"\n[ -z \"$CANCEL\" ] || exit 1\necho geheim\n",
+        );
         let log = dir.path().join("log");
         let run = |cancel: bool, confirm: bool| {
             let mut cmd = std::process::Command::new(&script);
@@ -329,7 +345,7 @@ mod tests {
             if confirm {
                 cmd.env("SSH_ASKPASS_PROMPT", "confirm");
             }
-            cmd.output().unwrap()
+            output_when_not_busy(&mut cmd)
         };
         let out = run(false, false);
         assert!(out.status.success());

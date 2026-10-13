@@ -47,6 +47,10 @@ just coverage       # Rust coverage (cargo-llvm-cov)
 - **Platforms.** What differs between Linux and macOS goes through `Env::platform`, never `cfg!` in
   the rendering, so a test on Linux can render and check the macOS files
   (`Env { platform: Platform::MacOs, ..Env::with_home(dir) }`).
+- **Stand-in scripts through the helper.** A fake `ssh`, `osascript` or opener is written with
+  `fsutil::write_test_script` (core) or `common::write_executable` (CLI), never with `fs::write` and
+  `chmod`: while another test thread forks, a file written in the test process can still be open
+  for writing in the child, and Linux then refuses to run it (“Text file busy”).
 - **Snapshots for rendering.** A change in `render.rs` shows up as a snapshot diff; review it like
   code, then `just snapshots`.
 - **Frontend tests click like a user.** Query by role and label (`getByRole("button", { name:

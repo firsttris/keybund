@@ -315,18 +315,15 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn asks_the_login_shell_with_a_timeout() {
-        use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         let shell = dir.path().join("fakeshell");
-        std::fs::write(&shell, "#!/bin/sh\necho GIT_SSH_COMMAND=ssh -i /x\necho HOME=$HOME\n").unwrap();
-        std::fs::set_permissions(&shell, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::fsutil::write_test_script(&shell, "#!/bin/sh\necho GIT_SSH_COMMAND=ssh -i /x\necho HOME=$HOME\n");
         let vars = shell_vars(&shell, Path::new("/home/t"), Duration::from_secs(4)).unwrap();
         assert!(vars.contains(&("GIT_SSH_COMMAND".into(), "ssh -i /x".into())));
         assert!(vars.contains(&("HOME".into(), "/home/t".into())));
 
         let slow = dir.path().join("slowshell");
-        std::fs::write(&slow, "#!/bin/sh\nsleep 5\n").unwrap();
-        std::fs::set_permissions(&slow, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::fsutil::write_test_script(&slow, "#!/bin/sh\nsleep 5\n");
         let start = Instant::now();
         assert!(shell_vars(&slow, Path::new("/"), Duration::from_millis(300)).is_none());
         assert!(start.elapsed() < Duration::from_secs(3));

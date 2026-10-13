@@ -89,15 +89,28 @@ fn loaded(sock: &Path) -> String {
 }
 
 fn askpass(dir: &Path, answer: Option<&str>) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
     let script = dir.join(if answer.is_some() { "askpass-ok" } else { "askpass-fail" });
     let body = match answer {
         Some(a) => format!("#!/bin/sh\necho '{a}'\n"),
         None => "#!/bin/sh\nexit 1\n".to_string(),
     };
-    fs::write(&script, body).unwrap();
-    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    write_executable(&script, &body);
     script
+}
+
+/// Writes an executable script through a short `sh` child: written in this process, the file
+/// would be open for writing while another test thread forks, and Linux refuses to execute a file
+/// that is open for writing (ETXTBSY, `execve(2)`).
+fn write_executable(path: &Path, content: &str) {
+    use std::io::Write;
+    let mut child = Command::new("sh")
+        .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+        .arg(path)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(content.as_bytes()).unwrap();
+    assert!(child.wait().unwrap().success(), "could not write {}", path.display());
 }
 
 /// Runs a command with a private agent and askpass, isolated from the

@@ -599,16 +599,12 @@ fn install_key_runs_ssh_with_the_key_on_stdin() {
     sb.new_profile("NAS", &["--provider", "generic", "--host", "192.168.1.5", "--alias", "nas", "--user", "admin"]);
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
         // Fake ssh: records its arguments and stdin, answers like the remote script.
         let log = sb.dir.path().join("install.log");
-        let script = sb.bin.join("ssh");
-        std::fs::write(
-            &script,
-            format!("#!/bin/sh\necho \"$@\" > '{0}'\ncat >> '{0}'\necho KEYBUND_ADDED\n", log.display()),
-        )
-        .unwrap();
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        common::write_executable(
+            &sb.bin.join("ssh"),
+            &format!("#!/bin/sh\necho \"$@\" > '{0}'\ncat >> '{0}'\necho KEYBUND_ADDED\n", log.display()),
+        );
 
         sb.cmd()
             .args(["install-key", "nas"])

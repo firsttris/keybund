@@ -120,6 +120,24 @@ pub fn mode(_path: &Path) -> Option<u32> {
     None
 }
 
+/// Tests only: writes an executable stand-in script. Written in this process, the file would be
+/// open for writing while another test thread forks, the child would inherit that handle, and
+/// Linux refuses to execute a file that is open for writing (ETXTBSY, `execve(2)`); under
+/// `cargo llvm-cov` that failed CI. A short `sh` child writes it instead, so no write handle ever
+/// lives in the test process.
+#[cfg(all(test, unix))]
+pub fn write_test_script(path: &Path, content: &str) {
+    use std::io::Write;
+    let mut child = std::process::Command::new("sh")
+        .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+        .arg(path)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(content.as_bytes()).unwrap();
+    assert!(child.wait().unwrap().success(), "could not write {}", path.display());
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
