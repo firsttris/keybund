@@ -2052,7 +2052,7 @@ dependencies = [
 
 [[package]]
 name = "keybund-app"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "keybund-core",
  "serde",
@@ -2069,7 +2069,7 @@ dependencies = [
 
 [[package]]
 name = "keybund-cli"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "arboard",
@@ -2084,7 +2084,7 @@ dependencies = [
 
 [[package]]
 name = "keybund-core"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "base64 0.23.1",
  "insta",
