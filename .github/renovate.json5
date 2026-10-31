@@ -27,7 +27,7 @@
       groupName: "Tauri",
       sourceUrl: "https://github.com/tauri-apps/tauri",
       prBodyNotes: [
-        "Before merging: `cargo test` fails when `app/src/lib/bindings.ts` is outdated (run `just bindings` and commit it); `specta` must stay on the release candidate the new `tauri-specta` asks for. The macOS job runs the Rust suite; try the clipboard and the file dialogs in the AppImage (and the .dmg) of a `release.yml` run on this branch.",
+        "Before merging: `cargo test` fails when `app/src/lib/bindings.ts` is outdated (run `just bindings` and commit it); `specta` must stay on the release candidate the new `tauri-specta` asks for (raise the `allowedVersions` of `specta` and `specta-typescript` in `.github/renovate.json5` on this branch). The macOS job runs the Rust suite; try the clipboard and the file dialogs in the AppImage (and the .dmg) of a `release.yml` run on this branch.",
       ],
       schedule: ["at any time"],
       automerge: false,
@@ -39,6 +39,21 @@
       matchPackageNames: ["specta", "specta-typescript", "tauri-specta"],
       ignoreUnstable: false,
       respectLatest: false,
+    },
+    {
+      // specta and specta-typescript only as far as the pinned tauri-specta allows: tauri-specta
+      // 2.0.0-rc.26 requires specta =2.0.0-rc.26 and specta-typescript ^0.0.13, and
+      // specta-typescript 0.0.14 already requires specta =2.0.0-rc.27 (crates.io), so a newer pair
+      // cannot be resolved (#6). With a new tauri-specta in the Tauri PR, raise both bounds on
+      // that branch to what it asks for.
+      matchManagers: ["cargo"],
+      matchPackageNames: ["specta"],
+      allowedVersions: "<=2.0.0-rc.26",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchPackageNames: ["specta-typescript"],
+      allowedVersions: "<=0.0.13",
     },
   ],
 }
