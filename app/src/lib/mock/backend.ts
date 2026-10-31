@@ -674,8 +674,8 @@ function checkValues(p: Profile) {
   const seen = new Set<string>();
   for (const h of p.hosts) {
     token("hostname", h.hostname);
-    if (h.alias !== null) token("alias", h.alias);
-    if (h.user !== null) token("user", h.user);
+    if (h.alias != null) token("alias", h.alias);
+    if (h.user != null) token("user", h.user);
     // Port 0 is no port: ssh would silently use 22.
     if (h.port === 0) throw invalidValue("port", "0");
     // The same account or server twice in one key: two identical blocks, two identical rows.
@@ -952,7 +952,7 @@ export function createMockBackend(state: MockState = seedState()) {
         const plan = planFor(state);
         applyConfigs(state);
         const v = view(state, p);
-        state.clipboard = v.key.public_key;
+        state.clipboard = v.key.public_key ?? null;
         let openError: Msg | null = null;
         if (args.openProviderPage && v.add_key_urls[0]) {
           try {
