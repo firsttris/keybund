@@ -61,5 +61,15 @@
       "react": "recommended",
       "test": "recommended"
     }
+  },
+  "markdown": {
+    "formatter": {
+      "enabled": false
+    }
+  },
+  "yaml": {
+    "formatter": {
+      "enabled": false
+    }
   }
 }
