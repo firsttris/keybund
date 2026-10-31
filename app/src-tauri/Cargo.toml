@@ -23,14 +23,14 @@ keybund-core = { workspace = true, features = ["specta"] }
 serde.workspace = true
 serde_json.workspace = true
 specta.workspace = true
-specta-typescript = "0.0.12"
+specta-typescript = "0.0.14"
 tauri = { version = "2", features = [] }
-tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+tauri-specta = { version = "=2.0.0-rc.26", features = ["derive", "typescript"] }
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 
 [dev-dependencies]
 tempfile = "3"
 tauri = { version = "2", features = ["test"] }
-tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+tauri-specta = { version = "=2.0.0-rc.26", features = ["derive", "typescript"] }
 specta.workspace = true
