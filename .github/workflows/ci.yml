@@ -27,10 +27,10 @@ jobs:
     name: Rust · fmt, clippy, unit + integration + E2E tests
     # Draft pull requests do not build; "Ready for review" starts the run
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # From the Actions cache: the Ubuntu mirror is sometimes slow, the install took up to a minute
       - name: System packages (Tauri, ssh, git)
         uses: firsttris/workflows/actions/apt-install@v1
@@ -54,10 +54,10 @@ jobs:
     name: Rust · macOS · clippy, unit + integration + E2E tests
     # The same tests against Apple's ssh and git: Keychain options, gitdir/i, launchd's agent.
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -81,10 +81,10 @@ jobs:
     name: Rust · coverage
     # Draft pull requests do not build; "Ready for review" starts the run
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: System packages (Tauri, ssh, git)
         uses: firsttris/workflows/actions/apt-install@v1
         with:
@@ -102,7 +102,7 @@ jobs:
         run: |
           cargo llvm-cov --workspace --lcov --output-path lcov.info
           cargo llvm-cov report --package keybund-core --package keybund-cli --fail-under-lines 85
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rust-coverage
           path: lcov.info
@@ -111,19 +111,19 @@ jobs:
     name: Frontend · lint, typecheck, unit + component tests, build
     # Draft pull requests do not build; "Ready for review" starts the run
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     defaults:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: app/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
           cache-dependency-path: app/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
@@ -131,7 +131,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm coverage
       - run: pnpm build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: frontend-coverage
@@ -142,7 +142,7 @@ jobs:
     name: Frontend · Playwright image
     # Draft pull requests do not build; "Ready for review" starts the run
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       image: ${{ steps.version.outputs.image }}
     steps:
@@ -154,7 +154,7 @@ jobs:
   e2e:
     name: Frontend · Playwright E2E
     needs: playwright-image
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     # The official image of the @playwright/test version in the lockfile: browsers, their libraries
     # and fonts are in it, so no playwright install runs and every run sees the same browser.
@@ -165,18 +165,18 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: app/package.json
       # Node comes with the image; this only caches the pnpm store.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           cache: pnpm
           cache-dependency-path: app/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report

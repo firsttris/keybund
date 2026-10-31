@@ -35,10 +35,10 @@ jobs:
     # The checks either passed or were not needed
     if: ${{ !cancelled() && needs.tested.result == 'success' && needs.checks.result != 'failure' }}
     # Older glibc than the test runners, so the binaries also run on older distributions
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: System packages (Tauri bundler)
         uses: firsttris/workflows/actions/apt-install@v1
         with:
@@ -47,12 +47,12 @@ jobs:
           recommends: "false"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: app/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
           cache-dependency-path: app/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
@@ -68,7 +68,7 @@ jobs:
           tar -czf "dist/keybund-cli-${version}-x86_64-linux.tar.gz" -C target/release keybund
           cp target/release/bundle/appimage/*.AppImage target/release/bundle/deb/*.deb dist/
           ls -l dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-linux
           path: dist/
@@ -78,20 +78,20 @@ jobs:
     name: Build · macOS CLI and .dmg (Apple Silicon + Intel)
     needs: [tested, checks]
     if: ${{ !cancelled() && needs.tested.result == 'success' && needs.checks.result != 'failure' }}
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin, x86_64-apple-darwin
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: app/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
           cache-dependency-path: app/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
@@ -142,7 +142,7 @@ jobs:
           tar -czf "dist/keybund-cli-${version}-universal-macos.tar.gz" -C target/universal keybund
           cp target/universal-apple-darwin/release/bundle/dmg/*.dmg dist/
           ls -l dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-macos
           path: dist/
@@ -153,15 +153,15 @@ jobs:
     needs: [build, build-macos]
     # A skipped "checks" job further up would otherwise skip this job too
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.build-macos.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: dist-*
           path: dist
           merge-multiple: true
       - run: (cd dist && sha256sum -- * > SHA256SUMS && ls -l)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
