@@ -9,16 +9,16 @@ export const commands = {
 	loadProfiles: () => typedError<ProfilesView_Serialize, CmdError>(__TAURI_INVOKE("load_profiles")),
 	profileDefaults: (name: string) => typedError<ProfileDefaults, CmdError>(__TAURI_INVOKE("profile_defaults", { name })),
 	normalizeFolder: (folder: string) => __TAURI_INVOKE<string>("normalize_folder", { folder }),
-	previewNewProject: (project: NewProject) => typedError<Plan, CmdError>(__TAURI_INVOKE("preview_new_project", { project })),
+	previewNewProject: (project: NewProject_Deserialize) => typedError<Plan, CmdError>(__TAURI_INVOKE("preview_new_project", { project })),
 	/**
 	 *  Creates the project, writes the configs, copies the public key and
 	 *  opens the provider's "add key" page.
 	 */
-	createProject: (project: NewProject, openProviderPage: boolean) => typedError<CreatedProject_Serialize, CmdError>(__TAURI_INVOKE("create_project", { project, openProviderPage })),
-	updateProfile: (profile: Profile) => typedError<ProfileView_Serialize, CmdError>(__TAURI_INVOKE("update_profile", { profile })),
+	createProject: (project: NewProject_Deserialize, openProviderPage: boolean) => typedError<CreatedProject_Serialize, CmdError>(__TAURI_INVOKE("create_project", { project, openProviderPage })),
+	updateProfile: (profile: Profile_Deserialize) => typedError<ProfileView_Serialize, CmdError>(__TAURI_INVOKE("update_profile", { profile })),
 	setDefaultProfile: (id: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("set_default_profile", { id })),
-	previewAddHost: (id: string, host: HostEntry) => typedError<Plan, CmdError>(__TAURI_INVOKE("preview_add_host", { id, host })),
-	addHost: (id: string, host: HostEntry) => typedError<ProfileView_Serialize, CmdError>(__TAURI_INVOKE("add_host", { id, host })),
+	previewAddHost: (id: string, host: HostEntry_Deserialize) => typedError<Plan, CmdError>(__TAURI_INVOKE("preview_add_host", { id, host })),
+	addHost: (id: string, host: HostEntry_Deserialize) => typedError<ProfileView_Serialize, CmdError>(__TAURI_INVOKE("add_host", { id, host })),
 	copyPublicKey: (id: string) => typedError<string, CmdError>(__TAURI_INVOKE("copy_public_key", { id })),
 	/**  Opens an https link in the browser, also from a toolbox or an AppImage. */
 	openUrl: (url: string) => typedError<null, CmdError>(__TAURI_INVOKE("open_url", { url })),
@@ -27,30 +27,22 @@ export const commands = {
 	/**  Stores the host keys whose fingerprints the user confirmed. */
 	trustHostKey: (id: string, host: string | null, fingerprints: string[]) => typedError<null, CmdError>(__TAURI_INVOKE("trust_host_key", { id, host, fingerprints })),
 	/**  Tests the connection to `host` (alias or hostname) or the profile's first host. */
-	testConnection: (id: string, host: string | null) => typedError<ProbeResult, CmdError>(__TAURI_INVOKE("test_connection", { id, host })),
+	testConnection: (id: string, host: string | null) => typedError<ProbeResult_Serialize, CmdError>(__TAURI_INVOKE("test_connection", { id, host })),
 	/**  Puts the profile's key on a server (`host` = alias or hostname). */
 	installKey: (id: string, host: string) => typedError<InstallResult, CmdError>(__TAURI_INVOKE("install_key", { id, host })),
-	lastTest: (id: string) => typedError<{
-	/**  The host that was tested (alias or hostname); `None` in old files. */
-	host: string | null,
-	success: boolean,
-	account: string | null,
-	message: Msg,
-	/**  Milliseconds since the epoch. */
-	at: number | null,
-} | null, CmdError>(__TAURI_INVOKE("last_test", { id })),
+	lastTest: (id: string) => typedError<LastTest_Serialize | null, CmdError>(__TAURI_INVOKE("last_test", { id })),
 	planChanges: () => typedError<Plan, CmdError>(__TAURI_INVOKE("plan_changes")),
 	applyChanges: (expectedDiffs: string[]) => typedError<ApplyReport, CmdError>(__TAURI_INVOKE("apply_changes", { expectedDiffs })),
-	which: (query: string) => typedError<WhichResult, CmdError>(__TAURI_INVOKE("which", { query })),
-	runDoctor: () => typedError<Report, CmdError>(__TAURI_INVOKE("run_doctor")),
-	fixDoctor: (fix: Fix) => typedError<Report, CmdError>(__TAURI_INVOKE("fix_doctor", { fix })),
-	scanKeys: () => typedError<ImportCandidate[], CmdError>(__TAURI_INVOKE("scan_keys")),
-	clonePreview: (url: string) => typedError<ClonePreview, CmdError>(__TAURI_INVOKE("clone_preview", { url })),
+	which: (query: string) => typedError<WhichResult_Serialize, CmdError>(__TAURI_INVOKE("which", { query })),
+	runDoctor: () => typedError<Report_Serialize, CmdError>(__TAURI_INVOKE("run_doctor")),
+	fixDoctor: (fix: Fix) => typedError<Report_Serialize, CmdError>(__TAURI_INVOKE("fix_doctor", { fix })),
+	scanKeys: () => typedError<ImportCandidate_Serialize[], CmdError>(__TAURI_INVOKE("scan_keys")),
+	clonePreview: (url: string) => typedError<ClonePreview_Serialize, CmdError>(__TAURI_INVOKE("clone_preview", { url })),
 	cloneRepo: (url: string, profileId: string, target: string | null) => typedError<string, CmdError>(__TAURI_INVOKE("clone_repo", { url, profileId, target })),
 	archiveProfile: (id: string) => typedError<ArchiveResult, CmdError>(__TAURI_INVOKE("archive_profile", { id })),
 	generatedConfig: (id: string) => typedError<GeneratedFile[], CmdError>(__TAURI_INVOKE("generated_config", { id })),
-	importProposals: () => typedError<ImportProposal[], CmdError>(__TAURI_INVOKE("import_proposals")),
-	importProfiles: (chosen: ImportProposal[], removeOld: boolean) => typedError<ImportDone, CmdError>(__TAURI_INVOKE("import_profiles", { chosen, removeOld })),
+	importProposals: () => typedError<ImportProposal_Serialize[], CmdError>(__TAURI_INVOKE("import_proposals")),
+	importProfiles: (chosen: ImportProposal_Deserialize[], removeOld: boolean) => typedError<ImportDone, CmdError>(__TAURI_INVOKE("import_profiles", { chosen, removeOld })),
 	cleanupPreview: () => typedError<Plan, CmdError>(__TAURI_INVOKE("cleanup_preview")),
 	cleanupApply: (expectedDiffs: string[]) => typedError<ApplyReport, CmdError>(__TAURI_INVOKE("cleanup_apply", { expectedDiffs })),
 	uninstallPreview: (opts: UninstallOptions) => typedError<UninstallPreview, CmdError>(__TAURI_INVOKE("uninstall_preview", { opts })),
@@ -76,7 +68,17 @@ export type ArchiveResult = {
 
 export type ChangeKind = "create" | "modify" | "delete";
 
-export type Check = {
+export type Check = Check_Serialize | Check_Deserialize;
+
+export type Check_Deserialize = {
+	id: string,
+	status: Status,
+	title: Msg,
+	detail?: Msg | null,
+	fix?: Fix | null,
+};
+
+export type Check_Serialize = {
 	id: string,
 	status: Status,
 	title: Msg,
@@ -84,14 +86,31 @@ export type Check = {
 	fix: Fix | null,
 };
 
-export type ClonePreview = {
+export type ClonePreview = ClonePreview_Serialize | ClonePreview_Deserialize;
+
+export type ClonePreview_Deserialize = {
 	repo: RepoUrl,
 	/**  `true` if `candidates` were matched by host; otherwise all profiles. */
 	matched: boolean,
-	candidates: CloneTarget[],
+	candidates: CloneTarget_Deserialize[],
 };
 
-export type CloneTarget = {
+export type ClonePreview_Serialize = {
+	repo: RepoUrl,
+	/**  `true` if `candidates` were matched by host; otherwise all profiles. */
+	matched: boolean,
+	candidates: CloneTarget_Serialize[],
+};
+
+export type CloneTarget = CloneTarget_Serialize | CloneTarget_Deserialize;
+
+export type CloneTarget_Deserialize = {
+	profile_id: string,
+	profile_name: string,
+	target?: string | null,
+};
+
+export type CloneTarget_Serialize = {
 	profile_id: string,
 	profile_name: string,
 	target: string | null,
@@ -113,7 +132,7 @@ export type CreatedProject_Deserialize = {
 	report: ApplyReport,
 	public_key: string,
 	/**  Why the provider page could not be opened, if it was requested. */
-	open_error: Msg | null,
+	open_error?: Msg | null,
 };
 
 export type CreatedProject_Serialize = {
@@ -172,12 +191,41 @@ export type GitIdentity = {
  *  The identity from the user's own `~/.gitconfig`: what git uses outside
  *  Keybund's folders and where a key leaves name or e-mail empty.
  */
-export type GlobalIdentity = {
+export type GlobalIdentity = GlobalIdentity_Serialize | GlobalIdentity_Deserialize;
+
+/**
+ *  The identity from the user's own `~/.gitconfig`: what git uses outside
+ *  Keybund's folders and where a key leaves name or e-mail empty.
+ */
+export type GlobalIdentity_Deserialize = {
+	name?: string | null,
+	email?: string | null,
+};
+
+/**
+ *  The identity from the user's own `~/.gitconfig`: what git uses outside
+ *  Keybund's folders and where a key leaves name or e-mail empty.
+ */
+export type GlobalIdentity_Serialize = {
 	name: string | null,
 	email: string | null,
 };
 
-export type HostEntry = {
+export type HostEntry = HostEntry_Serialize | HostEntry_Deserialize;
+
+export type HostEntry_Deserialize = {
+	/**
+	 *  SSH alias (e.g. `meinserver`). Hosts with an alias get their own
+	 *  `Host` block in the SSH config.
+	 */
+	alias?: string | null,
+	hostname: string,
+	user?: string | null,
+	port?: number | null,
+	provider: Provider,
+};
+
+export type HostEntry_Serialize = {
 	/**
 	 *  SSH alias (e.g. `meinserver`). Hosts with an alias get their own
 	 *  `Host` block in the SSH config.
@@ -211,8 +259,18 @@ export type HostLink = {
 };
 
 /**  A key pair found in `~/.ssh` that could be imported. */
-export type ImportCandidate = {
-	key: KeyInfo,
+export type ImportCandidate = ImportCandidate_Serialize | ImportCandidate_Deserialize;
+
+/**  A key pair found in `~/.ssh` that could be imported. */
+export type ImportCandidate_Deserialize = {
+	key: KeyInfo_Deserialize,
+	/**  Profile that already uses this key. */
+	used_by?: string | null,
+};
+
+/**  A key pair found in `~/.ssh` that could be imported. */
+export type ImportCandidate_Serialize = {
+	key: KeyInfo_Serialize,
 	/**  Profile that already uses this key. */
 	used_by: string | null,
 };
@@ -224,9 +282,25 @@ export type ImportDone = {
 };
 
 /**  A profile Keybund proposes to create from existing ssh config. */
-export type ImportProposal = {
+export type ImportProposal = ImportProposal_Serialize | ImportProposal_Deserialize;
+
+/**  A profile Keybund proposes to create from existing ssh config. */
+export type ImportProposal_Deserialize = {
 	/**  Prefilled profile; name, id, color and folders can be changed. */
-	profile: Profile,
+	profile: Profile_Deserialize,
+	/**  Use as default profile (the key for the host outside of all folders). */
+	make_default: boolean,
+	/**  The `Host` patterns this proposal replaces. */
+	blocks: string[],
+	key_exists: boolean,
+	/**  Hints for the user, e.g. that a folder is needed. */
+	notes: Msg[],
+};
+
+/**  A profile Keybund proposes to create from existing ssh config. */
+export type ImportProposal_Serialize = {
+	/**  Prefilled profile; name, id, color and folders can be changed. */
+	profile: Profile_Serialize,
 	/**  Use as default profile (the key for the host outside of all folders). */
 	make_default: boolean,
 	/**  The `Host` patterns this proposal replaces. */
@@ -245,10 +319,37 @@ export type InstallResult = {
 };
 
 /**  How the key of a new project is obtained. */
-export type KeyChoice = { type: "generate"; comment: string; passphrase: string | null } | { type: "existing"; path: string };
+export type KeyChoice = KeyChoice_Serialize | KeyChoice_Deserialize;
+
+/**  How the key of a new project is obtained. */
+export type KeyChoice_Deserialize = { type: "generate"; comment: string; passphrase?: string | null } | { type: "existing"; path: string };
+
+/**  How the key of a new project is obtained. */
+export type KeyChoice_Serialize = { type: "generate"; comment: string; passphrase: string | null } | { type: "existing"; path: string };
 
 /**  Everything Keybund knows about a key, derived from its `.pub` file. */
-export type KeyInfo = {
+export type KeyInfo = KeyInfo_Serialize | KeyInfo_Deserialize;
+
+/**  Everything Keybund knows about a key, derived from its `.pub` file. */
+export type KeyInfo_Deserialize = {
+	path: string,
+	pub_path: string,
+	private_exists: boolean,
+	public_exists: boolean,
+	/**  e.g. `ssh-ed25519`. */
+	key_type?: string | null,
+	/**  `SHA256:…`, as printed by `ssh-keygen -lf`. */
+	fingerprint?: string | null,
+	comment?: string | null,
+	/**  The full public key line. */
+	public_key?: string | null,
+	/**  Creation date of the `.pub` file as `YYYY-MM-DD`. */
+	created?: string | null,
+	age_days?: number | null,
+};
+
+/**  Everything Keybund knows about a key, derived from its `.pub` file. */
+export type KeyInfo_Serialize = {
 	path: string,
 	pub_path: string,
 	private_exists: boolean,
@@ -269,7 +370,22 @@ export type KeyInfo = {
  *  Reference to a private key. Only the path is stored; fingerprint and
  *  creation date are read from the `.pub` file when needed.
  */
-export type KeyRef = {
+export type KeyRef = KeyRef_Serialize | KeyRef_Deserialize;
+
+/**
+ *  Reference to a private key. Only the path is stored; fingerprint and
+ *  creation date are read from the `.pub` file when needed.
+ */
+export type KeyRef_Deserialize = {
+	path: string,
+	comment?: string | null,
+};
+
+/**
+ *  Reference to a private key. Only the path is stored; fingerprint and
+ *  creation date are read from the `.pub` file when needed.
+ */
+export type KeyRef_Serialize = {
 	path: string,
 	comment: string | null,
 };
@@ -280,7 +396,7 @@ export type LastTest_Deserialize = {
 	/**  The host that was tested (alias or hostname); `None` in old files. */
 	host?: string | null,
 	success: boolean,
-	account: string | null,
+	account?: string | null,
 	message: Msg,
 	/**  Milliseconds since the epoch. */
 	at: number | null,
@@ -308,9 +424,17 @@ export type Msg = {
  */
 export type MsgArg = string | Msg;
 
-export type NewProject = {
-	profile: Profile,
-	key: KeyChoice,
+export type NewProject = NewProject_Serialize | NewProject_Deserialize;
+
+export type NewProject_Deserialize = {
+	profile: Profile_Deserialize,
+	key: KeyChoice_Deserialize,
+	make_default: boolean,
+};
+
+export type NewProject_Serialize = {
+	profile: Profile_Serialize,
+	key: KeyChoice_Serialize,
 	make_default: boolean,
 };
 
@@ -335,7 +459,38 @@ export type Plan = {
  */
 export type Platform = "linux" | "macos";
 
-export type ProbeResult = {
+export type ProbeResult = ProbeResult_Serialize | ProbeResult_Deserialize;
+
+export type ProbeResult_Deserialize = {
+	success: boolean,
+	host: string,
+	/**  Account the provider associated the key with. */
+	account?: string | null,
+	/**  Short explanation for the user. */
+	message: Msg,
+	/**  Raw output of ssh. */
+	output: string,
+	/**  The command that was run, for display. */
+	command: string,
+	/**  The key the server accepted, if ssh reported it. */
+	used_key?: string | null,
+	/**
+	 *  `true` if the server accepted a different key than the profile's,
+	 *  e.g. one from an `IdentityFile` in `~/.ssh/config`.
+	 */
+	other_key: boolean,
+	/**
+	 *  The server refused the key (or took another one): it has to be
+	 *  added to the account or the server – the UI offers that right away.
+	 */
+	key_rejected: boolean,
+	/**  What happened, step by step, in plain words (from `ssh -v`). */
+	steps: ProbeStep_Deserialize[],
+	/**  The complete output of `ssh -v`, for the curious and for bug reports. */
+	log: string,
+};
+
+export type ProbeResult_Serialize = {
 	success: boolean,
 	host: string,
 	/**  Account the provider associated the key with. */
@@ -359,31 +514,29 @@ export type ProbeResult = {
 	 */
 	key_rejected: boolean,
 	/**  What happened, step by step, in plain words (from `ssh -v`). */
-	steps: ProbeStep[],
+	steps: ProbeStep_Serialize[],
 	/**  The complete output of `ssh -v`, for the curious and for bug reports. */
 	log: string,
 };
 
 /**  One step of a connection, e.g. "Biete Key an: ~/.ssh/privat_ed25519". */
-export type ProbeStep = {
+export type ProbeStep = ProbeStep_Serialize | ProbeStep_Deserialize;
+
+/**  One step of a connection, e.g. "Biete Key an: ~/.ssh/privat_ed25519". */
+export type ProbeStep_Deserialize = {
+	/**  `Some(true)` went well, `Some(false)` failed, `None` is information. */
+	ok?: boolean | null,
+	text: Msg,
+};
+
+/**  One step of a connection, e.g. "Biete Key an: ~/.ssh/privat_ed25519". */
+export type ProbeStep_Serialize = {
 	/**  `Some(true)` went well, `Some(false)` failed, `None` is information. */
 	ok: boolean | null,
 	text: Msg,
 };
 
-export type Profile = {
-	/**  Stable identifier, used for file names (`<id>.gitconfig`). */
-	id: string,
-	name: string,
-	/**  Color name for the UI (e.g. `emerald`, `blue`, `violet`). */
-	color: string | null,
-	key: KeyRef,
-	git: GitIdentity | null,
-	/**  Project folders, normalized with a trailing `/`. */
-	folders: string[],
-	archived: boolean,
-	hosts: HostEntry[],
-};
+export type Profile = Profile_Serialize | Profile_Deserialize;
 
 /**  Suggestions for a new project, derived from its name. */
 export type ProfileDefaults = {
@@ -398,21 +551,21 @@ export type ProfileDefaults = {
 export type ProfileView = ProfileView_Serialize | ProfileView_Deserialize;
 
 export type ProfileView_Deserialize = {
-	profile: Profile,
-	key: KeyInfo,
+	profile: Profile_Deserialize,
+	key: KeyInfo_Deserialize,
 	is_default: boolean,
 	add_key_urls: HostLink[],
 	/**  The key's summary: a failing host if any, else the latest test. */
-	last_test: LastTest_Deserialize | null,
+	last_test?: LastTest_Deserialize | null,
 	/**  The last test of each host, in host order (hosts never tested are missing). */
 	host_tests: LastTest_Deserialize[],
 	/**  The key is loaded in ssh-agent (`None`: no agent running). */
-	in_agent: boolean | null,
+	in_agent?: boolean | null,
 };
 
 export type ProfileView_Serialize = {
-	profile: Profile,
-	key: KeyInfo,
+	profile: Profile_Serialize,
+	key: KeyInfo_Serialize,
 	is_default: boolean,
 	add_key_urls: HostLink[],
 	/**  The key's summary: a failing host if any, else the latest test. */
@@ -423,19 +576,47 @@ export type ProfileView_Serialize = {
 	in_agent: boolean | null,
 };
 
+export type Profile_Deserialize = {
+	/**  Stable identifier, used for file names (`<id>.gitconfig`). */
+	id: string,
+	name: string,
+	/**  Color name for the UI (e.g. `emerald`, `blue`, `violet`). */
+	color?: string | null,
+	key: KeyRef_Deserialize,
+	git?: GitIdentity | null,
+	/**  Project folders, normalized with a trailing `/`. */
+	folders: string[],
+	archived: boolean,
+	hosts: HostEntry_Deserialize[],
+};
+
+export type Profile_Serialize = {
+	/**  Stable identifier, used for file names (`<id>.gitconfig`). */
+	id: string,
+	name: string,
+	/**  Color name for the UI (e.g. `emerald`, `blue`, `violet`). */
+	color: string | null,
+	key: KeyRef_Serialize,
+	git: GitIdentity | null,
+	/**  Project folders, normalized with a trailing `/`. */
+	folders: string[],
+	archived: boolean,
+	hosts: HostEntry_Serialize[],
+};
+
 export type ProfilesView = ProfilesView_Serialize | ProfilesView_Deserialize;
 
 export type ProfilesView_Deserialize = {
-	default_profile: string | null,
+	default_profile?: string | null,
 	profiles: ProfileView_Deserialize[],
 	/**  Number of config files that differ from what Keybund would write. */
 	pending_changes: number,
 	/**  Profiles that could be taken over from `~/.ssh/config`. */
 	import_available: number,
 	/**  When Keybund last wrote its configs (milliseconds since the epoch). */
-	last_applied: number | null,
+	last_applied?: number | null,
 	/**  Name and e-mail from `~/.gitconfig`, used where a key sets none. */
-	global_identity: GlobalIdentity,
+	global_identity: GlobalIdentity_Deserialize,
 };
 
 export type ProfilesView_Serialize = {
@@ -448,7 +629,7 @@ export type ProfilesView_Serialize = {
 	/**  When Keybund last wrote its configs (milliseconds since the epoch). */
 	last_applied: number | null,
 	/**  Name and e-mail from `~/.gitconfig`, used where a key sets none. */
-	global_identity: GlobalIdentity,
+	global_identity: GlobalIdentity_Serialize,
 };
 
 export type Provider = "github" | "gitlab" | "bitbucket" | "generic";
@@ -461,8 +642,14 @@ export type RepoUrl = {
 	name: string,
 };
 
-export type Report = {
-	checks: Check[],
+export type Report = Report_Serialize | Report_Deserialize;
+
+export type Report_Deserialize = {
+	checks: Check_Deserialize[],
+};
+
+export type Report_Serialize = {
+	checks: Check_Serialize[],
 };
 
 /**  User preferences (`[settings]` in `profiles.toml`). */
@@ -505,7 +692,30 @@ export type UninstallPreview = {
 
 export type WhichMode = "folder" | "host";
 
-export type WhichResult = {
+export type WhichResult = WhichResult_Serialize | WhichResult_Deserialize;
+
+export type WhichResult_Deserialize = {
+	query: string,
+	mode: WhichMode,
+	key_path?: string | null,
+	fingerprint?: string | null,
+	profile_id?: string | null,
+	/**  Where the setting comes from, e.g. a gitconfig file or `ssh -G`. */
+	source?: string | null,
+	/**  How it got there, e.g. `includeIf "gitdir:~/dev/kunde/"`. */
+	via?: Msg | null,
+	identities_only?: boolean | null,
+	git_name?: string | null,
+	git_email?: string | null,
+	hostname?: string | null,
+	user?: string | null,
+	port?: number | null,
+	/**  Whether the key is loaded in ssh-agent (`None`: no agent). */
+	agent_loaded?: boolean | null,
+	notes: Msg[],
+};
+
+export type WhichResult_Serialize = {
 	query: string,
 	mode: WhichMode,
 	key_path: string | null,
