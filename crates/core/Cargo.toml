@@ -15,7 +15,7 @@ specta = ["dep:specta"]
 [dependencies]
 serde.workspace = true
 specta = { workspace = true, optional = true }
-toml = "0.9"
+toml = "1.0"
 similar = "3"
 sha2 = "0.11"
 base64 = "0.23"
