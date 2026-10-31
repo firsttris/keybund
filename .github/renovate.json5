@@ -1,23 +1,15 @@
 // Renovate (GitHub App, https://github.com/apps/renovate): a pull request for each new release of
-// what Keybund builds on, plus the "Dependency Dashboard" issue listing what is open.
-// Only Tauri with tauri-specta (the typed commands in app/src/lib/bindings.ts): the crates and the
-// npm packages in one PR. OpenSSH and Git are the user's; the other crates and npm packages and the
-// actions are not tracked here. Check with
-// `npx --package renovate renovate-config-validator .github/renovate.json5`.
+// what Keybund builds on, plus the "Dependency Dashboard" issue listing what is open. Only Tauri
+// with tauri-specta (the typed commands in app/src/lib/bindings.ts): the crates and the npm
+// packages in one PR. OpenSSH and Git are the user's.
+// Everything else (the other packages, the actions, the images) comes with the shared settings of
+// firsttris/workflows (renovate/default.json5): minor and patch updates once a month in one pull
+// request that merges itself when CI is green, majors on request in the dashboard.
+// Check with `npx --package renovate renovate-config-validator .github/renovate.json5`.
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
-  extends: ["config:recommended"],
-  enabledManagers: ["cargo", "npm"],
-  timezone: "Europe/Berlin",
-  labels: ["dependencies"],
-  // Nothing merges itself: each of these needs the checks in its pull request read by a person
-  automerge: false,
+  extends: ["github>firsttris/workflows//renovate/default.json5"],
   packageRules: [
-    {
-      // From the package managers only Tauri (below)
-      matchManagers: ["cargo", "npm"],
-      enabled: false,
-    },
     {
       // Tauri and tauri-specta: the crates and the npm packages in one PR, since the CLI wants
       // them on matching versions. Tauri 3 alphas are left out (stable releases only).
@@ -37,6 +29,9 @@
       prBodyNotes: [
         "Before merging: `cargo test` fails when `app/src/lib/bindings.ts` is outdated (run `just bindings` and commit it); `specta` must stay on the release candidate the new `tauri-specta` asks for. The macOS job runs the Rust suite; try the clipboard and the file dialogs in the AppImage (and the .dmg) of a `release.yml` run on this branch.",
       ],
+      schedule: ["at any time"],
+      automerge: false,
+      dependencyDashboardApproval: false,
     },
     {
       // specta and tauri-specta are release candidates, pinned exactly (=2.0.0-rc.x)
