@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.8",
   "type": "module",
-  "packageManager": "pnpm@10.28.0",
+  "packageManager": "pnpm@10.34.9",
   "license": "GPL-3.0-only",
   "scripts": {
     "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide",
@@ -36,7 +36,7 @@
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
+    "@biomejs/biome": "2.6.3",
     "@inlang/paraglide-js": "^2.27.0",
     "@inlang/plugin-message-format": "^4.5.0",
     "@playwright/test": "^1.64.0",
