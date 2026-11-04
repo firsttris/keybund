@@ -10,17 +10,6 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: ["github>firsttris/workflows//renovate/default.json5"],
-  customManagers: [
-    {
-      // "packageManager": "bun@x.y.z" in app/package.json: the Bun of every workflow (setup-bun's
-      // bun-version-file, and npm in the Playwright image of the E2E and screenshots jobs)
-      customType: "regex",
-      managerFilePatterns: ["/^app/package\\.json$/"],
-      matchStrings: ['"packageManager": "bun@(?<currentValue>\\d+\\.\\d+\\.\\d+)"'],
-      depNameTemplate: "bun",
-      datasourceTemplate: "npm",
-    },
-  ],
   packageRules: [
     {
       // Tauri and tauri-specta: the crates and the npm packages in one PR, since the CLI wants
@@ -69,7 +58,8 @@
     },
     {
       // Bun installs the packages and runs the scripts and the Playwright runner; its own PR,
-      // majors too
+      // majors too. Renovate's bun manager reads "packageManager": "bun@x.y.z" in app/package.json
+      // itself, as the npm package `bun` (no regex manager needed).
       matchPackageNames: ["bun"],
       enabled: true,
       groupName: "Bun",
