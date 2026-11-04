@@ -47,18 +47,13 @@ jobs:
           recommends: "false"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v6
+      - uses: oven-sh/setup-bun@v2
         with:
-          package_json_file: app/package.json
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          cache: pnpm
-          cache-dependency-path: app/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
+          bun-version-file: app/package.json
+      - run: bun install --frozen-lockfile
         working-directory: app
       - run: cargo build --release --locked -p keybund-cli
-      - run: pnpm tauri build --bundles appimage,deb
+      - run: bun run tauri build --bundles appimage,deb
         working-directory: app
       - name: Collect release files
         run: |
@@ -86,15 +81,10 @@ jobs:
         with:
           targets: aarch64-apple-darwin, x86_64-apple-darwin
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v6
+      - uses: oven-sh/setup-bun@v2
         with:
-          package_json_file: app/package.json
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          cache: pnpm
-          cache-dependency-path: app/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
+          bun-version-file: app/package.json
+      - run: bun install --frozen-lockfile
         working-directory: app
       - name: CLI for both architectures in one binary
         run: |
@@ -107,7 +97,7 @@ jobs:
       # Ad-hoc signed ("signingIdentity": "-" in tauri.conf.json), not notarized: Gatekeeper asks
       # once, see docs/installation.md.
       # app too: the dmg alone keeps no .app around for the smoke test below.
-      - run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+      - run: bun run tauri build --target universal-apple-darwin --bundles app,dmg
         working-directory: app
       # Nobody has to find out on their Mac that the app does not start: both architectures are in
       # it, the CLI answers, and the app opens its window and keeps running (a throw-away HOME,

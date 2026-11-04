@@ -1,6 +1,6 @@
 /**
  * In-memory implementation of every Tauri command, used when the frontend
- * runs in a plain browser (`pnpm dev:mock`), in unit tests and in the
+ * runs in a plain browser (`bun run dev:mock`), in unit tests and in the
  * Playwright E2E tests. It mirrors the Rust behavior closely enough to
  * exercise all screens, but writes nothing to disk.
  */
