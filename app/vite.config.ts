@@ -14,7 +14,12 @@ export default defineConfig({
     tailwindcss(),
     // messages/{de,en}.json → src/paraglide (typed message functions); the language
     // itself is chosen in src/lib/i18n.ts.
-    paraglideVitePlugin({ project: "./project.inlang", outdir: "./src/paraglide", strategy: ["baseLocale"] }),
+    paraglideVitePlugin({
+      project: "./project.inlang",
+      outdir: "./src/paraglide",
+      outputStructure: "message-modules",
+      strategy: ["baseLocale"],
+    }),
   ],
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },

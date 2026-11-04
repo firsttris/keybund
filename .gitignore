@@ -10,3 +10,4 @@ node_modules/
 test-results/
 /.venv-docs/
 /site/
+**/project.inlang/cache/
