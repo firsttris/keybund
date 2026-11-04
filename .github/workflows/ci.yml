@@ -118,19 +118,14 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: oven-sh/setup-bun@v2
         with:
-          package_json_file: app/package.json
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          cache: pnpm
-          cache-dependency-path: app/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm coverage
-      - run: pnpm build
+          bun-version-file: app/package.json
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run coverage
+      - run: bun run build
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -149,7 +144,7 @@ jobs:
       - id: version
         uses: firsttris/workflows/actions/playwright-image@v1
         with:
-          lockfile: app/pnpm-lock.yaml
+          lockfile: app/bun.lock
 
   e2e:
     name: Frontend · Playwright E2E
@@ -166,16 +161,12 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          package_json_file: app/package.json
-      # Node comes with the image; this only caches the pnpm store.
-      - uses: actions/setup-node@v7
-        with:
-          cache: pnpm
-          cache-dependency-path: app/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm e2e
+      # The npm package brings the binary without curl or unzip, which the image lacks; node reads
+      # the version (`packageManager` in app/package.json, as setup-bun takes it elsewhere), the
+      # image has no jq
+      - run: npm install --global "bun@$(node -p "require('./package.json').packageManager.split('@')[1]")"
+      - run: bun install --frozen-lockfile
+      - run: bun run e2e
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

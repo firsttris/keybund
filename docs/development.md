@@ -5,7 +5,8 @@ the test layers in [Testing](testing.md).
 
 ## Setup
 
-You need Rust (stable, 1.89 or newer), Node.js 22 with pnpm 10, [`just`](https://github.com/casey/just),
+You need Rust (stable, 1.89 or newer), [Bun](https://bun.sh) (the version in `packageManager` of
+`app/package.json`; it installs the packages and runs the scripts), [`just`](https://github.com/casey/just),
 OpenSSH and Git, and for the desktop app the WebKitGTK development files.
 
 === "Fedora, Bazzite (toolbox)"
@@ -13,9 +14,9 @@ OpenSSH and Git, and for the desktop app the WebKitGTK development files.
     A toolbox keeps the host system clean – the recommended way on immutable systems:
 
     ```sh
-    packaging/toolbox.sh          # once: toolbox "keybund-dev" with webkit2gtk, Rust, Node, pnpm, just
+    packaging/toolbox.sh          # once: toolbox "keybund-dev" with webkit2gtk, Rust, Bun, just
     toolbox enter keybund-dev
-    just setup                    # pnpm install in app/
+    just setup                    # bun install in app/
     ```
 
 === "Debian, Ubuntu"
@@ -24,7 +25,7 @@ OpenSSH and Git, and for the desktop app the WebKitGTK development files.
     sudo apt install build-essential libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
       libayatana-appindicator3-dev openssh-client git
     curl -sSf https://sh.rustup.rs | sh
-    corepack enable && cargo install just
+    curl -fsSL https://bun.sh/install | bash && cargo install just
     just setup
     ```
 
@@ -112,7 +113,7 @@ written) and `hostKeyError` (`host_key_check` fails with that error kind).
 The app speaks English and German. All texts live in two catalogs, **`app/messages/de.json`** and
 **`app/messages/en.json`** ([inlang message format](https://inlang.com/m/reootnfj/plugin-inlang-messageFormat)),
 compiled by [Paraglide JS](https://inlang.com/m/gerre34r/library-inlang-paraglideJs) into typed
-functions in `app/src/paraglide` (generated, not committed; `pnpm i18n` or any Vite run compiles them).
+functions in `app/src/paraglide` (generated, not committed; `bun run i18n` or any Vite run compiles them).
 
 - **Frontend texts**: `m.key()` in components – `m.settings_language()`, `m.home_connected({ when })`.
   Plurals are message variants on the input `n`; `rich(m.key, { name: <b>…</b> })` puts elements into
@@ -130,7 +131,7 @@ functions in `app/src/paraglide` (generated, not committed; `pnpm i18n` or any V
   `e2e/i18n.spec.ts` walks the English app looking for German left behind.
 
 To add a text: add the key to both catalogs (`area_name`, e.g. `settings_languageHint`), use it, run
-`pnpm test`. To add a language: add it to `locales` in `app/project.inlang/settings.json`, create
+`bun run test` in `app/`. To add a language: add it to `locales` in `app/project.inlang/settings.json`, create
 `app/messages/<lang>.json` with every key, extend `LANGS` and `systemLang()` in `src/lib/i18n.ts` and
 `Lang` in `crates/core/src/i18n.rs`.
 
@@ -145,7 +146,7 @@ To add a text: add the key to both catalogs (`area_name`, e.g. `settings_languag
 | Rust macOS | `clippy` and `cargo test --workspace` on macos-14, with Apple's `ssh` and `git` from `/usr/bin` first on `PATH` |
 | Rust coverage | `cargo llvm-cov`; core and CLI must stay above 85 % of lines |
 | Frontend | Biome (`biome check`), `tsc -b`, Vitest with coverage thresholds (90 % lines), `vite build` |
-| Playwright | every end-to-end flow on a desktop and a narrow viewport in Chromium and once more in WebKit (macOS' engine), in the official Playwright image of the version in `pnpm-lock.yaml` |
+| Playwright | every end-to-end flow on a desktop and a narrow viewport in Chromium and once more in WebKit (macOS' engine), in the official Playwright image of the version in `app/bun.lock`, the runner on Bun (`bun --bun playwright test`) |
 
 ## Releases
 

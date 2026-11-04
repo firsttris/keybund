@@ -33,7 +33,7 @@ export default defineConfig({
       : []),
   ],
   webServer: {
-    command: "pnpm dev:mock",
+    command: "bun --bun vite --mode mock",
     url: "http://localhost:1420",
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

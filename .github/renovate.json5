@@ -1,14 +1,26 @@
 // Renovate (GitHub App, https://github.com/apps/renovate): a pull request for each new release of
-// what Keybund builds on, plus the "Dependency Dashboard" issue listing what is open. Only Tauri
+// what Keybund builds on, plus the "Dependency Dashboard" issue listing what is open. Tauri
 // with tauri-specta (the typed commands in app/src/lib/bindings.ts): the crates and the npm
-// packages in one PR. OpenSSH and Git are the user's.
+// packages in one PR; and Bun (`packageManager` in app/package.json). OpenSSH and Git are the
+// user's.
 // Everything else (the other packages, the actions, the images) comes with the shared settings of
 // firsttris/workflows (renovate/default.json5): minor and patch updates once a month in one pull
 // request that merges itself when CI is green, majors on request in the dashboard.
-// Check with `npx --package renovate renovate-config-validator .github/renovate.json5`.
+// Check with `bunx --package renovate renovate-config-validator .github/renovate.json5`.
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: ["github>firsttris/workflows//renovate/default.json5"],
+  customManagers: [
+    {
+      // "packageManager": "bun@x.y.z" in app/package.json: the Bun of every workflow (setup-bun's
+      // bun-version-file, and npm in the Playwright image of the E2E and screenshots jobs)
+      customType: "regex",
+      managerFilePatterns: ["/^app/package\\.json$/"],
+      matchStrings: ['"packageManager": "bun@(?<currentValue>\\d+\\.\\d+\\.\\d+)"'],
+      depNameTemplate: "bun",
+      datasourceTemplate: "npm",
+    },
+  ],
   packageRules: [
     {
       // Tauri and tauri-specta: the crates and the npm packages in one PR, since the CLI wants
@@ -54,6 +66,20 @@
       matchManagers: ["cargo"],
       matchPackageNames: ["specta-typescript"],
       allowedVersions: "<=0.0.13",
+    },
+    {
+      // Bun installs the packages and runs the scripts and the Playwright runner; its own PR,
+      // majors too
+      matchPackageNames: ["bun"],
+      enabled: true,
+      groupName: "Bun",
+      sourceUrl: "https://github.com/oven-sh/bun",
+      prBodyNotes: [
+        "`packageManager` in `app/package.json` is the Bun of every workflow (setup-bun's `bun-version-file`, and `npm install bun@…` in the Playwright image of the E2E and screenshots jobs). Run `bun install` in `app/` in case `bun.lock` changes; CI's frontend and E2E jobs must be green (`bun run lint`, `typecheck`, `coverage`, `build`, `bun --bun playwright test`). Try `bun run tauri build` in a `release.yml` run on this branch.",
+      ],
+      schedule: ["at any time"],
+      automerge: false,
+      dependencyDashboardApproval: false,
     },
   ],
 }

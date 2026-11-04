@@ -72,13 +72,13 @@ that needs nothing besides `ssh` and `git`. All commands are described in
 
 ## Building from source
 
-You need Rust (stable), Node.js 22 with pnpm, `just` and the WebKitGTK development files for Tauri.
+You need Rust (stable), [Bun](https://bun.sh), `just` and the WebKitGTK development files for Tauri.
 On Fedora, Bazzite or any other immutable system the easiest way is a toolbox, so the host stays
 clean:
 
 ```sh
 git clone https://github.com/firsttris/keybund.git && cd keybund
-packaging/toolbox.sh            # once: a Fedora toolbox with webkit2gtk, Rust, Node, pnpm, just
+packaging/toolbox.sh            # once: a Fedora toolbox with webkit2gtk, Rust, Bun, just
 toolbox enter keybund-dev
 just setup                      # frontend dependencies
 just install                    # builds CLI and AppImage, installs both to ~/.local/bin with a menu entry
@@ -88,8 +88,8 @@ On Debian or Ubuntu the packages are
 `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev` plus `build-essential`;
 then the same `just setup && just install`.
 
-On macOS you need the Xcode Command Line Tools, Rust, Node.js 22 with pnpm and `just`; then
-`just setup` and `cd app && pnpm tauri build --bundles app` – the app is in
+On macOS you need the Xcode Command Line Tools, Rust, Bun and `just`; then
+`just setup` and `cd app && bun run tauri build --bundles app` – the app is in
 `target/release/bundle/macos/Keybund.app`. More in [Development](development.md).
 
 ## Updating

@@ -1,6 +1,6 @@
 // Takes the pictures in docs/ (README, documentation, banner, social preview)
 // from the demo data of the mock backend. scripts/screenshots.sh serves the
-// build; by hand: node scripts/screenshots.mjs <docs dir> [base url]
+// build; by hand: bun scripts/screenshots.mjs <docs dir> [base url]
 // The pictures show the English UI (the browser's language decides). The clock
 // is fixed, so an unchanged page gives an unchanged picture.
 import { readFileSync } from "node:fs";

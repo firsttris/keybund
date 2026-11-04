@@ -9,8 +9,13 @@ jobs:
   screenshots:
     uses: firsttris/workflows/.github/workflows/screenshots.yml@v1
     with:
-      install: npm install --global pnpm@10.28.0 && pnpm --dir app install --frozen-lockfile
-      lockfile: app/pnpm-lock.yaml
+      # The Bun of `packageManager` in app/package.json, as setup-bun takes it in ci.yml; the
+      # image has npm and node, but no unzip for Bun's installer and no jq (not the workflow's
+      # `bun-version` input, which would be a second place for the version)
+      install: >-
+        npm install --global "bun@$(node -p "require('./app/package.json').packageManager.split('@')[1]")"
+        && cd app && bun install --frozen-lockfile
+      lockfile: app/bun.lock
       command: bash scripts/screenshots.sh
       paths: |
         docs/screenshot-*.png
