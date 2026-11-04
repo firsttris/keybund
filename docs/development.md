@@ -25,7 +25,9 @@ OpenSSH and Git, and for the desktop app the WebKitGTK development files.
     sudo apt install build-essential libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
       libayatana-appindicator3-dev openssh-client git
     curl -sSf https://sh.rustup.rs | sh
-    curl -fsSL https://bun.sh/install | bash && cargo install just
+    # the Bun of packageManager in app/package.json
+    curl -fsSL https://bun.sh/install | bash -s "bun-v$(sed -n 's/.*"packageManager": *"bun@\([0-9][^"]*\)".*/\1/p' app/package.json)"
+    cargo install just
     just setup
     ```
 
